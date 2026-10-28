@@ -8,6 +8,9 @@ use crate::nav::{self, Steerpoint};
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_terrain::Terrain;
 
+/// Abrisswarnung unterhalb dieses Vielfachen der Abrissgeschwindigkeit.
+const STALL_WARNING_MARGIN: f64 = 1.1;
+
 /// Simulationsfrequenz.
 pub const TICK_HZ: u32 = 120;
 /// Zeitschritt in Sekunden.
@@ -252,9 +255,15 @@ impl Sim {
         });
 
         let time_to_impact = if vs < -0.5 { radar_alt / -vs } else { f64::INFINITY };
+        // Abrisswarnung: knapp über der (g-abhängigen) Abrissgeschwindigkeit,
+        // bei hohem Anstellwinkel oder wenn der Abriss schon einsetzt.
+        let n_demand = flight::demanded_load_factor(&self.spec, &self.last_controls);
+        let v_stall = flight::stall_speed(&self.spec, aero.density, n_demand);
         let warnings = Warnings {
             stall: !crashed
-                && (aero.stalled || aero.alpha.abs() >= self.spec.alpha_warning_rad)
+                && (a.stall > 0.02
+                    || aero.alpha.abs() >= self.spec.alpha_warning_rad
+                    || aero.tas < STALL_WARNING_MARGIN * v_stall)
                 && aero.tas > 1.0,
             pull_up: !crashed && radar_alt < 900.0 && time_to_impact < 6.0,
             over_g: !crashed && aero.load_factor > self.spec.g_limit_pos * 0.95,
@@ -313,7 +322,7 @@ impl Sim {
         h.f64(a.attitude.z);
         h.f64(a.engine);
         h.f64(a.airbrake);
-        h.u64(u64::from(a.stalled));
+        h.f64(a.stall);
         h.u64(self.active_steerpoint as u64);
         h.finish()
     }

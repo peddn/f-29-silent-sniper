@@ -145,35 +145,40 @@ Format jedes Eintrags:
   wird stetig nach unten gedrückt, solange Fahrt fehlt). Es ist **stetig** und
   ohne Schaltzustand. Unsere Hysterese-Lösung (v0.1.1/v0.1.2) erzeugt dagegen
   Sprünge.
-- **Unser Design:** Das Original rechnet mit einer Geschwindigkeitsschwelle. Wir
-  lösen den Abriss physikalisch über den **Anstellwinkel** aus; die Abhängigkeit
-  von Höhe (Luftdichte) und g-Last ergibt sich dabei von selbst (v_Abriss ∝ √(n/ρ)).
-  Den Verlauf danach steuert das **Fahrtdefizit** gegenüber der Erholungsfahrt
-  (`stall_recovery_speed_factor` × 1-g-Abrissgeschwindigkeit bei aktueller Dichte):
-  - **Langsamer Abriss:** Die Nase kippt aus jeder Fluglage kräftig Richtung
-    senkrecht nach unten (`stall_pitch_break`), über Nicken und Gieren. Die
-    Flugbahn folgt der Nase, der Auftrieb bricht auf `stall_lift_factor` ein, und
-    die Ruder sind fast wirkungslos.
-  - **Schneller („beschleunigter“) Abriss** durch zu hartes Ziehen: nur leichtes
-    Nicken, milder Auftriebsverlust, die Strömung legt knapp unter der Warnschwelle
-    wieder an. Das ergibt ein Schütteln an der Grenze statt eines Abkippens.
-  - **Ende des Abrisses** erst, wenn der Anstellwinkel klein *und* die Fahrt
-    wieder über der Erholungsfahrt ist. Danach wirkt das Höhenruder umso besser,
-    je höher der Staudruck ist (`control_q_ref_pa`); wer zu früh zu hart zieht,
-    reißt erneut ab.
-  - kein Anstellwinkelbegrenzer, nur eine Warnung kurz vor dem Abrisswinkel
-  - Der Autopilot schützt sich selbst (Energie- und Anstellwinkelschutz), das
-    Flugzeug tut es nicht.
+- **Unser Design (v0.1.3):** Nach dem Vorbild des Originals ist der Abriss eine
+  **stetige Abrissstärke 0…1** ohne Schaltzustand und ohne Hysterese, eingebettet
+  in unsere Kräftephysik:
+  - Abrissgeschwindigkeit `v_s = v_s1g(ρ) · √(1 + Zug · stall_stick_g)`. Die g-Last
+    stammt aus dem **Knüppelkommando**, nicht aus dem erreichten Auftrieb, sonst
+    würde der Auftriebsverlust den Abriss sofort wieder beenden (Pendeln). Höhe
+    (Dichte) und Ziehen heben die Abrissgeschwindigkeit an.
+  - Ziel-Abrissstärke = relatives Fahrtdefizit unter `v_s`, voll bei
+    `stall_deficit_full`. Jenseits des Abrisswinkels wächst sie zusätzlich mit dem
+    Anstellwinkel, damit knapp über `v_s` kein absurder Anstellwinkel möglich ist.
+    Die Stärke folgt dem Ziel mit der Zeitkonstante `stall_time_constant_s`.
+  - Mit der Abrissstärke wachsen proportional: Auftriebsverlust (bis
+    `stall_lift_factor`), Zusatzwiderstand, Ruderverlust (bis
+    `stall_control_factor`) und das **Abkippen der Nase Richtung senkrecht nach
+    unten** aus jeder Fluglage (bis `stall_pitch_break`). Die Flugbahn folgt der
+    Nase, statt flach durchzusacken.
+  - Im Sturz kommt die Fahrt zurück, und die Abrissstärke sinkt stetig. Mit
+    mäßigem Zug lässt sich das Flugzeug abfangen; wer zu früh voll zieht, hebt
+    die Abrissgeschwindigkeit an und bleibt teilweise im Abriss.
+  - Rollen allein zieht **keine** g-Last (Abweichung vom Original, bewusst so
+    gewählt): Querlage ohne Ziehen ergibt eine sinkende Kurve.
+  - kein Anstellwinkelbegrenzer; Warnung bei hohem Anstellwinkel, beginnendem
+    Abriss oder Fahrt unter 110 % von `v_s`.
+  - Der Autopilot schützt sich selbst (Energie- und Anstellwinkelschutz).
 
-  *v0.1.2:* Die erste Fassung (v0.1.1) beendete den Abriss schon, sobald der
-  Anstellwinkel kleiner wurde. Das führte zu einem schnellen Pendeln zwischen Abriss
-  und Wiederanlegen, das sich laut Spieltest wie „Zurückspulen“ anfühlte.
+  *Verlauf:* v0.1.1 kannte nur Abriss an/aus mit Anstellwinkel-Hysterese, was zu
+  einem schnellen Pendeln führte („Zurückspulen“). v0.1.2 beendete den Abriss erst
+  bei ausreichender Fahrt, schaltete aber weiterhin hart. v0.1.3 ist stetig.
 - **Unsere Werte:** `crates/f29-data/src/aircraft.rs`. Abgestimmt über die
   Flugtests `slow_stall_drops_nose_steeply_then_recovers_with_speed`,
-  `fast_stall_is_only_a_mild_buffet`, `hard_pull_stalls_sinks_and_recovers_when_released`,
-  `hard_turn_bleeds_speed`, `steep_zoom_climb_ends_in_stall` und
-  `stall_warning_precedes_stall`. Keine Werte aus der Referenz übernommen.
-- **Status:** umgesetzt (v0.1.2)
+  `stall_strength_grows_with_speed_deficit`, `stall_strength_changes_smoothly`,
+  `hard_pull_stalls_sinks_and_recovers_when_released`, `hard_turn_bleeds_energy`,
+  `steep_zoom_climb_ends_in_stall` und `stall_warning_precedes_stall`. Keine Werte aus der Referenz übernommen.
+- **Status:** umgesetzt (v0.1.3)
 
 ### M-005 Höhenanzeige
 

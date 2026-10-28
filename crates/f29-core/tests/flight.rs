@@ -114,7 +114,7 @@ fn hard_pull_stalls_sinks_and_recovers_when_released() {
     let mut stalled_at = None;
     for t in 0..ticks(6.0) {
         sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 0.7, 0));
-        if sim.aircraft().stalled && stalled_at.is_none() {
+        if sim.aircraft().is_stalled() && stalled_at.is_none() {
             stalled_at = Some(t);
         }
     }
@@ -128,7 +128,7 @@ fn hard_pull_stalls_sinks_and_recovers_when_released() {
     let mut recovered = false;
     for _ in 0..ticks(10.0) {
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0));
-        if !sim.aircraft().stalled {
+        if !sim.aircraft().is_stalled() {
             recovered = true;
             break;
         }
@@ -142,7 +142,7 @@ fn slow_stall_drops_nose_steeply_then_recovers_with_speed() {
     let mut sim = high_sim(2_500.0, 82.0, 0.7);
     let h0 = sim.flight_data().altitude_m;
     let mut t = 0;
-    while !sim.aircraft().stalled {
+    while !sim.aircraft().is_stalled() {
         sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 0.7, 0));
         t += 1;
         assert!(t < ticks(5.0), "kein Abriss");
@@ -158,7 +158,7 @@ fn slow_stall_drops_nose_steeply_then_recovers_with_speed() {
     let mut ended = false;
     for _ in 0..ticks(15.0) {
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0));
-        if !sim.aircraft().stalled {
+        if !sim.aircraft().is_stalled() {
             ended = true;
             break;
         }
@@ -170,19 +170,39 @@ fn slow_stall_drops_nose_steeply_then_recovers_with_speed() {
 }
 
 #[test]
-fn fast_stall_is_only_a_mild_buffet() {
-    // 300 kt in Bodennähe: voll ziehen überschreitet den Abrisswinkel, aber
-    // das Flugzeug kippt nicht ab, sondern schüttelt nur an der Grenze.
-    let mut sim = high_sim(1_500.0, 155.0, 1.0);
-    let mut stalled = false;
-    let mut min_pitch: f64 = 0.0;
-    for _ in 0..ticks(4.0) {
-        sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 1.0, 0));
-        stalled |= sim.aircraft().stalled;
-        min_pitch = min_pitch.min(sim.flight_data().pitch);
+fn stall_strength_grows_with_speed_deficit() {
+    // Gleich hartes Ziehen: bei hoher Fahrt nur ein leichtes Schütteln an der
+    // Grenze, bei niedriger Fahrt ein voller Abriss mit abkippender Nase.
+    let pull = |speed: f64| {
+        let mut sim = high_sim(1_500.0, speed, 1.0);
+        let (mut max_stall, mut min_pitch) = (0.0_f64, 0.0_f64);
+        for _ in 0..ticks(4.0) {
+            sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 1.0, 0));
+            max_stall = max_stall.max(sim.aircraft().stall);
+            min_pitch = min_pitch.min(sim.flight_data().pitch);
+        }
+        (max_stall, min_pitch)
+    };
+    let (fast_stall, fast_pitch) = pull(160.0);
+    let (slow_stall, slow_pitch) = pull(90.0);
+    assert!(fast_stall < 0.5, "schnell: Abrissstärke {fast_stall:.2}");
+    assert!(fast_pitch > -0.35, "schnell: Nase fällt auf {:.0}°", fast_pitch.to_degrees());
+    assert!(slow_stall > 0.8, "langsam: Abrissstärke {slow_stall:.2}");
+    assert!(slow_pitch < -0.8, "langsam: Nase nur auf {:.0}°", slow_pitch.to_degrees());
+}
+
+#[test]
+fn stall_strength_changes_smoothly() {
+    // Kein Schaltzustand: zwischen zwei Ticks ändert sich die Abrissstärke nur wenig.
+    let mut sim = high_sim(2_500.0, 82.0, 0.7);
+    let mut last = sim.aircraft().stall;
+    for t in 0..ticks(20.0) {
+        let pull = if t < ticks(3.0) { 1.0 } else { 0.4 };
+        sim.step(ControlFrame::from_analog(pull, 0.0, 0.0, 0.7, 0));
+        let now = sim.aircraft().stall;
+        assert!((now - last).abs() < 0.05, "Sprung der Abrissstärke {last:.2} → {now:.2} bei Tick {t}");
+        last = now;
     }
-    assert!(stalled, "kein Abriss beim harten Ziehen");
-    assert!(min_pitch > -0.2, "schneller Abriss kippt zu stark ab: {:.0}°", min_pitch.to_degrees());
 }
 
 #[test]
@@ -191,10 +211,10 @@ fn stall_warning_precedes_stall() {
     let mut warned_before = false;
     for _ in 0..ticks(5.0) {
         let fd = sim.flight_data();
-        if fd.warnings.stall && !sim.aircraft().stalled {
+        if fd.warnings.stall && !sim.aircraft().is_stalled() {
             warned_before = true;
         }
-        if sim.aircraft().stalled {
+        if sim.aircraft().is_stalled() {
             break;
         }
         sim.step(ControlFrame::from_analog(0.6, 0.0, 0.0, 0.7, 0));
@@ -203,17 +223,19 @@ fn stall_warning_precedes_stall() {
 }
 
 #[test]
-fn hard_turn_bleeds_speed() {
-    // 70° Querlage, voll ziehen, 10 s: deutlicher Fahrtverlust.
+fn hard_turn_bleeds_energy() {
+    // 70° Querlage, voll ziehen, 10 s: deutlicher Energieverlust (Höhe + Fahrt),
+    // selbst mit Vollschub. Wer zu hart zieht, spiralt nach unten.
     let mut sim = high_sim(2_000.0, 180.0, 1.0);
-    let v0 = sim.flight_data().tas_mps;
+    let energy = |fd: &f29_core::FlightData| fd.altitude_m + fd.tas_mps * fd.tas_mps / (2.0 * 9.81);
+    let e0 = energy(&sim.flight_data());
     for _ in 0..ticks(10.0) {
         let fd = sim.flight_data();
         let roll = ((70.0_f64.to_radians() - fd.roll) * 3.0).clamp(-1.0, 1.0);
         sim.step(ControlFrame::from_analog(1.0, roll, 0.0, 1.0, 0));
     }
-    let lost = v0 - sim.flight_data().tas_mps;
-    assert!(lost > 30.0, "nur {lost:.1} m/s Fahrtverlust in 10 s harter Kurve");
+    let lost = e0 - energy(&sim.flight_data());
+    assert!(lost > 300.0, "nur {lost:.0} m Energiehöhe verloren in 10 s harter Kurve");
 }
 
 #[test]
@@ -226,7 +248,7 @@ fn steep_zoom_climb_ends_in_stall() {
         // 45° Nicklage anstreben und halten
         let pitch = ((45.0_f64.to_radians() - fd.pitch) * 2.0).clamp(-1.0, 1.0);
         sim.step(ControlFrame::from_analog(pitch, 0.0, 0.0, 1.0, 0));
-        stalled |= sim.aircraft().stalled;
+        stalled |= sim.aircraft().is_stalled();
     }
     assert!(stalled, "45°-Steigflug mit Vollschub endet nicht im Abriss");
 }

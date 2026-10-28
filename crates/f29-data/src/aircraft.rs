@@ -58,19 +58,22 @@ pub struct AircraftSpec {
     /// Anstellwinkel, ab dem die Abrisswarnung kommt (muss unter `alpha_stall_rad` liegen).
     /// Es gibt bewusst **keinen** Anstellwinkelbegrenzer: Wer zu hart zieht, reißt ab.
     pub alpha_warning_rad: f64,
-    /// Abkippen im Strömungsabriss: Drehrate (rad/s), mit der die Nase aus
+    // --- Strömungsabriss (stetig, Stärke 0..1 aus dem Fahrtdefizit) ---
+    /// Relatives Fahrtdefizit unter der Abrissgeschwindigkeit, bei dem der
+    /// Abriss seine volle Stärke erreicht (z. B. 0,3 = 30 % zu langsam).
+    pub stall_deficit_full: f64,
+    /// Zusätzliche g-Last, die voller Zug am Knüppel für die Abrissgeschwindigkeit
+    /// anfordert (v_s = v_s1g · √(1 + Zug · stall_stick_g)).
+    pub stall_stick_g: f64,
+    /// Zeitkonstante, mit der die Abrissstärke dem Fahrtdefizit folgt (s).
+    pub stall_time_constant_s: f64,
+    /// Abkippen bei vollem Abriss: Drehrate (rad/s), mit der die Nase aus
     /// jeder Fluglage Richtung senkrecht nach unten fällt.
     pub stall_pitch_break: f64,
-    /// Anteil der Höhenruderwirkung, der im Strömungsabriss erhalten bleibt (0..1).
+    /// Anteil der Ruderwirkung, der bei vollem Abriss erhalten bleibt (0..1).
     pub stall_control_factor: f64,
-    /// Anteil des Auftriebs, der bei abgerissener Strömung bleibt (0..1).
+    /// Anteil des Auftriebs, der bei vollem Abriss bleibt (0..1).
     pub stall_lift_factor: f64,
-    /// Anstellwinkel, unter dem die Strömung nach einem Abriss wieder anliegt
-    /// (Hysterese; deutlich kleiner als `alpha_stall_rad`).
-    pub alpha_reattach_rad: f64,
-    /// Ein Abriss endet erst, wenn die Fahrt wieder dieses Vielfache der
-    /// 1-g-Abrissgeschwindigkeit (bei aktueller Luftdichte) erreicht hat.
-    pub stall_recovery_speed_factor: f64,
     /// Verstärkung der Schiebewinkel-Kompensation (Gierdämpfer).
     pub yaw_damper_gain: f64,
 }
@@ -108,11 +111,12 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     g_limit_pos: 7.0,
     g_limit_neg: 2.5,
     alpha_warning_rad: 0.25,
-    stall_pitch_break: 0.9,
+    stall_deficit_full: 0.3,
+    stall_stick_g: 4.0,
+    stall_time_constant_s: 0.3,
+    stall_pitch_break: 1.0,
     stall_control_factor: 0.15,
     stall_lift_factor: 0.35,
-    alpha_reattach_rad: 0.14,
-    stall_recovery_speed_factor: 1.35,
     yaw_damper_gain: 2.5,
 };
 
@@ -124,7 +128,7 @@ impl AircraftSpec {
             field,
             reason,
         };
-        let positive: [(&'static str, f64); 20] = [
+        let positive: [(&'static str, f64); 23] = [
             ("mass_kg", self.mass_kg),
             ("wing_area_m2", self.wing_area_m2),
             ("thrust_max_n", self.thrust_max_n),
@@ -145,6 +149,9 @@ impl AircraftSpec {
             ("g_limit_neg", self.g_limit_neg),
             ("alpha_warning_rad", self.alpha_warning_rad),
             ("stall_pitch_break", self.stall_pitch_break),
+            ("stall_deficit_full", self.stall_deficit_full),
+            ("stall_stick_g", self.stall_stick_g),
+            ("stall_time_constant_s", self.stall_time_constant_s),
         ];
         for (field, value) in positive {
             if !(value.is_finite() && value > 0.0) {
@@ -166,17 +173,11 @@ impl AircraftSpec {
         if !(0.0..=1.0).contains(&self.stall_control_factor) {
             return Err(err("stall_control_factor", "muss zwischen 0 und 1 liegen".into()));
         }
-        if !(self.stall_recovery_speed_factor >= 1.0 && self.stall_recovery_speed_factor < 3.0) {
-            return Err(err("stall_recovery_speed_factor", "muss zwischen 1 und 3 liegen".into()));
+        if self.stall_deficit_full > 1.0 {
+            return Err(err("stall_deficit_full", "muss höchstens 1 sein".into()));
         }
         if !(0.0..=1.0).contains(&self.stall_lift_factor) {
             return Err(err("stall_lift_factor", "muss zwischen 0 und 1 liegen".into()));
-        }
-        if !(self.alpha_reattach_rad > 0.0 && self.alpha_reattach_rad < self.alpha_warning_rad) {
-            return Err(err(
-                "alpha_reattach_rad",
-                "muss zwischen 0 und alpha_warning_rad liegen (Hysterese)".into(),
-            ));
         }
         if self.alpha_stall_rad > 0.6 {
             return Err(err("alpha_stall_rad", "unplausibel groß (> 0.6 rad)".into()));
