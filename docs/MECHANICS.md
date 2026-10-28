@@ -367,6 +367,12 @@ Format jedes Eintrags:
   werden geglättet, damit es rüttelt statt zittert. Seit v0.1.6 rüttelt es
   zusätzlich bei ausgefahrenem Fahrwerk über dessen Höchstfahrt; am Boden ruht
   die Turbulenz. Schwierigkeitsstufen und Schäden folgen später.
+
+  *Designentscheidung (v0.1.9):* Die Turbulenz wird zum Boden hin **nicht**
+  ausgeblendet, sie ist direkt über dem Boden am stärksten. Langsamer Tiefstflug
+  zum Unterfliegen von Radaren (M-020) soll anspruchsvoll bleiben: Wer langsam
+  fliegt, wackelt weniger, und Klappen beruhigen weiter, erhöhen dafür aber
+  später den Radarquerschnitt.
 - **Unsere Werte:** `TURBULENCE_*` in `crates/f29-core/src/sim.rs`.
 - **Status:** umgesetzt (v0.1.4)
 
