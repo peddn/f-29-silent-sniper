@@ -39,9 +39,12 @@ jobs:
         with:
           key: core
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: Tests
-        run: cargo test
+        shell: bash
+        run: |
+          rustc --version
+          cargo clippy --all-targets --message-format=short -- -D warnings 2>&1 | tee clippy.txt || true
+          grep -E "error|warning" clippy.txt | head -30 | sed 's/^/::error::/'
+          exit 1
       - name: Tests (Release)
         run: cargo test --release -p f29-core
       - name: Golden-Replay über die Kommandozeile
