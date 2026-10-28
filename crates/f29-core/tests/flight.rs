@@ -137,6 +137,55 @@ fn hard_pull_stalls_sinks_and_recovers_when_released() {
 }
 
 #[test]
+fn slow_stall_drops_nose_steeply_then_recovers_with_speed() {
+    // 160 kt: hart ziehen bis zum Abriss, dann loslassen.
+    let mut sim = high_sim(2_500.0, 82.0, 0.7);
+    let h0 = sim.flight_data().altitude_m;
+    let mut t = 0;
+    while !sim.aircraft().stalled {
+        sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 0.7, 0));
+        t += 1;
+        assert!(t < ticks(5.0), "kein Abriss");
+    }
+    // Die Nase kippt steil nach unten – Ziehen hilft dabei kaum.
+    let mut min_pitch: f64 = 0.0;
+    for _ in 0..ticks(4.0) {
+        sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 0.7, 0));
+        min_pitch = min_pitch.min(sim.flight_data().pitch);
+    }
+    assert!(min_pitch < -1.0, "Nase nur auf {:.0}° gefallen", min_pitch.to_degrees());
+    // Loslassen: im Sturz Fahrt aufnehmen, Abriss endet.
+    let mut ended = false;
+    for _ in 0..ticks(15.0) {
+        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0));
+        if !sim.aircraft().stalled {
+            ended = true;
+            break;
+        }
+    }
+    assert!(ended, "Abriss endet nicht");
+    let fd = sim.flight_data();
+    assert!(fd.tas_mps > 90.0, "Abriss endet ohne ausreichende Fahrt: {:.0} m/s", fd.tas_mps);
+    assert!(h0 - fd.altitude_m > 150.0, "kaum Höhenverlust: {:.0} m", h0 - fd.altitude_m);
+}
+
+#[test]
+fn fast_stall_is_only_a_mild_buffet() {
+    // 300 kt in Bodennähe: voll ziehen überschreitet den Abrisswinkel, aber
+    // das Flugzeug kippt nicht ab, sondern schüttelt nur an der Grenze.
+    let mut sim = high_sim(1_500.0, 155.0, 1.0);
+    let mut stalled = false;
+    let mut min_pitch: f64 = 0.0;
+    for _ in 0..ticks(4.0) {
+        sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 1.0, 0));
+        stalled |= sim.aircraft().stalled;
+        min_pitch = min_pitch.min(sim.flight_data().pitch);
+    }
+    assert!(stalled, "kein Abriss beim harten Ziehen");
+    assert!(min_pitch > -0.2, "schneller Abriss kippt zu stark ab: {:.0}°", min_pitch.to_degrees());
+}
+
+#[test]
 fn stall_warning_precedes_stall() {
     let mut sim = high_sim(5_000.0, 130.0, 0.7);
     let mut warned_before = false;

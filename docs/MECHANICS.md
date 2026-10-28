@@ -107,22 +107,34 @@ Format jedes Eintrags:
   Spielerbeobachtung (erster Spieltest): „Im Original sackt das Flugzeug aggressiv
   senkrecht nach unten ab, wenn man aggressiv fliegt.“
 - **Unser Design:** Das Original rechnet mit einer Geschwindigkeitsschwelle. Wir
-  bilden das Verhalten physikalisch über den **Anstellwinkel** ab; die
-  Abhängigkeit von Höhe (Luftdichte) und g-Last ergibt sich dabei von selbst
-  (v_Abriss ∝ √(n/ρ)).
+  lösen den Abriss physikalisch über den **Anstellwinkel** aus; die Abhängigkeit
+  von Höhe (Luftdichte) und g-Last ergibt sich dabei von selbst (v_Abriss ∝ √(n/ρ)).
+  Den Verlauf danach steuert das **Fahrtdefizit** gegenüber der Erholungsfahrt
+  (`stall_recovery_speed_factor` × 1-g-Abrissgeschwindigkeit bei aktueller Dichte):
+  - **Langsamer Abriss:** Die Nase kippt aus jeder Fluglage kräftig Richtung
+    senkrecht nach unten (`stall_pitch_break`), über Nicken und Gieren. Die
+    Flugbahn folgt der Nase, der Auftrieb bricht auf `stall_lift_factor` ein, und
+    die Ruder sind fast wirkungslos.
+  - **Schneller („beschleunigter“) Abriss** durch zu hartes Ziehen: nur leichtes
+    Nicken, milder Auftriebsverlust, die Strömung legt knapp unter der Warnschwelle
+    wieder an. Das ergibt ein Schütteln an der Grenze statt eines Abkippens.
+  - **Ende des Abrisses** erst, wenn der Anstellwinkel klein *und* die Fahrt
+    wieder über der Erholungsfahrt ist. Danach wirkt das Höhenruder umso besser,
+    je höher der Staudruck ist (`control_q_ref_pa`); wer zu früh zu hart zieht,
+    reißt erneut ab.
   - kein Anstellwinkelbegrenzer, nur eine Warnung kurz vor dem Abrisswinkel
-  - **Hysterese:** Abriss beim Überschreiten von `alpha_stall_rad`, Wiederanlegen
-    der Strömung erst unter `alpha_reattach_rad`
-  - im Abriss: Auftrieb auf `stall_lift_factor`, zusätzlicher Widerstand,
-    Ruderwirkung auf `stall_control_factor`, Nickabfall mit Mindestrate
-    `stall_pitch_break` plus Anteil proportional zur Abrisstiefe
   - Der Autopilot schützt sich selbst (Energie- und Anstellwinkelschutz), das
     Flugzeug tut es nicht.
+
+  *v0.1.2:* Die erste Fassung (v0.1.1) beendete den Abriss schon, sobald der
+  Anstellwinkel kleiner wurde. Das führte zu einem schnellen Pendeln zwischen Abriss
+  und Wiederanlegen, das sich laut Spieltest wie „Zurückspulen“ anfühlte.
 - **Unsere Werte:** `crates/f29-data/src/aircraft.rs`. Abgestimmt über die
-  Flugtests `hard_pull_stalls_sinks_and_recovers_when_released`,
+  Flugtests `slow_stall_drops_nose_steeply_then_recovers_with_speed`,
+  `fast_stall_is_only_a_mild_buffet`, `hard_pull_stalls_sinks_and_recovers_when_released`,
   `hard_turn_bleeds_speed`, `steep_zoom_climb_ends_in_stall` und
   `stall_warning_precedes_stall`. Keine Werte aus der Referenz übernommen.
-- **Status:** umgesetzt (v0.1.1)
+- **Status:** umgesetzt (v0.1.2)
 
 ### M-005 Höhenanzeige
 

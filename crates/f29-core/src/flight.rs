@@ -9,8 +9,10 @@
 //! Ratenhaltung (Knüppel neutral = Lage bleibt), Turn-Koordination,
 //! Gierdämpfer und einen g-Begrenzer – aber bewusst **keinen**
 //! Anstellwinkelbegrenzer. Wer zu langsam zu hart zieht, reißt die Strömung
-//! ab: Der Auftrieb bricht ein, die Ruder verlieren Wirkung, die Nase fällt
-//! und das Flugzeug sackt durch, bis wieder Fahrt aufgebaut ist.
+//! ab: Der Auftrieb bricht ein, die Ruder verlieren fast jede Wirkung, und die
+//! Nase kippt aus jeder Fluglage Richtung senkrecht nach unten. Erst wenn das
+//! Flugzeug im Sturz wieder genug Fahrt hat, liegt die Strömung wieder an –
+//! dann lässt es sich langsam abfangen; die Nickwirkung wächst mit der Fahrt.
 //!
 //! Damit entstehen Anstellwinkel, Schiebewinkel, Lastvielfaches,
 //! Energieverlust im Kurvenflug und Strömungsabriss physikalisch aus der
@@ -91,14 +93,27 @@ pub struct AeroData {
     pub thrust: f64,
     /// Strömung abgerissen (Zustand aus [`AircraftState::stalled`]).
     pub stalled: bool,
+    /// Schwere des Abrisses 0..1 nach Fahrtdefizit (0 = schnell, 1 = langsam).
+    pub stall_severity: f64,
 }
 
 /// Geschwindigkeit, unter der keine Aerodynamik gerechnet wird (Singularität).
 const MIN_AERO_SPEED: f64 = 1.0;
 /// Unterhalb dieser Geschwindigkeit sind Bahnhaltung und Koordination aus.
 const MIN_FBW_SPEED: f64 = 40.0;
-/// Zusätzlicher Nickabfall pro rad Abrisstiefe, 1/s.
-const STALL_BREAK_GAIN: f64 = 3.0;
+/// Wie schnell sich die Flugbahn im Abriss zur Nase dreht (1/s). Das Flugzeug
+/// fällt dadurch der Nase nach, statt flach durchzusacken.
+const STALL_PATH_ALIGN: f64 = 1.6;
+/// Anteil des Auftriebs bei einem milden Abriss (hohe Fahrt).
+const STALL_MILD_LIFT: f64 = 0.8;
+/// Verbleibende Ruderwirkung bei einem milden Abriss (hohe Fahrt).
+const STALL_MILD_CONTROL: f64 = 0.6;
+/// Anteil der vollen Abkipprate, der auch ohne Fahrtdefizit wirkt.
+const STALL_MIN_BREAK: f64 = 0.25;
+/// Relatives Fahrtdefizit, ab dem die volle Abkipprate erreicht wird.
+const STALL_DEFICIT_FULL: f64 = 0.25;
+/// Ab diesem Winkel zur Senkrechten (rad) kippt die Nase im Abriss nicht weiter.
+const STALL_DIVE_CONE: f64 = 0.2;
 /// Zusätzlicher Widerstandsbeiwert bei abgerissener Strömung.
 const STALL_EXTRA_DRAG: f64 = 0.08;
 /// Ausfahrgeschwindigkeit der Luftbremse, 1/s.
@@ -146,11 +161,14 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
     let qbar = 0.5 * air.density * tas * tas;
     let mut cl = lift_coefficient(spec, alpha);
     let mut cd = drag_coefficient(spec, alpha, cl, s.airbrake);
+    let severity = if s.stalled { stall_severity(spec, air.density, tas) } else { 0.0 };
     if s.stalled {
         // Abgerissene Strömung: Auftrieb bricht ein, Widerstand steigt – auch
         // wenn der Anstellwinkel schon wieder unter dem Abrisswinkel liegt.
-        cl *= spec.stall_lift_factor;
-        cd += STALL_EXTRA_DRAG;
+        // Bei hoher Fahrt (kurzer, „beschleunigter“ Abriss) fällt das milder aus.
+        let lift_factor = STALL_MILD_LIFT + (spec.stall_lift_factor - STALL_MILD_LIFT) * severity;
+        cl *= lift_factor;
+        cd += STALL_EXTRA_DRAG * (0.5 + 0.5 * severity);
     }
     let ca = detmath::cos(alpha);
     // Normalkraft in Körper-z (Auftrieb und Widerstand projiziert).
@@ -167,6 +185,7 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
         cd,
         thrust,
         stalled: s.stalled,
+        stall_severity: severity,
     }
 }
 
@@ -184,10 +203,14 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
     // Ratenkommando: Knüppel neutral ⇒ q = 0. Der Geradeausflug ist damit
     // ein stabiles Gleichgewicht (zu wenig Auftrieb ⇒ Bahn krümmt sich nach
     // unten ⇒ α wächst ⇒ Auftrieb wächst), es braucht keine Kompensation.
-    let stall_excess = (aero.alpha.abs() - spec.alpha_stall_rad).max(0.0);
     let stalled = aero.stalled;
     // Im Abriss verlieren die Ruder einen Großteil ihrer Wirkung.
-    let stall_eff = if stalled { spec.stall_control_factor } else { 1.0 };
+    // Bei langsamem Abriss fast wirkungslos, bei schnellem nur leicht geschwächt.
+    let stall_eff = if stalled {
+        STALL_MILD_CONTROL + (spec.stall_control_factor - STALL_MILD_CONTROL) * aero.stall_severity
+    } else {
+        1.0
+    };
     let mut q_cmd = c.pitch_f() * spec.max_pitch_rate * eff * stall_eff;
     if v > MIN_FBW_SPEED {
         // g-Begrenzer über die Bahnkrümmung n ≈ V·q/g + cosθ·cosφ.
@@ -195,24 +218,57 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
         let q_min = (-spec.g_limit_neg - ctheta * cphi) * G0 / v;
         q_cmd = q_cmd.clamp(q_min, q_max);
     }
-    // Nickabfall im Abriss: Die Nase fällt mit einer Mindestrate, die mit der
-    // Tiefe des Abrisses weiter wächst. Ziehen kommt dagegen nicht an – das
-    // Flugzeug muss erst wieder Fahrt aufnehmen.
-    if stalled {
-        let sign = if aero.alpha > 0.0 { 1.0 } else { -1.0 };
-        q_cmd -= sign * (spec.stall_pitch_break + STALL_BREAK_GAIN * stall_excess);
-    }
-
     // --- Rollen ---
     let p_cmd = c.roll_f() * spec.max_roll_rate * eff * stall_eff;
 
     // --- Gieren ---
     let mut r_cmd = c.yaw_f() * spec.max_yaw_rate * eff + spec.yaw_damper_gain * aero.beta;
-    if v > MIN_FBW_SPEED {
+    if v > MIN_FBW_SPEED && !stalled {
         r_cmd += (G0 / v * sphi * ctheta).clamp(-0.3, 0.3);
     }
 
-    DVec3::new(p_cmd, q_cmd, r_cmd)
+    let mut cmd = DVec3::new(p_cmd, q_cmd, r_cmd);
+    if stalled {
+        cmd += stall_departure_rates(spec, s, aero);
+    }
+    cmd
+}
+
+/// Schwere eines Abrisses nach Fahrtdefizit: 0 bei Erholungsfahrt und
+/// darüber, 1 bei einem Defizit von `STALL_DEFICIT_FULL` und mehr.
+fn stall_severity(spec: &AircraftSpec, density: f64, tas: f64) -> f64 {
+    let v_rec = recovery_speed(spec, density);
+    ((v_rec - tas) / (STALL_DEFICIT_FULL * v_rec)).clamp(0.0, 1.0)
+}
+
+/// Fahrt, ab der ein Abriss enden kann (m/s).
+fn recovery_speed(spec: &AircraftSpec, density: f64) -> f64 {
+    spec.stall_recovery_speed_factor * spec.stall_speed_1g(density)
+}
+
+/// Abkippen im Abriss: Drehung, die die Nase aus jeder Lage Richtung
+/// senkrecht nach unten bringt (über Nicken und Gieren, Rollen bleibt frei).
+///
+/// Die Stärke hängt vom Fahrtdefizit ab: Ein kurzer Abriss bei hoher Fahrt
+/// (zu hart gezogen) lässt die Nase nur leicht nicken, ein Abriss bei
+/// niedriger Fahrt kippt das Flugzeug hart über die Nase ab.
+fn stall_departure_rates(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData) -> DVec3 {
+    let strength = STALL_MIN_BREAK + (1.0 - STALL_MIN_BREAK) * aero.stall_severity;
+    // Schwerkraftrichtung in Körperachsen
+    let g = s.attitude.inverse_rotate(DVec3::Z);
+    // Winkel zwischen Nase (Körper-x) und der Senkrechten nach unten
+    let angle = detmath::acos(g.x);
+    if angle <= STALL_DIVE_CONE {
+        return DVec3::ZERO;
+    }
+    // Drehachse Nase × unten = (0, −g.z, g.y); bei senkrecht hochstehender
+    // Nase ist sie unbestimmt – dann einfach über die Nase abkippen.
+    let axis = DVec3::new(0.0, -g.z, g.y);
+    let len = axis.length();
+    let dir = if len > 0.05 { axis / len } else { DVec3::new(0.0, -1.0, 0.0) };
+    // Weich auslaufen, wenn die Nase fast senkrecht steht
+    let fade = ((angle - STALL_DIVE_CONE) / 0.4).min(1.0);
+    dir * (spec.stall_pitch_break * fade * strength)
 }
 
 /// Ein Integrationsschritt. Gibt die Aerodynamik des *Ausgangszustands* zurück.
@@ -242,6 +298,12 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, dt: f6
         force_body += lift_dir * (qs * aero.cl);
         force_body -= v_hat * (qs * aero.cd);
         force_body += DVec3::Y * (-qs * spec.cy_beta * aero.beta);
+        if s.stalled {
+            // Flugbahn zur Nase drehen: Kraft senkrecht zur Geschwindigkeit,
+            // ändert also nur die Richtung, nicht den Betrag der Fahrt.
+            let to_nose = DVec3::X - v_hat * v_hat.x;
+            force_body += to_nose * (spec.mass_kg * aero.tas * STALL_PATH_ALIGN * aero.stall_severity);
+        }
     }
     let force_world = s.attitude.rotate(force_body) + DVec3::new(0.0, 0.0, spec.mass_kg * G0);
     let accel = force_world / spec.mass_kg;
@@ -251,14 +313,20 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, dt: f6
     s.position += s.velocity * dt;
     s.attitude = (s.attitude * DQuat::from_rotation_vector(s.body_rates * dt)).normalize();
 
-    // Abriss-Hysterese: Abriss oberhalb des Abrisswinkels, Wiederanlegen der
-    // Strömung erst deutlich darunter.
+    // Abriss: oberhalb des Abrisswinkels. Er endet erst, wenn die Strömung
+    // wieder anliegen kann (kleiner Anstellwinkel) *und* das Flugzeug im Sturz
+    // genug Fahrt aufgebaut hat.
     let a = aero.alpha.abs();
     if aero.tas >= MIN_AERO_SPEED {
         if a > spec.alpha_stall_rad {
             s.stalled = true;
-        } else if a < spec.alpha_reattach_rad {
-            s.stalled = false;
+        } else if s.stalled {
+            // Milder Abriss: Strömung liegt schon knapp unter der Warnschwelle wieder an.
+            let reattach = spec.alpha_warning_rad
+                + (spec.alpha_reattach_rad - spec.alpha_warning_rad) * aero.stall_severity;
+            if a < reattach && aero.tas > recovery_speed(spec, aero.density) {
+                s.stalled = false;
+            }
         }
     }
 
@@ -290,25 +358,41 @@ mod tests {
     }
 
     #[test]
-    fn stall_hysteresis() {
+    fn slow_stall_needs_speed_and_small_alpha_to_end() {
         let spec = &F29_SPEC;
-        let mut st = AircraftState::level(0.0, 0.0, 5000.0, 0.0, 150.0);
-        // Nase weit über die Flugbahn: Anstellwinkel jenseits des Abrisses
+        let dt = 1.0 / 120.0;
+        // Langsam (weit unter Erholungsfahrt) und Nase über der Flugbahn ⇒ Abriss
+        let mut st = AircraftState::level(0.0, 0.0, 5000.0, 0.0, 70.0);
         st.attitude = DQuat::from_euler(0.0, spec.alpha_stall_rad + 0.05, 0.0);
-        step(spec, &mut st, &ControlFrame::default(), 1.0 / 120.0);
+        step(spec, &mut st, &ControlFrame::default(), dt);
         assert!(st.stalled);
-        // Zwischen Wiederanlege- und Abrisswinkel bleibt der Abriss bestehen
-        st.attitude = DQuat::from_euler(0.0, (spec.alpha_reattach_rad + spec.alpha_stall_rad) * 0.5, 0.0);
-        st.velocity = DVec3::new(150.0, 0.0, 0.0);
-        step(spec, &mut st, &ControlFrame::default(), 1.0 / 120.0);
-        assert!(st.stalled);
-        let stalled_lift = aero_data(spec, &st).cl;
-        // Unter dem Wiederanlegewinkel liegt die Strömung wieder an
-        st.attitude = DQuat::from_euler(0.0, spec.alpha_reattach_rad * 0.5, 0.0);
-        st.velocity = DVec3::new(150.0, 0.0, 0.0);
-        step(spec, &mut st, &ControlFrame::default(), 1.0 / 120.0);
+        assert!(aero_data(spec, &st).stall_severity > 0.99);
+        // Kleiner Anstellwinkel, aber zu langsam ⇒ Abriss bleibt
+        st.attitude = DQuat::from_euler(0.0, 0.0, 0.0);
+        st.velocity = DVec3::new(70.0, 0.0, 0.0);
+        step(spec, &mut st, &ControlFrame::default(), dt);
+        assert!(st.stalled, "Abriss darf ohne Fahrt nicht enden");
+        // Kleiner Anstellwinkel und genug Fahrt ⇒ Strömung liegt wieder an
+        st.attitude = DQuat::from_euler(0.0, 0.0, 0.0);
+        st.velocity = DVec3::new(160.0, 0.0, 0.0);
+        step(spec, &mut st, &ControlFrame::default(), dt);
         assert!(!st.stalled);
-        assert!(stalled_lift < lift_coefficient(spec, spec.alpha_stall_rad) * 0.7);
+    }
+
+    #[test]
+    fn stalled_lift_collapses_more_when_slow() {
+        let spec = &F29_SPEC;
+        let mut slow = AircraftState::level(0.0, 0.0, 5000.0, 0.0, 70.0);
+        slow.attitude = DQuat::from_euler(0.0, 0.2, 0.0);
+        let mut fast = slow.clone();
+        fast.velocity = DVec3::new(200.0, 0.0, 0.0);
+        let clean = aero_data(spec, &slow).cl;
+        slow.stalled = true;
+        fast.stalled = true;
+        let cl_slow = aero_data(spec, &slow).cl;
+        let cl_fast = aero_data(spec, &fast).cl;
+        assert!(cl_slow < 0.5 * clean, "langsamer Abriss: {cl_slow} vs {clean}");
+        assert!(cl_fast > cl_slow, "schneller Abriss muss milder sein");
     }
 
     #[test]
