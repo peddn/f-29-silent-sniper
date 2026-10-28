@@ -323,3 +323,41 @@ fn gear_overspeed_buffets_and_warns() {
     assert!(fd.warnings.gear_overspeed);
     assert!(fd.turbulence > 0.05, "kein Rütteln: {}", fd.turbulence);
 }
+
+/// Spielertest: Vollgas und von Anfang an voll gezogen (Tastatur), ohne
+/// Klappen. Das Flugzeug muss abheben und steigen, ohne abzureißen – und nach
+/// dem Loslassen normal weiterfliegen.
+#[test]
+fn full_pull_takeoff_does_not_stall() {
+    for flap in [0, flags::FLAPS] {
+        let mut sim = Sim::new(SimConfig::runway(SEED));
+        let mut stick = 0.0_f64;
+        let mut max_stall = 0.0_f64;
+        for i in 0..ticks(45.0) {
+            let target = if i < ticks(40.0) { 1.0 } else { 0.0 };
+            stick += (target - stick).clamp(-3.0 * DT, 3.0 * DT);
+            sim.step(ControlFrame::from_analog(stick, 0.0, 0.0, 1.0, flags::GEAR | flap));
+            assert_eq!(sim.status(), Status::Flying, "Absturz nach {:.1} s", i as f64 * DT);
+            if !sim.aircraft().on_ground {
+                max_stall = max_stall.max(sim.aircraft().stall);
+                let fd = sim.flight_data();
+                assert!(
+                    !fd.warnings.stall,
+                    "Abrisswarnung beim Start: {} kt, vs {} kt, aoa {:.1}, stall {}, flaps {}, t {}",
+                    f29_core::units::mps_to_kt(fd.tas_mps),
+                    f29_core::units::mps_to_kt(fd.stall_speed_mps),
+                    fd.alpha.to_degrees(),
+                    sim.aircraft().stall,
+                    flap,
+                    fd.time_s
+                );
+            }
+        }
+        assert!(max_stall < 0.01, "Abriss beim Start: {max_stall}");
+        let fd = sim.flight_data();
+        assert!(fd.radar_altitude_m > 60.0, "kein Steigflug: {} m", fd.radar_altitude_m);
+        assert!(!sim.aircraft().takeoff_phase, "Startphase endet beim Loslassen");
+        let (_, pitch, _) = sim.aircraft().attitude.to_euler();
+        assert!(pitch > 0.1, "Nase fällt nach dem Loslassen: {}", pitch.to_degrees());
+    }
+}

@@ -280,8 +280,15 @@ Format jedes Eintrags:
   - Rollmodus: Höhe auf den Boden geklemmt, keine Querlage, Lenken über Quer- und
     Seitenruder mit einer Drehrate, die mit der Fahrt abnimmt – auf der Stelle
     wenden geht. Rollreibung, Radbremse (Taste B) abhängig von der Radlast.
-  - Rotieren erst ab 1,05 × Abrissfahrt (masseabhängig); Abheben, sobald der
+  - Rotieren erst ab 1,1 × Abrissfahrt (masseabhängig); Abheben, sobald der
     Auftrieb das Gewicht trägt.
+  - *v0.1.7:* **Startphase.** Beim Rotieren und nach dem Abheben steuert der
+    Knüppel die Nicklage (voll gezogen = 12°) statt der Nickrate, und es wird
+    keine g-Last angefordert. Vorher hob voller Zug die Nase in einer halben
+    Sekunde auf 14°, und direkt nach dem Abheben riss die Strömung ab
+    (Spielertest). Die Startphase endet, sobald der Knüppel losgelassen wird;
+    danach gilt wieder die normale Ratensteuerung mit der gewohnt gefährlichen
+    Abrissgrenze.
   - Wer schneller als ≈ 23 kt von der befestigten Fläche rollt, verunglückt.
 - **Unsere Werte:** `crates/f29-data/src/aircraft.rs` (Abschnitt Fahrwerk und Boden).
   Startrollstrecke mit vollen Tanks und Klappen ≈ 0,7–1 km; eine geheime Piste
