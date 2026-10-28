@@ -129,8 +129,6 @@ const PATH_HOLD_MAX_RATE: f64 = 0.12;
 /// Bahnhaltung nur bei kleiner Querlage (rad) und neutralem Knüppel.
 const PATH_HOLD_MAX_BANK: f64 = 0.26;
 const PATH_HOLD_STICK_DEADBAND: f64 = 0.03;
-/// Bahnwinkel, unterhalb dessen die Bahnhaltung auf exakt horizontal einrastet (rad).
-const PATH_HOLD_LEVEL_SNAP: f64 = 0.05;
 /// Anstellwinkel jenseits des Abrisswinkels, bei dem der Abriss voll ist (rad).
 const STALL_ALPHA_FULL: f64 = 0.15;
 /// Ab diesem Winkel zur Senkrechten (rad) kippt die Nase im Abriss nicht weiter.
@@ -324,8 +322,7 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
         && s.stall < STALL_NOTICEABLE
         && aero.tas > MIN_FBW_SPEED;
     if hold && !s.path_hold_active {
-        let gamma = flight_path_angle(s);
-        s.path_hold = if gamma.abs() < PATH_HOLD_LEVEL_SNAP { 0.0 } else { gamma };
+        s.path_hold = flight_path_angle(s);
     }
     s.path_hold_active = hold;
 

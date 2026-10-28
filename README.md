@@ -109,7 +109,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Erster Spieltest auf echter Hardware (Linux, AMD Radeon, Vulkan)
 - [x] Feinschliff Flugverhalten nach erstem Spielerfeedback (v0.1.1)
 - [x] Radarhöhe über Grund immer im HUD
-- [x] Bahnhaltung bei losgelassenem Knüppel, Turbulenz in Bodennähe, Landeklappen (v0.1.4)
+- [x] Bahnhaltung bei losgelassenem Knüppel, Turbulenz in Bodennähe, Landeklappen (v0.1.4/0.1.5)
 
 ### v0.2: Angriff und Tarnung
 - [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD

@@ -94,8 +94,13 @@ Format jedes Eintrags:
   *v0.1.4:* Laut Spieltest verlor das Flugzeug im Geradeausflug langsam Höhe, und
   der Schub wirkte kaum. Deshalb gibt es jetzt:
   - **Bahnhaltung:** Bei neutralem Knüppel und kleiner Querlage hält die
-    Flugsteuerung den Bahnwinkel; nahe der Horizontalen rastet sie auf waagerecht
-    ein. Kurven mit Querlage sinken weiterhin, wenn man nicht zieht.
+    Flugsteuerung den Bahnwinkel, den das Flugzeug beim Loslassen hat. Kurven mit
+    Querlage sinken weiterhin, wenn man nicht zieht.
+
+  *v0.1.5:* Das Einrasten auf exakt waagerecht wurde wieder entfernt. Der
+  beobachtete Höhenverlust war korrektes Verhalten: Die Nase lag auf dem
+  Horizont, für den Horizontalflug muss sie aber um den Anstellwinkel darüber
+  stehen. Maßgeblich für die Flugbahn ist der Flight Path Marker im HUD.
   - **Schnelleres Triebwerk und Staudruckwiderstand im Leerlauf:** Gas wegnehmen
     bremst deutlich, und der Maximalschub ist etwas höher. In 10 s ergeben sich
     etwa +13 m/s bei Vollgas und −30 m/s im Leerlauf.
