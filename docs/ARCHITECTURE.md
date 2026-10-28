@@ -29,10 +29,10 @@ kompiliert und testet ohne Grafikkarte, ohne Fenster und ohne externe Crates.
 | Crate | Aufgabe |
 |---|---|
 | `f29-data` | Spieldaten als Typen + Plausibilitätsprüfung |
-| `f29-terrain` | Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung |
+| `f29-terrain` | Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung, Flugplätze (Platzwahl, Einebnung) |
 | `f29-core` | Flugmodell, Atmosphäre, Sim-Schleife, Navigation, Replays, Autopilot, deterministische Mathematik |
 | `f29-hud` | HUD und Instrumente als Liniensegmente, Vektorfont, SVG-Export |
-| `f29-render` | Terrain-Kachel-Meshes, Flugzeugmodell, Palette, NED → Y-up |
+| `f29-render` | Terrain-Kachel-Meshes, Bahnen mit Markierungen und PAPI, Flugzeugmodell mit Fahrwerk, Palette, NED → Y-up |
 | `f29-headless` | Simulation ohne Grafik: Demo, Replays, HUD als SVG, Höhenkarte, Benchmark |
 | `f29-app` | Fenster, Eingabe, Kameras, Terrain-Streaming, Post-Processing |
 
@@ -88,9 +88,10 @@ Terrain-Streaming in Threads), solange es den Simulationszustand nur liest.
 |---|---|---|
 | Unit | detmath vs. `std` (≤ 1e-14), Quaternionen, ISA-Tabellenwerte, PCG32-Referenzfolge, Rauschen | `src/**` |
 | Flugtests | Autopilot hält Höhe/Kurs/Fahrt, Rollrate, g-Begrenzer, stetiger Strömungsabriss (Abkippen, Erholung mit Fahrt, keine Sprünge), Abrisswarnung, Energieverlust in harter Kurve, Abriss im Steilflug, Schubwirkung, Turbulenz nur in Bodennähe, Landeklappen, begrenzte Steigleistung, Höchstgeschwindigkeit, Luftbremse, Absturz, PULL-UP-Warnung | `f29-core/tests/flight.rs` |
+| Landungen | Bahnstart, Start und Steigflug, Autopilot-Landung (gut), Landung auf geheimer Piste mit Wenden am Ende und erneutem Start, Bauchlandung, harte Landung, Landung neben der Bahn, Route über die Piste, Treibstoffverbrauch und Gewichtseinfluss, Flameout, BINGO, Fahrwerks-Überfahrt | `f29-core/tests/landing.rs` |
 | Determinismus | identische Eingaben ⇒ identischer Hash; eine Quantisierungsstufe Unterschied ⇒ anderer Hash; Replay-Textformat verlustfrei | `f29-core/tests/determinism.rs` |
-| Golden Replay | 90-s-Flug mit festem Hash, läuft in CI auf Linux, Windows und macOS | `f29-core/tests/golden/patrol.replay` |
-| Terrain | Seed-Stabilität, Kachelränder bitgleich, Stetigkeit, Normalen | `f29-terrain`, `f29-render` |
+| Golden Replay | 90-s-Flug sowie Anflug, Landung, Ausrollen und erneuter Start mit festem Hash, läuft in CI auf Linux, Windows und macOS | `f29-core/tests/golden/*.replay` |
+| Terrain | Seed-Stabilität, Kachelränder bitgleich, Stetigkeit, Normalen, Flugplätze eben und deterministisch, Bahnnummern | `f29-terrain`, `f29-render` |
 | HUD | alles bleibt bei 4:3 bis 21:9 im Bild, Projektion des Boresight, Leiter bewegt sich richtig, deterministisch | `f29-hud/src/tests.rs` |
 | Daten | Flugzeugparameter plausibel; Shader-Palette = Rust-Palette | `f29-data`, `f29-render` |
 

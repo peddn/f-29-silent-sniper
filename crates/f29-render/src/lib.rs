@@ -12,6 +12,7 @@ pub mod coords;
 pub mod mesh;
 pub mod model;
 pub mod palette;
+pub mod runway_mesh;
 pub mod terrain_mesh;
 
 pub use mesh::MeshData;

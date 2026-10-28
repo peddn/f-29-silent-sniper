@@ -9,8 +9,10 @@ pub struct AircraftSpec {
     pub name: &'static str,
 
     // --- Masse und Geometrie ---
-    /// Flugmasse inkl. Treibstoff und interner Zuladung.
-    pub mass_kg: f64,
+    /// Leermasse inkl. interner Zuladung, ohne Treibstoff.
+    pub empty_mass_kg: f64,
+    /// Fassungsvermögen der internen Tanks.
+    pub fuel_capacity_kg: f64,
     /// Flügelreferenzfläche.
     pub wing_area_m2: f64,
 
@@ -24,6 +26,11 @@ pub struct AircraftSpec {
     /// Staudruckwiderstand des Triebwerks (N pro m/s Fahrt) im Leerlauf;
     /// nimmt mit steigender Drehzahl ab. Sorgt dafür, dass Gas wegnehmen bremst.
     pub idle_ram_drag: f64,
+    /// Treibstoffverbrauch im Leerlauf (kg/s).
+    pub fuel_flow_idle_kgps: f64,
+    /// Treibstoffverbrauch bei Vollgas auf Meereshöhe (kg/s). Dazwischen
+    /// wächst der Verbrauch mit dem Quadrat der Triebwerksstellung.
+    pub fuel_flow_max_kgps: f64,
 
     // --- Aerodynamik ---
     /// Auftriebsbeiwert bei Anstellwinkel 0.
@@ -52,6 +59,30 @@ pub struct AircraftSpec {
     pub flap_max_speed_mps: f64,
     /// Aus-/Einfahrgeschwindigkeit der Klappen (Anteil pro s).
     pub flap_rate: f64,
+
+    // --- Fahrwerk und Boden ---
+    /// Zusätzlicher Widerstandsbeiwert bei ausgefahrenem Fahrwerk.
+    pub gear_cd: f64,
+    /// Zeit zum vollständigen Aus- oder Einfahren (s).
+    pub gear_time_s: f64,
+    /// Höchstfahrt mit ausgefahrenem Fahrwerk; darüber rüttelt es (m/s).
+    pub gear_max_speed_mps: f64,
+    /// Höhe des Bezugspunkts über dem Boden, wenn das Flugzeug auf den Rädern steht (m).
+    pub gear_height_m: f64,
+    /// Höhe des Bezugspunkts bei Bodenberührung mit eingefahrenem Fahrwerk (m).
+    pub belly_height_m: f64,
+    /// Rollreibungsbeiwert am Boden.
+    pub rolling_friction: f64,
+    /// Verzögerung der Radbremse bei voller Radlast (m/s²).
+    pub wheel_brake_decel: f64,
+    /// Drehrate beim Lenken am Boden im Stand (rad/s); nimmt mit der Fahrt ab.
+    pub ground_steer_rate: f64,
+    /// Sinkrate beim Aufsetzen, ab der die Landung als hart gilt (m/s).
+    pub hard_landing_sink_mps: f64,
+    /// Sinkrate beim Aufsetzen, ab der das Fahrwerk bricht (m/s).
+    pub max_landing_sink_mps: f64,
+    /// Größte Querlage beim Aufsetzen, ohne dass eine Fläche aufschlägt (rad).
+    pub max_landing_bank_rad: f64,
 
     // --- Flugsteuerung (Fly-by-Wire, ratenkommandiert) ---
     /// Maximale Rollrate bei voller Ruderwirksamkeit.
@@ -100,13 +131,16 @@ pub struct AircraftSpec {
 /// ist begrenzt, und wer zu hart zieht, reißt die Strömung ab und sackt durch.
 pub const F29_SPEC: AircraftSpec = AircraftSpec {
     name: "F-29",
-    mass_kg: 21_500.0,
+    empty_mass_kg: 16_300.0,
+    fuel_capacity_kg: 5_200.0,
     wing_area_m2: 70.0,
 
     thrust_max_n: 92_000.0,
     thrust_density_exponent: 0.75,
     engine_spool_time_s: 1.2,
     idle_ram_drag: 200.0,
+    fuel_flow_idle_kgps: 0.35,
+    fuel_flow_max_kgps: 4.3,
 
     cl0: 0.04,
     cl_alpha: 3.6,
@@ -121,6 +155,18 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     flap_cd: 0.05,
     flap_max_speed_mps: 130.0,
     flap_rate: 0.5,
+
+    gear_cd: 0.025,
+    gear_time_s: 5.0,
+    gear_max_speed_mps: 128.6,
+    gear_height_m: 2.2,
+    belly_height_m: 0.9,
+    rolling_friction: 0.03,
+    wheel_brake_decel: 5.0,
+    ground_steer_rate: 0.6,
+    hard_landing_sink_mps: 3.0,
+    max_landing_sink_mps: 5.0,
+    max_landing_bank_rad: 0.17,
 
     max_roll_rate: 2.6,
     max_pitch_rate: 0.45,
@@ -147,8 +193,20 @@ impl AircraftSpec {
             field,
             reason,
         };
-        let positive: [(&'static str, f64); 25] = [
-            ("mass_kg", self.mass_kg),
+        let positive: [(&'static str, f64); 37] = [
+            ("empty_mass_kg", self.empty_mass_kg),
+            ("fuel_capacity_kg", self.fuel_capacity_kg),
+            ("fuel_flow_idle_kgps", self.fuel_flow_idle_kgps),
+            ("fuel_flow_max_kgps", self.fuel_flow_max_kgps),
+            ("gear_time_s", self.gear_time_s),
+            ("gear_max_speed_mps", self.gear_max_speed_mps),
+            ("gear_height_m", self.gear_height_m),
+            ("belly_height_m", self.belly_height_m),
+            ("wheel_brake_decel", self.wheel_brake_decel),
+            ("ground_steer_rate", self.ground_steer_rate),
+            ("hard_landing_sink_mps", self.hard_landing_sink_mps),
+            ("max_landing_sink_mps", self.max_landing_sink_mps),
+            ("max_landing_bank_rad", self.max_landing_bank_rad),
             ("wing_area_m2", self.wing_area_m2),
             ("thrust_max_n", self.thrust_max_n),
             ("thrust_density_exponent", self.thrust_density_exponent),
@@ -179,9 +237,13 @@ impl AircraftSpec {
                 return Err(err(field, format!("muss endlich und > 0 sein, ist {value}")));
             }
         }
-        for (field, value) in
-            [("idle_ram_drag", self.idle_ram_drag), ("flap_cl", self.flap_cl), ("flap_cd", self.flap_cd)]
-        {
+        for (field, value) in [
+            ("idle_ram_drag", self.idle_ram_drag),
+            ("flap_cl", self.flap_cl),
+            ("flap_cd", self.flap_cd),
+            ("gear_cd", self.gear_cd),
+            ("rolling_friction", self.rolling_friction),
+        ] {
             if !(value.is_finite() && value >= 0.0) {
                 return Err(err(field, "muss >= 0 sein".into()));
             }
@@ -210,17 +272,31 @@ impl AircraftSpec {
         if self.alpha_stall_rad > 0.6 {
             return Err(err("alpha_stall_rad", "unplausibel groß (> 0.6 rad)".into()));
         }
+        if self.fuel_flow_idle_kgps >= self.fuel_flow_max_kgps {
+            return Err(err("fuel_flow_idle_kgps", "muss kleiner als der Vollgasverbrauch sein".into()));
+        }
+        if self.hard_landing_sink_mps >= self.max_landing_sink_mps {
+            return Err(err("hard_landing_sink_mps", "muss unter max_landing_sink_mps liegen".into()));
+        }
+        if self.belly_height_m >= self.gear_height_m {
+            return Err(err("belly_height_m", "muss unter gear_height_m liegen".into()));
+        }
         if self.g_limit_pos < 1.0 {
             return Err(err("g_limit_pos", "muss mindestens 1 g erlauben".into()));
         }
         Ok(())
     }
 
-    /// Abrissgeschwindigkeit im 1-g-Horizontalflug bei Luftdichte `density`
-    /// und Klappenstellung `flaps` (0..1), in m/s.
-    pub fn stall_speed_1g(&self, density: f64, flaps: f64) -> f64 {
+    /// Masse mit vollen Tanks.
+    pub fn full_mass_kg(&self) -> f64 {
+        self.empty_mass_kg + self.fuel_capacity_kg
+    }
+
+    /// Abrissgeschwindigkeit im 1-g-Horizontalflug bei Masse `mass_kg`,
+    /// Luftdichte `density` und Klappenstellung `flaps` (0..1), in m/s.
+    pub fn stall_speed_1g(&self, mass_kg: f64, density: f64, flaps: f64) -> f64 {
         let cl_max = self.cl_max() + self.flap_cl * flaps.clamp(0.0, 1.0);
-        (2.0 * self.mass_kg * 9.806_65 / (density * self.wing_area_m2 * cl_max)).sqrt()
+        (2.0 * mass_kg * 9.806_65 / (density * self.wing_area_m2 * cl_max)).sqrt()
     }
 
     /// Maximaler Auftriebsbeiwert (am Abreißpunkt).
@@ -247,29 +323,50 @@ mod tests {
 
     #[test]
     fn validation_rejects_non_finite_values() {
-        let spec = AircraftSpec { mass_kg: f64::NAN, ..F29_SPEC };
-        assert_eq!(spec.validate().unwrap_err().field, "mass_kg");
+        let spec = AircraftSpec { empty_mass_kg: f64::NAN, ..F29_SPEC };
+        assert_eq!(spec.validate().unwrap_err().field, "empty_mass_kg");
     }
 
     #[test]
     fn thrust_to_weight_is_low() {
-        let tw = F29_SPEC.thrust_max_n / (F29_SPEC.mass_kg * 9.80665);
+        let tw = F29_SPEC.thrust_max_n / (F29_SPEC.full_mass_kg() * 9.80665);
         assert!((0.3..0.45).contains(&tw), "Schub/Gewicht {tw}");
     }
 
     #[test]
     fn flaps_lower_stall_speed_noticeably() {
-        let clean = F29_SPEC.stall_speed_1g(1.225, 0.0);
-        let flaps = F29_SPEC.stall_speed_1g(1.225, 1.0);
+        let m = F29_SPEC.full_mass_kg();
+        let clean = F29_SPEC.stall_speed_1g(m, 1.225, 0.0);
+        let flaps = F29_SPEC.stall_speed_1g(m, 1.225, 1.0);
         assert!(flaps < 0.88 * clean && flaps > 0.7 * clean, "{flaps} vs {clean}");
         assert!(F29_SPEC.flap_max_speed_mps > 1.6 * clean);
+    }
+
+    #[test]
+    fn fuel_endurance_is_plausible() {
+        // Vollgas etwa 20 Minuten, Leerlauf weit über eine Stunde.
+        let s = &F29_SPEC;
+        let full = s.fuel_capacity_kg / s.fuel_flow_max_kgps / 60.0;
+        let idle = s.fuel_capacity_kg / s.fuel_flow_idle_kgps / 60.0;
+        assert!((15.0..25.0).contains(&full), "Vollgas {full} min");
+        assert!(idle > 120.0, "Leerlauf {idle} min");
+        // Treibstoff macht ein Viertel bis ein Drittel der Startmasse aus.
+        let share = s.fuel_capacity_kg / s.full_mass_kg();
+        assert!((0.2..0.35).contains(&share), "Anteil {share}");
+    }
+
+    #[test]
+    fn gear_speed_is_above_landing_speed() {
+        let s = &F29_SPEC;
+        let vs = s.stall_speed_1g(s.full_mass_kg(), 1.225, 1.0);
+        assert!(s.gear_max_speed_mps > 1.6 * vs);
     }
 
     #[test]
     fn stall_speed_is_plausible() {
         // Mindestgeschwindigkeit im Horizontalflug auf Meereshöhe: Größenordnung
         // 60–80 m/s (120–155 kt) für ein schweres Angriffsflugzeug ohne Landeklappen.
-        let w = F29_SPEC.mass_kg * 9.80665;
+        let w = F29_SPEC.full_mass_kg() * 9.80665;
         let v_stall = (2.0 * w / (1.225 * F29_SPEC.wing_area_m2 * F29_SPEC.cl_max())).sqrt();
         assert!((60.0..80.0).contains(&v_stall), "v_stall = {v_stall}");
     }

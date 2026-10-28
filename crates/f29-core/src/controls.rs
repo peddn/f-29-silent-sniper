@@ -13,6 +13,8 @@ pub mod flags {
     pub const NEXT_STEERPOINT: u8 = 1 << 1;
     /// Landeklappen ausgefahren (gehalten).
     pub const FLAPS: u8 = 1 << 2;
+    /// Fahrwerk ausgefahren (gehalten).
+    pub const GEAR: u8 = 1 << 3;
 }
 
 /// Ein Tick Steuereingabe, quantisiert.

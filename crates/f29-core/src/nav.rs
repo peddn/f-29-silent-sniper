@@ -16,6 +16,21 @@ pub struct Steerpoint {
     pub east: f64,
     /// Geländehöhe am Punkt.
     pub elevation: f64,
+    /// Index der Bahn, falls der Punkt ein Flugplatz ist.
+    pub runway: Option<usize>,
+}
+
+impl Steerpoint {
+    /// Navigationspunkt in der Mitte einer Bahn.
+    pub fn runway(rw: &f29_terrain::Runway, index: usize) -> Self {
+        Self {
+            name: rw.name.to_string(),
+            north: rw.center[0],
+            east: rw.center[1],
+            elevation: rw.elevation_m,
+            runway: Some(index),
+        }
+    }
 }
 
 /// Erzeugt eine Route aus `count` Punkten, beginnend nahe `(north, east)`.
@@ -47,6 +62,7 @@ pub fn generate_route(terrain: &Terrain, seed: u64, north: f64, east: f64, count
             north: pn,
             east: pe,
             elevation: terrain.elevation(pn, pe),
+            runway: None,
         });
     }
     points

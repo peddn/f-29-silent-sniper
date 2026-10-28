@@ -5,6 +5,7 @@
 //! f29-headless replay   DATEI
 //! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
+//! f29-headless airfields [--seed N]
 //! f29-headless bench    [--seconds S]
 //! ```
 
@@ -13,7 +14,7 @@ use f29_core::controls::flags;
 use f29_core::replay::Replay;
 use f29_core::{DT, Sim, SimConfig, Status, TICK_HZ, detmath, units};
 use f29_hud::{HudOptions, ScreenLayout};
-use f29_terrain::{Surface, Terrain};
+use f29_terrain::Surface;
 use std::process::ExitCode;
 use std::time::Instant;
 
@@ -27,6 +28,7 @@ Befehle:
                                                        HUD nach S Sekunden Demo als SVG
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
+  airfields [--seed N]                                 Flugplätze und Route auflisten
   bench    [--seconds S]                               Ticks pro Sekunde messen
 ";
 
@@ -88,6 +90,7 @@ fn main() -> ExitCode {
         "hud-svg" => hud_svg(&args),
         "terrain" => terrain(&args),
         "bench" => bench(&args),
+        "airfields" => airfields(&args),
         "help" | "--help" | "-h" => {
             print!("{USAGE}");
             Ok(())
@@ -114,11 +117,18 @@ fn run_demo(seed: u64, seconds: f64, mut on_tick: impl FnMut(&Sim, f29_core::Con
         let mut next = false;
         if let Some(sp) = &fd.steerpoint {
             ap.target_heading = sp.bearing;
-            // Sicherheitshöhe über dem Gelände halten
-            let ahead = sim.terrain().elevation(
-                fd.position.x + 3_000.0 * detmath::cos(fd.heading),
-                fd.position.y + 3_000.0 * detmath::sin(fd.heading),
-            );
+            // Sicherheitshöhe über dem höchsten Gelände bis 8 km voraus halten,
+            // in Flugrichtung und in Richtung des Navigationspunkts (Kurven).
+            let ahead = [fd.heading, sp.bearing]
+                .into_iter()
+                .flat_map(|dir| (1..=8).map(move |k| (dir, f64::from(k) * 1_000.0)))
+                .map(|(dir, d)| {
+                    sim.terrain().elevation(
+                        fd.position.x + d * detmath::cos(dir),
+                        fd.position.y + d * detmath::sin(dir),
+                    )
+                })
+                .fold(f64::MIN, f64::max);
             ap.target_altitude_m = ahead.max(fd.ground_elevation_m) + 600.0;
             next = sp.range < 1_500.0;
         }
@@ -156,6 +166,12 @@ fn print_summary(sim: &Sim) {
     if let Some(sp) = &fd.steerpoint {
         println!("Steerpoint   {} in {:.1} NM", sp.name, units::m_to_nm(sp.range));
     }
+    println!(
+        "Treibstoff   {:.0} lb ({:.0} %), Restflugzeit {:.0} min",
+        units::kg_to_lb(fd.fuel_kg),
+        fd.fuel_fraction * 100.0,
+        fd.endurance_s / 60.0
+    );
     println!("Zustands-Hash {:016x}", sim.state_hash());
 }
 
@@ -234,9 +250,10 @@ fn terrain(args: &Args) -> Result<(), String> {
     let size = args.get("size", 512_usize)?;
     let extent = args.get("extent", 120_000.0_f64)?;
     let out = args.opt("out").unwrap_or("terrain.ppm");
-    let t = Terrain::new(seed);
+    let sim = Sim::new(SimConfig::new(seed));
+    let t = sim.terrain();
     let mut img = format!("P6\n{size} {size}\n255\n").into_bytes();
-    let route = f29_core::nav::generate_route(&t, seed, 0.0, 0.0, 4);
+    let route = sim.route().to_vec();
     for row in 0..size {
         for col in 0..size {
             // Norden oben, Osten rechts, Ursprung in der Bildmitte
@@ -277,12 +294,49 @@ fn terrain(args: &Args) -> Result<(), String> {
             }
         }
     };
-    mark(0.0, 0.0, [255, 255, 0]);
     for sp in &route {
         mark(sp.north, sp.east, [255, 40, 40]);
     }
+    // Bahnen als weiße Striche
+    for rw in t.runways() {
+        let steps = (rw.length_m / (extent / size as f64) * 2.0).max(4.0) as usize;
+        for i in 0..=steps {
+            let p = rw.world((i as f64 / steps as f64 - 0.5) * rw.length_m, 0.0);
+            let col = ((p[1] / extent + 0.5) * size as f64) as i64;
+            let row = ((0.5 - p[0] / extent) * size as f64) as i64;
+            if (0..size as i64).contains(&row) && (0..size as i64).contains(&col) {
+                let header = format!("P6\n{size} {size}\n255\n").len();
+                let i = header + ((row as usize) * size + col as usize) * 3;
+                img[i..i + 3].copy_from_slice(&[255, 255, 255]);
+            }
+        }
+    }
     std::fs::write(out, img).map_err(|e| format!("{out}: {e}"))?;
     println!("{size}×{size} px, {:.0} km Kantenlänge → {out}", extent / 1000.0);
+    Ok(())
+}
+
+fn airfields(args: &Args) -> Result<(), String> {
+    let seed = args.get("seed", 0x0F29_u64)?;
+    let sim = Sim::new(SimConfig::new(seed));
+    println!("Seed {seed:#x}");
+    for rw in sim.terrain().runways() {
+        let (a, b) = rw.numbers();
+        println!(
+            "{:<8} {:?}  Bahn {a:02}/{b:02}  {:.0} × {:.0} m  Höhe {:.0} ft  bei N {:.1} km  E {:.1} km",
+            rw.name,
+            rw.kind,
+            rw.length_m,
+            rw.width_m,
+            units::m_to_ft(rw.elevation_m),
+            rw.center[0] / 1_000.0,
+            rw.center[1] / 1_000.0
+        );
+    }
+    println!("Route:");
+    for sp in sim.route() {
+        println!("  {:<8} N {:.1} km  E {:.1} km", sp.name, sp.north / 1_000.0, sp.east / 1_000.0);
+    }
     Ok(())
 }
 

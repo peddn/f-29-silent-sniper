@@ -23,7 +23,9 @@ impl Plugin for ViewPlugin {
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
-                (update_viewport, update_camera_and_aircraft).chain().in_set(SimSystems::Present),
+                (update_viewport, update_camera_and_aircraft, update_gear)
+                    .chain()
+                    .in_set(SimSystems::Present),
             );
     }
 }
@@ -71,6 +73,9 @@ pub struct HudCamera;
 
 #[derive(Component)]
 pub struct PlayerAircraft;
+
+#[derive(Component)]
+pub struct LandingGear;
 
 /// Augpunkt des Piloten relativ zum Modellzentrum (Y-up, Nase −z).
 const EYE_OFFSET: Vec3 = Vec3::new(0.0, 0.9, -4.5);
@@ -132,14 +137,23 @@ fn setup(
         HudCamera,
     ));
 
-    // Spielerflugzeug
-    commands.spawn((
-        Mesh3d(meshes.add(to_bevy_mesh(model::aircraft()))),
-        MeshMaterial3d(materials.add(vertex_color_material())),
-        Transform::default(),
-        Visibility::Hidden,
-        PlayerAircraft,
-    ));
+    // Spielerflugzeug mit Fahrwerk als Kind (nur ausgefahren sichtbar)
+    let material = materials.add(vertex_color_material());
+    commands
+        .spawn((
+            Mesh3d(meshes.add(to_bevy_mesh(model::aircraft()))),
+            MeshMaterial3d(material.clone()),
+            Transform::default(),
+            Visibility::Hidden,
+            PlayerAircraft,
+        ))
+        .with_child((
+            Mesh3d(meshes.add(to_bevy_mesh(model::landing_gear()))),
+            MeshMaterial3d(material),
+            Transform::default(),
+            Visibility::Hidden,
+            LandingGear,
+        ));
 }
 
 /// Beschränkt die 3D-Kamera auf den Bereich über dem Instrumentenbrett.
@@ -198,4 +212,12 @@ pub fn update_camera_and_aircraft(
         }
     }
     **retro = RetroEffect::from_mode(view.retro);
+}
+
+/// Fahrwerk zeigen, sobald es halb draußen ist.
+fn update_gear(state: Res<SimState>, mut gear: Single<&mut Visibility, With<LandingGear>>) {
+    let want = if state.sim.aircraft().gear > 0.5 { Visibility::Inherited } else { Visibility::Hidden };
+    if **gear != want {
+        **gear = want;
+    }
 }

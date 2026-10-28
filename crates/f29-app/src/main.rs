@@ -8,10 +8,11 @@
 //! Kommandozeile:
 //!
 //! ```text
-//! f29-silent-sniper [--seed N] [--view cockpit|chase]
+//! f29-silent-sniper [--seed N] [--view cockpit|chase] [--start runway|air]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
 
+mod airfield;
 mod capture;
 mod hud;
 mod input;
@@ -29,6 +30,12 @@ pub const HUD_LAYER: usize = 1;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let seed = arg(&args, "--seed").and_then(|v| parse_u64(&v)).unwrap_or(sim::DEFAULT_SEED);
+    // Standard: Start auf der Bahn der Heimatbasis; `--start air` für den Luftstart.
+    let config = if arg(&args, "--start").as_deref() == Some("air") {
+        f29_core::SimConfig::new(seed)
+    } else {
+        f29_core::SimConfig::runway(seed)
+    };
     let mut view_settings = view::ViewSettings::default();
     if arg(&args, "--view").as_deref() == Some("chase") {
         view_settings.mode = view::ViewMode::Chase;
@@ -51,7 +58,8 @@ fn main() {
             ..default()
         }))
         .add_plugins((
-            sim::SimPlugin { seed },
+            sim::SimPlugin { config },
+            airfield::AirfieldPlugin,
             input::InputPlugin,
             view::ViewPlugin,
             terrain::TerrainPlugin,

@@ -123,6 +123,17 @@ fn hsi(dl: &mut DisplayList, fd: &FlightData, c: [f32; 2], r: f32) {
     dl.line([c[0], c[1] + s * 0.8], [c[0], c[1] - s * 1.2], Ink::Needle);
     dl.line([c[0] - s * 0.5, c[1] - s], [c[0] + s * 0.5, c[1] - s], Ink::Needle);
 
+    if let Some(rh) = fd.steerpoint.as_ref().and_then(|sp| sp.runway_heading) {
+        // Bahnrichtung als gestrichelte Linie durch die Rose
+        let a = screen(rh as f32);
+        let (ca, sa) = (a.cos(), a.sin());
+        dl.dashed(
+            [c[0] - r * 0.8 * ca, c[1] - r * 0.8 * sa],
+            [c[0] + r * 0.8 * ca, c[1] + r * 0.8 * sa],
+            9,
+            Ink::PanelDim,
+        );
+    }
     if let Some(sp) = &fd.steerpoint {
         let a = screen(sp.bearing as f32);
         let (ca, sa) = (a.cos(), a.sin());
@@ -222,8 +233,8 @@ fn attitude_indicator(dl: &mut DisplayList, fd: &FlightData, c: [f32; 2], r: f32
 /// Linke Spalte: Schub, g-Messer, Anstellwinkel, Luftbremse, Klappen.
 fn left_column(dl: &mut DisplayList, fd: &FlightData, top: [f32; 2], ph: f32) {
     let x = top[0];
-    let mut y = top[1] - ph * 0.16;
-    let step = ph * 0.16;
+    let mut y = top[1] - ph * 0.14;
+    let step = ph * 0.14;
     let mut row = |dl: &mut DisplayList, txt: &str, ink: Ink| {
         dl.text_mid([x, y], TXT, Align::Right, txt, ink);
         y -= step;
@@ -235,18 +246,40 @@ fn left_column(dl: &mut DisplayList, fd: &FlightData, top: [f32; 2], ph: f32) {
     row(dl, "BRAKE", brake_ink);
     let flaps_ink = if fd.flaps > 0.05 { Ink::Needle } else { Ink::PanelDim };
     row(dl, "FLAPS", flaps_ink);
+    // Fahrwerk: verriegelt = hell, in Bewegung = blinkend, eingefahren = dunkel
+    let blink = (fd.time_s * 2.0).fract() < 0.5;
+    let (gear_txt, gear_ink) = if fd.gear >= 0.999 {
+        ("GEAR DN", if fd.warnings.gear_overspeed && blink { Ink::Warning } else { Ink::Needle })
+    } else if fd.gear > 0.001 {
+        ("GEAR", if blink { Ink::Warning } else { Ink::PanelDim })
+    } else {
+        ("GEAR UP", Ink::PanelDim)
+    };
+    row(dl, gear_txt, gear_ink);
 }
 
 /// Rechte Spalte: Missionszeit und Warnleuchten.
 fn right_column(dl: &mut DisplayList, fd: &FlightData, top: [f32; 2], ph: f32) {
     let x = top[0];
-    let mut y = top[1] - ph * 0.2;
-    let step = ph * 0.17;
+    let mut y = top[1] - ph * 0.14;
+    let step = ph * 0.135;
     let t = fd.time_s.max(0.0) as u64;
     dl.text_mid([x, y], TXT, Align::Left, &format!("T {:02}:{:02}", t / 60, t % 60), Ink::Panel);
     y -= step;
-    let lamps =
-        [("STALL", fd.warnings.stall), ("PULL UP", fd.warnings.pull_up), ("OVER G", fd.warnings.over_g)];
+    // Treibstoff in Pfund und Restflugzeit beim aktuellen Verbrauch
+    let lb = (units::kg_to_lb(fd.fuel_kg) / 10.0).round() as i64 * 10;
+    let fuel_ink = if fd.warnings.fuel_low || fd.warnings.bingo { Ink::Warning } else { Ink::Panel };
+    dl.text_mid([x, y], TXT, Align::Left, &format!("FUEL {lb:>5}"), fuel_ink);
+    y -= step * 0.75;
+    let min = (fd.endurance_s / 60.0).floor() as i64;
+    dl.text_mid([x, y], TXT_SMALL, Align::Left, &format!("{min:>3} MIN"), Ink::PanelDim);
+    y -= step;
+    let lamps = [
+        ("STALL", fd.warnings.stall),
+        ("PULL UP", fd.warnings.pull_up),
+        ("OVER G", fd.warnings.over_g),
+        ("BINGO", fd.warnings.bingo || fd.warnings.flameout),
+    ];
     for (txt, on) in lamps {
         let ink = if on { Ink::Warning } else { Ink::PanelDim };
         dl.text_mid([x, y], TXT, Align::Left, txt, ink);

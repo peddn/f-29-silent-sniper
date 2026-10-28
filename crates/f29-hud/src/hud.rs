@@ -18,11 +18,19 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout)
 
     if fd.warnings.crashed {
         dl.text_mid(c, TXT * 2.2, Align::Center, "CRASHED", Ink::Warning);
-        dl.text_mid([c[0], c[1] - TXT * 3.0], TXT, Align::Center, "R - RESTART", Ink::Warning);
+        if let f29_core::Status::Crashed { cause, .. } = fd.status {
+            dl.text_mid([c[0], c[1] - TXT * 2.6], TXT, Align::Center, cause.label(), Ink::Warning);
+        }
+        dl.text_mid([c[0], c[1] - TXT * 5.0], TXT, Align::Center, "R - RESTART", Ink::Warning);
         return;
     }
 
     pitch_ladder(dl, fd, layout, &glass);
+    if landing_mode(fd) {
+        glide_line(dl, fd, layout, &glass);
+        sink_scale(dl, fd, &glass);
+    }
+    ground_messages(dl, fd, &glass);
     boresight(dl, c, vh);
     flight_path_marker(dl, fd, layout, &glass, vh);
     steerpoint_marker(dl, fd, layout, &glass, vh);
@@ -59,6 +67,10 @@ fn pitch_ladder(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, gl
         let tick =
             |s: f32, len: f32| [mid[0] + along[0] * s + up[0] * len, mid[1] + along[1] * s + up[1] * len];
 
+        // Am Boden nur der Horizont – Platz für die Landemeldungen.
+        if fd.on_ground && deg != 0 {
+            continue;
+        }
         if deg == 0 {
             // Horizontlinie, breit, mit Lücke für das Boresight-Symbol
             dl.line(p(-0.40), p(-0.04), Ink::Hud);
@@ -292,5 +304,92 @@ fn warnings(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     }
     if fd.warnings.over_g {
         show(dl, "OVER G");
+    }
+    if fd.warnings.gear_up {
+        show(dl, "GEAR");
+    }
+    if fd.warnings.gear_overspeed {
+        show(dl, "GEAR SPEED");
+    }
+    if fd.warnings.flameout {
+        show(dl, "FLAMEOUT");
+    } else if fd.warnings.bingo {
+        show(dl, "BINGO");
+    } else if fd.warnings.fuel_low {
+        show(dl, "FUEL LOW");
+    }
+}
+
+/// Landemodus: Fahrwerk ausgefahren und in der Luft.
+fn landing_mode(fd: &FlightData) -> bool {
+    fd.gear > 0.99 && !fd.on_ground
+}
+
+/// Gestrichelte −3°-Linie in der Pitch-Leiter: Liegt der Flight Path Marker
+/// darauf und die Linie auf der Schwelle, stimmt der Gleitpfad.
+fn glide_line(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect) {
+    let f = layout.focal();
+    let c = glass.center();
+    let (sr, cr) = (fd.roll as f32).sin_cos();
+    let along = [cr, sr];
+    let up = [-sr, cr];
+    let delta = -GLIDE_DEG.to_radians() - fd.pitch as f32;
+    if delta.abs() > 0.7 {
+        return;
+    }
+    let off = f * delta.tan();
+    let mid = [c[0] + up[0] * off, c[1] + up[1] * off];
+    let p = |s: f32| [mid[0] + along[0] * s, mid[1] + along[1] * s];
+    dl.dashed(p(-0.16), p(-0.05), 4, Ink::HudDim);
+    dl.dashed(p(0.05), p(0.16), 4, Ink::HudDim);
+}
+
+/// Gleitwinkel des Anflugs in Grad.
+const GLIDE_DEG: f32 = 3.0;
+/// Sinkrate, ab der eine Landung hart wird bzw. das Fahrwerk bricht (ft/min).
+/// Muss zu den Flugzeugdaten passen; ein Test prüft das.
+pub(crate) const HARD_SINK_FPM: f32 = 590.0;
+pub(crate) const MAX_SINK_FPM: f32 = 984.0;
+
+/// Sinkratenskala rechts im Glas (Landemodus): Balken für die Steig-/Sinkrate,
+/// Marken für „hart“ und „Bruch“ – wie die Landehilfe im Original, eigene Form.
+fn sink_scale(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
+    // rechts neben dem Glas, damit Höhe und Pitch-Leiter frei bleiben
+    let x = glass.max[0] + 0.03;
+    let top = glass.center()[1] + 0.03;
+    let full = 1_500.0_f32; // fpm über die ganze Skala
+    let len = 0.17_f32;
+    let y_of = |fpm: f32| top - (fpm.clamp(0.0, full) / full) * len;
+    dl.line([x, top], [x, top - len], Ink::HudDim);
+    for (fpm, ink) in [(HARD_SINK_FPM, Ink::Hud), (MAX_SINK_FPM, Ink::Warning)] {
+        let y = y_of(fpm);
+        dl.line([x - 0.010, y], [x + 0.010, y], ink);
+    }
+    let sink = (-units::mps_to_fpm(fd.vertical_speed_mps)) as f32;
+    let y = y_of(sink);
+    let ink = if sink > MAX_SINK_FPM { Ink::Warning } else { Ink::Hud };
+    dl.line([x - 0.004, top], [x - 0.004, y], ink);
+    dl.line([x + 0.004, top], [x + 0.004, y], ink);
+    dl.line([x - 0.006, y], [x + 0.006, y], ink);
+    dl.text_mid([x, top + 0.018], TXT_SMALL * 0.8, Align::Center, "SINK", Ink::HudDim);
+}
+
+/// Meldungen am Boden: Aufsetzbewertung, Stillstand auf der Bahn.
+fn ground_messages(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
+    if !fd.on_ground {
+        return;
+    }
+    let c = glass.center();
+    let y = c[1] + (glass.max[1] - glass.min[1]) * 0.18;
+    if let Some(td) = &fd.touchdown {
+        let fpm = units::mps_to_fpm(td.sink_mps).round() as i64;
+        let (word, ink) = if td.hard { ("HARD LANDING", Ink::Warning) } else { ("GOOD LANDING", Ink::Hud) };
+        dl.text_mid([c[0], y], TXT, Align::Center, word, ink);
+        dl.text_mid([c[0], y - TXT * 1.6], TXT_SMALL, Align::Center, &format!("{fpm} FPM"), Ink::Hud);
+    }
+    if fd.stopped_on_runway
+        && let Some(name) = fd.runway_name
+    {
+        dl.text_mid([c[0], y - TXT * 3.2], TXT_SMALL, Align::Center, &format!("STOPPED - {name}"), Ink::Hud);
     }
 }

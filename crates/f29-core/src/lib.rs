@@ -25,7 +25,7 @@ pub mod units;
 
 pub use controls::ControlFrame;
 pub use math::{DQuat, DVec3};
-pub use sim::{DT, FlightData, Sim, SimConfig, Status, TICK_HZ};
+pub use sim::{CrashCause, DT, FlightData, Sim, SimConfig, SpawnKind, Status, TICK_HZ, Touchdown};
 
 pub use f29_data as data;
 pub use f29_terrain as terrain;

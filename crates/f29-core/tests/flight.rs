@@ -325,7 +325,7 @@ fn diving_into_terrain_crashes_and_freezes() {
             break;
         }
     }
-    let Status::Crashed { tick } = sim.status() else {
+    let Status::Crashed { tick, .. } = sim.status() else {
         panic!("kein Absturz – Höhe {:.0} m", sim.flight_data().altitude_m);
     };
     let fd = sim.flight_data();

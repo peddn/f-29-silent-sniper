@@ -8,7 +8,10 @@
 //! Koordinaten: `x` = Nord, `y` = Ost in Metern (wie das NED-System im
 //! Simulationskern); Höhen in Metern über dem Meeresspiegel.
 
+pub mod airfield;
 pub mod noise;
+
+pub use airfield::{AirfieldKind, Runway};
 
 use noise::{fbm, mix64, ridged, smoothstep};
 
@@ -72,6 +75,7 @@ pub struct Terrain {
     s_ridge: u64,
     s_hill: u64,
     s_forest: u64,
+    runways: Vec<Runway>,
 }
 
 impl Terrain {
@@ -84,7 +88,7 @@ impl Terrain {
     pub fn with_params(seed: u64, params: TerrainParams) -> Self {
         // Jede Schicht bekommt einen eigenen, aus dem Seed abgeleiteten Strom.
         let sub = |k: u64| mix64(seed ^ mix64(k));
-        Self {
+        let mut t = Self {
             seed,
             params,
             s_continent: sub(1),
@@ -92,7 +96,20 @@ impl Terrain {
             s_ridge: sub(3),
             s_hill: sub(4),
             s_forest: sub(5),
-        }
+            runways: Vec::new(),
+        };
+        t.runways = airfield::place_airfields(seed, |x, y| t.raw_height(x, y));
+        t
+    }
+
+    /// Alle Start- und Landebahnen; die erste ist die Heimatbasis.
+    pub fn runways(&self) -> &[Runway] {
+        &self.runways
+    }
+
+    /// Index der Bahn, auf deren befestigter Fläche der Punkt liegt.
+    pub fn runway_at(&self, x: f64, y: f64) -> Option<usize> {
+        self.runways.iter().position(|r| r.contains(x, y))
     }
 
     pub fn seed(&self) -> u64 {
@@ -103,8 +120,14 @@ impl Terrain {
         &self.params
     }
 
-    /// Bodenhöhe inkl. Meeresgrund (kann negativ sein).
+    /// Bodenhöhe inkl. Meeresgrund (kann negativ sein), mit eingeebneten
+    /// Flugplätzen.
     pub fn ground_height(&self, x: f64, y: f64) -> f64 {
+        airfield::flatten(&self.runways, x, y, self.raw_height(x, y))
+    }
+
+    /// Geländehöhe ohne Flugplätze.
+    fn raw_height(&self, x: f64, y: f64) -> f64 {
         let p = &self.params;
         let cs = p.continent_scale;
         let continent = fbm(self.s_continent, x / cs, y / cs, 5);
@@ -144,6 +167,9 @@ impl Terrain {
         }
         if h < 6.0 {
             return Surface::Beach;
+        }
+        if self.runways.iter().any(|r| r.in_flat_area(x, y)) {
+            return Surface::Grass;
         }
         let steepness = 1.0 - self.normal(x, y)[2];
         if steepness > 0.30 {
@@ -265,6 +291,52 @@ mod tests {
             let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
             assert!((len - 1.0).abs() < 1e-12);
             assert!(n[2] > 0.0);
+        }
+    }
+
+    #[test]
+    fn airfields_exist_and_are_deterministic() {
+        for seed in [0x0F29_u64, 1, 7, 1234, 99_999] {
+            let t = Terrain::new(seed);
+            let r = t.runways();
+            assert!(r.len() >= 2, "Seed {seed}: nur {} Bahnen", r.len());
+            assert_eq!(r[0].kind, AirfieldKind::Home);
+            assert!(r[1..].iter().all(|x| x.kind == AirfieldKind::Secret));
+            assert_eq!(Terrain::new(seed).runways(), r);
+        }
+    }
+
+    #[test]
+    fn runways_are_flat_on_land_and_blend_smoothly() {
+        let t = Terrain::new(0x0F29);
+        for rw in t.runways() {
+            assert!(rw.elevation_m > 10.0);
+            for i in 0..=20 {
+                // knapp innerhalb der Kanten (Rundung bei der Rücktransformation)
+                let u = (-0.5 + f64::from(i) / 20.0) * rw.length_m * 0.999;
+                for v in [-rw.width_m * 0.499, 0.0, rw.width_m * 0.499] {
+                    let p = rw.world(u, v);
+                    assert_eq!(t.elevation(p[0], p[1]), rw.elevation_m, "{} nicht eben", rw.name);
+                    assert!(t.runway_at(p[0], p[1]).is_some());
+                }
+            }
+            // Übergang ohne Sprung
+            for i in 0..400 {
+                let p = rw.world(0.0, rw.width_m * 0.5 + f64::from(i) * 2.5);
+                let q = rw.world(0.0, rw.width_m * 0.5 + f64::from(i) * 2.5 + 1.0);
+                let d = (t.elevation(p[0], p[1]) - t.elevation(q[0], q[1])).abs();
+                assert!(d < 2.0, "Sprung {d} m neben {}", rw.name);
+            }
+        }
+    }
+
+    #[test]
+    fn runway_numbers_match_heading() {
+        let t = Terrain::new(3);
+        for rw in t.runways() {
+            let (a, b) = rw.numbers();
+            assert!((1..=36).contains(&a) && (1..=36).contains(&b));
+            assert_eq!((a + 18 - 1) % 36 + 1, b);
         }
     }
 

@@ -11,12 +11,15 @@ pub const DEFAULT_SEED: u64 = 0x0F29;
 const MAX_STEPS_PER_FRAME: u32 = 24;
 
 pub struct SimPlugin {
-    pub seed: u64,
+    pub config: SimConfig,
 }
 
 impl Plugin for SimPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(SimState::new(self.seed))
+        let state = SimState::new(self.config.clone());
+        let pilot = PilotInput::matching(&state.sim);
+        app.insert_resource(state)
+            .insert_resource(pilot)
             .add_systems(Update, step_simulation.in_set(SimSystems::Step));
     }
 }
@@ -74,8 +77,8 @@ pub struct SimState {
 }
 
 impl SimState {
-    pub fn new(seed: u64) -> Self {
-        let sim = Sim::new(SimConfig::new(seed));
+    pub fn new(config: SimConfig) -> Self {
+        let sim = Sim::new(config);
         let pose = Pose::of(&sim);
         let recorder = Replay::new(sim.config().clone());
         Self { sim, paused: false, accumulator: 0.0, prev: pose, curr: pose, recorder }
@@ -86,10 +89,11 @@ impl SimState {
         Pose::lerp(self.prev, self.curr, (self.accumulator / DT).clamp(0.0, 1.0))
     }
 
-    /// Neustart mit demselben Seed; der bisherige Flug wird als Replay gesichert.
+    /// Neustart mit derselben Konfiguration; der bisherige Flug wird als
+    /// Replay gesichert.
     pub fn restart(&mut self) {
         self.save_replay();
-        *self = Self::new(self.sim.config().seed);
+        *self = Self::new(self.sim.config().clone());
     }
 
     /// Schreibt den bisherigen Flug nach `replays/last.replay`.

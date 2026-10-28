@@ -4,20 +4,25 @@
 //! die Startbedingungen exakt erhalten bleiben):
 //!
 //! ```text
-//! F29REPLAY 1
+//! F29REPLAY 2
 //! seed 3881
-//! spawn <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle>
+//! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
 //! frames <anzahl Zeilen>
 //! <wiederholungen> <pitch> <roll> <yaw> <throttle> <flags>
 //! ...
 //! hash <hex>
 //! ```
+//!
+//! Version 1 (ohne Startart und Tankfüllung) wird weiter gelesen: Luftstart,
+//! volle Tanks. Ihre Hashes passen aber nicht mehr, weil das Flugmodell seitdem
+//! Treibstoff verbraucht.
 
 use crate::controls::ControlFrame;
-use crate::sim::{Sim, SimConfig, Spawn};
+use crate::sim::{Sim, SimConfig, Spawn, SpawnKind};
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 1";
+pub const MAGIC: &str = "F29REPLAY 2";
+const MAGIC_V1: &str = "F29REPLAY 1";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replay {
@@ -78,14 +83,19 @@ impl Replay {
         let _ = writeln!(s, "seed {}", self.config.seed);
         let _ = writeln!(
             s,
-            "spawn {} {} {} {} {} {} {}",
+            "spawn {} {} {} {} {} {} {} {} {}",
+            match sp.kind {
+                SpawnKind::Air => "air",
+                SpawnKind::Runway => "runway",
+            },
             hex(sp.north),
             hex(sp.east),
             hex(sp.altitude),
             hex(sp.min_clearance),
             hex(sp.heading),
             hex(sp.speed),
-            hex(sp.throttle)
+            hex(sp.throttle),
+            hex(sp.fuel)
         );
         let _ = writeln!(s, "frames {}", self.frames.len());
         for (n, f) in &self.frames {
@@ -108,7 +118,8 @@ impl Replay {
         let err = |line: usize, message: String| ParseError { line, message };
 
         let (ln, magic) = next("Kopfzeile")?;
-        if magic != MAGIC {
+        let v1 = magic == MAGIC_V1;
+        if magic != MAGIC && !v1 {
             return Err(err(ln, format!("erwartet `{MAGIC}`")));
         }
 
@@ -119,15 +130,28 @@ impl Replay {
             .ok_or_else(|| err(ln, "erwartet `seed <zahl>`".into()))?;
 
         let (ln, spawn_line) = next("spawn")?;
-        let vals: Vec<f64> = spawn_line
+        let mut tokens = spawn_line
             .strip_prefix("spawn ")
             .ok_or_else(|| err(ln, "erwartet `spawn ...`".into()))?
             .split_whitespace()
+            .peekable();
+        let kind = if v1 {
+            SpawnKind::Air
+        } else {
+            match tokens.next() {
+                Some("air") => SpawnKind::Air,
+                Some("runway") => SpawnKind::Runway,
+                other => return Err(err(ln, format!("unbekannte Startart {other:?}"))),
+            }
+        };
+        let vals: Vec<f64> = tokens
             .map(|t| u64::from_str_radix(t, 16).map(f64::from_bits))
             .collect::<Result<_, _>>()
             .map_err(|e| err(ln, format!("ungültiger Hexwert: {e}")))?;
-        let [north, east, altitude, min_clearance, heading, speed, throttle] = vals[..] else {
-            return Err(err(ln, format!("spawn braucht 7 Werte, hat {}", vals.len())));
+        let (north, east, altitude, min_clearance, heading, speed, throttle, fuel) = match vals[..] {
+            [n, e, a, m, h, s, t] if v1 => (n, e, a, m, h, s, t, 1.0),
+            [n, e, a, m, h, s, t, f] if !v1 => (n, e, a, m, h, s, t, f),
+            _ => return Err(err(ln, format!("spawn hat {} Werte", vals.len()))),
         };
 
         let (ln, frames_line) = next("frames")?;
@@ -170,7 +194,7 @@ impl Replay {
         Ok(Self {
             config: SimConfig {
                 seed,
-                spawn: Spawn { north, east, altitude, min_clearance, heading, speed, throttle },
+                spawn: Spawn { kind, fuel, north, east, altitude, min_clearance, heading, speed, throttle },
             },
             frames,
             final_hash,
@@ -194,6 +218,19 @@ mod tests {
         assert_eq!(r.tick_count(), 300);
         let parsed = Replay::from_text(&r.to_text()).expect("parse");
         assert_eq!(parsed, r);
+        let mut rw = Replay::new(SimConfig::runway(5));
+        rw.config.spawn.fuel = 0.4;
+        assert_eq!(Replay::from_text(&rw.to_text()).expect("parse"), rw);
+    }
+
+    #[test]
+    fn reads_version_1() {
+        let v1 =
+            "F29REPLAY 1\nseed 9\nspawn 0 0 40a3880000000000 0 0 406a400000000000 0\nframes 1\n5 0 0 0 0 0\n";
+        let r = Replay::from_text(v1).expect("v1");
+        assert_eq!(r.config.spawn.kind, SpawnKind::Air);
+        assert_eq!(r.config.spawn.fuel, 1.0);
+        assert_eq!(r.tick_count(), 5);
     }
 
     #[test]

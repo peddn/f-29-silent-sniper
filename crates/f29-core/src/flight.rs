@@ -18,6 +18,15 @@
 //! zurück, die Abrissstärke sinkt stetig, und das Flugzeug lässt sich langsam
 //! abfangen; die Nickwirkung wächst mit der Fahrt.
 //!
+//! **Treibstoff** ist echte Masse: Mit vollen Tanks ist das Flugzeug träge,
+//! gegen Ende leichter. Der Verbrauch wächst mit dem Quadrat der
+//! Triebwerksstellung; bei leeren Tanks geht das Triebwerk aus.
+//!
+//! **Am Boden** gibt es bewusst keine Federbeine, sondern einen einfachen
+//! Rollmodus: Höhe auf die Bahn geklemmt, keine Querlage, Lenken über Quer-
+//! und Seitenruder (auch auf der Stelle), Radbremse, Rotieren erst ab der
+//! Abhebefahrt. Sobald der Auftrieb das Gewicht trägt, hebt das Flugzeug ab.
+//!
 //! Damit entstehen Anstellwinkel, Schiebewinkel, Lastvielfaches,
 //! Energieverlust im Kurvenflug und Strömungsabriss physikalisch aus der
 //! Translation, während die Steuerung gutmütig und gut testbar bleibt.
@@ -51,6 +60,12 @@ pub struct AircraftState {
     pub stall: f64,
     /// Landeklappen 0..1.
     pub flaps: f64,
+    /// Treibstoff in den Tanks, kg.
+    pub fuel_kg: f64,
+    /// Fahrwerk 0 = eingefahren … 1 = ausgefahren und verriegelt.
+    pub gear: f64,
+    /// Steht bzw. rollt auf dem Boden (Rollmodus statt Flugmodell).
+    pub on_ground: bool,
 }
 
 impl AircraftState {
@@ -66,7 +81,25 @@ impl AircraftState {
             airbrake: 0.0,
             stall: 0.0,
             flaps: 0.0,
+            fuel_kg: f29_data::F29_SPEC.fuel_capacity_kg,
+            gear: 0.0,
+            on_ground: false,
         }
+    }
+
+    /// Aktuelle Masse (Leermasse + Treibstoff).
+    pub fn mass(&self, spec: &AircraftSpec) -> f64 {
+        spec.empty_mass_kg + self.fuel_kg.max(0.0)
+    }
+
+    /// Ob das Fahrwerk ganz ausgefahren und verriegelt ist.
+    pub fn gear_down(&self) -> bool {
+        self.gear >= GEAR_LOCKED
+    }
+
+    /// Ob das Triebwerk mangels Treibstoff ausgegangen ist.
+    pub fn flamed_out(&self) -> bool {
+        self.fuel_kg <= 0.0
     }
 
     /// Ob ein merklicher Strömungsabriss vorliegt.
@@ -87,6 +120,8 @@ impl AircraftState {
             && self.airbrake.is_finite()
             && self.stall.is_finite()
             && self.flaps.is_finite()
+            && self.fuel_kg.is_finite()
+            && self.gear.is_finite()
     }
 }
 
@@ -125,6 +160,17 @@ const STALL_EXTRA_DRAG: f64 = 0.08;
 pub const STALL_NOTICEABLE: f64 = 0.1;
 /// Ausfahrgeschwindigkeit der Luftbremse, 1/s.
 const AIRBRAKE_RATE: f64 = 1.25;
+/// Ab dieser Stellung gilt das Fahrwerk als ausgefahren und verriegelt.
+pub const GEAR_LOCKED: f64 = 0.999;
+/// Abhebefahrt als Vielfaches der 1-g-Abrissfahrt: erst darüber hebt
+/// Ziehen am Boden die Nase.
+pub const ROTATE_FACTOR: f64 = 1.05;
+/// Größte Nicklage am Boden, bevor das Heck aufsetzen würde (rad).
+const MAX_GROUND_PITCH: f64 = 0.24;
+/// Rate, mit der die Nase am Boden ohne Zug wieder absinkt (rad/s).
+const NOSE_SETTLE_RATE: f64 = 0.15;
+/// Fahrt, bei der die Lenkrate am Boden auf die Hälfte gefallen ist (m/s).
+const STEER_HALF_SPEED: f64 = 15.0;
 
 /// Auftriebsbeiwert über dem Anstellwinkel.
 pub fn lift_coefficient(spec: &AircraftSpec, alpha: f64) -> f64 {
@@ -160,8 +206,11 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
     let tas = vb.length();
     // Nettoschub: Bruttoschub minus Staudruckwiderstand des Triebwerks, der bei
     // niedriger Drehzahl am größten ist – Gas wegnehmen bremst dadurch spürbar.
-    let gross =
-        spec.thrust_max_n * s.engine * detmath::powf(air.density / RHO0, spec.thrust_density_exponent);
+    let gross = if s.flamed_out() {
+        0.0
+    } else {
+        spec.thrust_max_n * s.engine * detmath::powf(air.density / RHO0, spec.thrust_density_exponent)
+    };
     let thrust = gross - spec.idle_ram_drag * s.velocity.length() * (1.0 - s.engine);
     if tas < MIN_AERO_SPEED {
         return AeroData { tas, density: air.density, thrust, load_factor: 0.0, ..AeroData::default() };
@@ -170,7 +219,8 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
     let beta = detmath::asin(vb.y / tas);
     let qbar = 0.5 * air.density * tas * tas;
     let mut cl = lift_coefficient(spec, alpha) + spec.flap_cl * s.flaps;
-    let mut cd = drag_coefficient(spec, alpha, cl, s.airbrake) + spec.flap_cd * s.flaps;
+    let mut cd =
+        drag_coefficient(spec, alpha, cl, s.airbrake) + spec.flap_cd * s.flaps + spec.gear_cd * s.gear;
     if s.stall > 0.0 {
         // Abgerissene Strömung: Auftrieb bricht ein, Widerstand steigt.
         cl *= 1.0 + (spec.stall_lift_factor - 1.0) * s.stall;
@@ -185,13 +235,114 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
         qbar,
         alpha,
         beta,
-        load_factor: -fz / (spec.mass_kg * G0),
+        load_factor: -fz / (s.mass(spec) * G0),
         density: air.density,
         cl,
         cd,
         thrust,
         stall: s.stall,
     }
+}
+
+/// Treibstoffverbrauch (kg/s) bei Triebwerksstellung `engine` und Luftdichte
+/// `density`: Grundverbrauch plus ein Anteil, der mit dem Quadrat der
+/// Stellung wächst und mit der Luftdichte fällt (wie der Schub).
+pub fn fuel_flow(spec: &AircraftSpec, engine: f64, density: f64) -> f64 {
+    let e = engine.clamp(0.0, 1.0);
+    let lapse = detmath::powf(density / RHO0, spec.thrust_density_exponent);
+    spec.fuel_flow_idle_kgps + (spec.fuel_flow_max_kgps - spec.fuel_flow_idle_kgps) * e * e * lapse
+}
+
+/// Triebwerk, Luftbremse, Klappen, Fahrwerk und Treibstoff – im Flug wie am Boden.
+fn update_systems(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, aero: &AeroData, dt: f64) {
+    // Triebwerk: ohne Treibstoff läuft es aus.
+    let spool = (dt / spec.engine_spool_time_s).min(1.0);
+    let target = if s.flamed_out() { 0.0 } else { c.throttle_f() };
+    s.engine += (target - s.engine) * spool;
+    if !s.flamed_out() {
+        s.fuel_kg = (s.fuel_kg - fuel_flow(spec, s.engine, aero.density) * dt).max(0.0);
+    }
+
+    let brake_target = if c.has(flags::AIRBRAKE) { 1.0 } else { 0.0 };
+    let max_move = AIRBRAKE_RATE * dt;
+    s.airbrake += (brake_target - s.airbrake).clamp(-max_move, max_move);
+    // Klappen; oberhalb der Höchstfahrt fahren sie selbsttätig ein.
+    let flap_target = if c.has(flags::FLAPS) && aero.tas < spec.flap_max_speed_mps { 1.0 } else { 0.0 };
+    let flap_move = spec.flap_rate * dt;
+    s.flaps += (flap_target - s.flaps).clamp(-flap_move, flap_move);
+    // Fahrwerk; am Boden lässt es sich nicht einfahren.
+    let gear_target = if c.has(flags::GEAR) || s.on_ground { 1.0 } else { 0.0 };
+    let gear_move = dt / spec.gear_time_s;
+    s.gear += (gear_target - s.gear).clamp(-gear_move, gear_move);
+}
+
+/// Abhebefahrt: unterhalb hebt Ziehen am Boden die Nase nicht.
+pub fn rotate_speed(spec: &AircraftSpec, s: &AircraftState, density: f64) -> f64 {
+    spec.stall_speed_1g(s.mass(spec), density, s.flaps) * ROTATE_FACTOR
+}
+
+/// Ein Tick im Rollmodus. `elevation` ist die Bodenhöhe unter dem Flugzeug.
+/// Liefert `true`, wenn das Flugzeug in diesem Tick abgehoben hat.
+pub fn ground_step(
+    spec: &AircraftSpec,
+    s: &mut AircraftState,
+    c: &ControlFrame,
+    elevation: f64,
+    dt: f64,
+) -> bool {
+    let aero = aero_data(spec, s);
+    update_systems(spec, s, c, &aero, dt);
+    s.stall = 0.0;
+
+    let (yaw, pitch, _) = s.attitude.to_euler();
+    let (sy, cy) = detmath::sin_cos(yaw);
+    let fwd = DVec3::new(cy, sy, 0.0);
+    let v = s.velocity.dot(fwd).max(0.0);
+    let mass = s.mass(spec);
+    let weight = mass * G0;
+    let qs = aero.qbar * spec.wing_area_m2;
+    let lift = qs * aero.cl;
+    let wheel_load = (weight - lift).max(0.0);
+
+    // Längs: Schub gegen Luftwiderstand, Rollreibung und Radbremse.
+    let mut resist = qs * aero.cd + spec.rolling_friction * wheel_load;
+    if c.has(flags::AIRBRAKE) {
+        resist += spec.wheel_brake_decel * mass * (wheel_load / weight);
+    }
+    let push = aero.thrust;
+    let accel = (push - resist) / mass;
+    // Reibung hält ein stehendes Flugzeug fest, schiebt es aber nie rückwärts.
+    let v_new = if v <= 0.0 && push <= resist { 0.0 } else { (v + accel * dt).max(0.0) };
+
+    // Lenken über Quer- und Seitenruder, auch auf der Stelle (wie im Original).
+    let steer = (c.roll_f() + c.yaw_f()).clamp(-1.0, 1.0);
+    let r = steer * spec.ground_steer_rate / (1.0 + v_new / STEER_HALF_SPEED);
+
+    // Nicken: erst ab der Abhebefahrt; ohne Zug senkt sich die Nase.
+    let v_rot = rotate_speed(spec, s, aero.density);
+    let q = if v_new >= v_rot && c.pitch_f() > 0.0 {
+        c.pitch_f() * spec.max_pitch_rate * 0.6
+    } else if pitch > 0.0 {
+        -NOSE_SETTLE_RATE
+    } else {
+        0.0
+    };
+    let new_pitch = (pitch + q * dt).clamp(0.0, MAX_GROUND_PITCH);
+    let new_yaw = yaw + r * dt;
+
+    s.attitude = DQuat::from_euler(new_yaw, new_pitch, 0.0);
+    s.body_rates = DVec3::new(0.0, q, r);
+    let (sy, cy) = detmath::sin_cos(new_yaw);
+    s.velocity = DVec3::new(cy, sy, 0.0) * v_new;
+    s.position += s.velocity * dt;
+    s.position.z = -(elevation + spec.gear_height_m);
+
+    // Abheben: Der Auftrieb trägt das Gewicht und die Nase ist oben.
+    if lift > weight && new_pitch > 0.02 {
+        s.on_ground = false;
+        return true;
+    }
+    false
 }
 
 /// Kommandierte Drehraten der Flugsteuerung.
@@ -202,7 +353,7 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
     let v = aero.tas;
 
     // Ruderwirksamkeit sinkt mit dem Staudruck.
-    let eff = (aero.qbar / spec.control_q_ref_pa).clamp(0.1, 1.0);
+    let eff = control_effectiveness(spec, aero.qbar);
 
     // --- Nicken ---
     // Ratenkommando: Knüppel neutral ⇒ q = 0. Der Geradeausflug ist damit
@@ -232,13 +383,29 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
 /// Vom Piloten angeforderte g-Last (aus dem Knüppel, nicht aus dem tatsächlich
 /// erreichten Auftrieb – sonst würde der Auftriebsverlust im Abriss die
 /// Abrissgeschwindigkeit sofort wieder senken und es entstünde ein Pendeln).
-pub fn demanded_load_factor(spec: &AircraftSpec, c: &ControlFrame) -> f64 {
-    1.0 + c.pitch_f().max(0.0) * spec.stall_stick_g
+///
+/// Voller Zug fordert höchstens `stall_stick_g` zusätzliche g an – oder
+/// weniger, wenn die Ruder bei geringem Staudruck gar nicht mehr Nickrate
+/// erzeugen können (n = 1 + V·q/g). So lässt sich bei Landefahrt behutsam
+/// abfangen, während harter Zug bei Kampffahrt unverändert früh abreißt.
+pub fn demanded_load_factor(spec: &AircraftSpec, c: &ControlFrame, tas: f64, qbar: f64) -> f64 {
+    1.0 + c.pitch_f().max(0.0) * stick_g_per_unit(spec, tas, qbar)
+}
+
+/// Zusätzliche g-Anforderung pro voller Knüppelauslenkung.
+pub fn stick_g_per_unit(spec: &AircraftSpec, tas: f64, qbar: f64) -> f64 {
+    let rate_g = tas * spec.max_pitch_rate * control_effectiveness(spec, qbar) / G0;
+    rate_g.min(spec.stall_stick_g)
+}
+
+/// Ruderwirksamkeit 0,1..1, steigt mit dem Staudruck.
+pub fn control_effectiveness(spec: &AircraftSpec, qbar: f64) -> f64 {
+    (qbar / spec.control_q_ref_pa).clamp(0.1, 1.0)
 }
 
 /// Abrissgeschwindigkeit bei Luftdichte `density` und g-Last `n` (m/s).
-pub fn stall_speed(spec: &AircraftSpec, density: f64, n: f64, flaps: f64) -> f64 {
-    spec.stall_speed_1g(density, flaps) * n.max(1.0).sqrt()
+pub fn stall_speed(spec: &AircraftSpec, mass_kg: f64, density: f64, n: f64, flaps: f64) -> f64 {
+    spec.stall_speed_1g(mass_kg, density, flaps) * n.max(1.0).sqrt()
 }
 
 /// Flugbahnwinkel γ (rad, positiv = steigen).
@@ -280,17 +447,8 @@ fn stall_departure_rates(spec: &AircraftSpec, s: &AircraftState) -> DVec3 {
 /// Turbulenz). Gibt die Aerodynamik des *Ausgangszustands* zurück.
 pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: DVec3, dt: f64) -> AeroData {
     let aero = aero_data(spec, s);
-
-    // Triebwerk und Luftbremse
-    let spool = (dt / spec.engine_spool_time_s).min(1.0);
-    s.engine += (c.throttle_f() - s.engine) * spool;
-    let brake_target = if c.has(flags::AIRBRAKE) { 1.0 } else { 0.0 };
-    let max_move = AIRBRAKE_RATE * dt;
-    s.airbrake += (brake_target - s.airbrake).clamp(-max_move, max_move);
-    // Klappen; oberhalb der Höchstfahrt fahren sie selbsttätig ein.
-    let flap_target = if c.has(flags::FLAPS) && aero.tas < spec.flap_max_speed_mps { 1.0 } else { 0.0 };
-    let flap_move = spec.flap_rate * dt;
-    s.flaps += (flap_target - s.flaps).clamp(-flap_move, flap_move);
+    let mass = s.mass(spec);
+    update_systems(spec, s, c, &aero, dt);
 
     // Flugsteuerung: Raten folgen dem Kommando mit Verzögerung erster Ordnung.
     let cmd = fbw_rate_command(spec, s, &aero, c) + gust;
@@ -312,11 +470,11 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
             // Flugbahn zur Nase drehen: Kraft senkrecht zur Geschwindigkeit,
             // ändert also nur die Richtung, nicht den Betrag der Fahrt.
             let to_nose = DVec3::X - v_hat * v_hat.x;
-            force_body += to_nose * (spec.mass_kg * aero.tas * STALL_PATH_ALIGN * s.stall);
+            force_body += to_nose * (mass * aero.tas * STALL_PATH_ALIGN * s.stall);
         }
     }
-    let force_world = s.attitude.rotate(force_body) + DVec3::new(0.0, 0.0, spec.mass_kg * G0);
-    let accel = force_world / spec.mass_kg;
+    let force_world = s.attitude.rotate(force_body) + DVec3::new(0.0, 0.0, mass * G0);
+    let accel = force_world / mass;
 
     // Semi-impliziter Euler: erst Geschwindigkeit, dann Position mit neuer Geschwindigkeit.
     s.velocity += accel * dt;
@@ -328,8 +486,8 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
     // wächst sie jenseits des Abrisswinkels mit dem Anstellwinkel, damit auch
     // knapp über der Abrissgeschwindigkeit kein absurder Anstellwinkel entsteht.
     let target = if aero.tas >= MIN_AERO_SPEED {
-        let n = demanded_load_factor(spec, c);
-        let by_speed = stall_target(spec, stall_speed(spec, aero.density, n, s.flaps), aero.tas);
+        let n = demanded_load_factor(spec, c, aero.tas, aero.qbar);
+        let by_speed = stall_target(spec, stall_speed(spec, mass, aero.density, n, s.flaps), aero.tas);
         let by_alpha = ((aero.alpha.abs() - spec.alpha_stall_rad) / STALL_ALPHA_FULL).clamp(0.0, 1.0);
         by_speed.max(by_alpha)
     } else {
@@ -375,7 +533,7 @@ mod tests {
     fn stall_is_continuous_and_follows_speed_deficit() {
         let spec = &F29_SPEC;
         let rho = atmosphere::isa(3000.0).density;
-        let vs = spec.stall_speed_1g(rho, 0.0);
+        let vs = spec.stall_speed_1g(spec.full_mass_kg(), rho, 0.0);
         // Deutlich über der Abrissgeschwindigkeit: kein Abriss
         let mut fast = AircraftState::level(0.0, 0.0, 3000.0, 0.0, vs * 1.6);
         run(&mut fast, ControlFrame::default(), 0.5);
@@ -395,7 +553,7 @@ mod tests {
     fn pulling_raises_stall_speed() {
         let spec = &F29_SPEC;
         let rho = atmosphere::isa(3000.0).density;
-        let v = spec.stall_speed_1g(rho, 0.0) * 1.4;
+        let v = spec.stall_speed_1g(spec.full_mass_kg(), rho, 0.0) * 1.4;
         // Ohne Ziehen kein Abriss, mit vollem Ziehen schon (beschleunigter Abriss)
         let mut neutral = AircraftState::level(0.0, 0.0, 3000.0, 0.0, v);
         run(&mut neutral, ControlFrame::default(), 0.5);
@@ -417,6 +575,113 @@ mod tests {
         st.stall = 0.5;
         let half = aero_data(spec, &st).cl;
         assert!(half < clean && half > stalled, "Auftrieb muss stetig mit der Abrissstärke fallen");
+    }
+
+    #[test]
+    fn fuel_burn_grows_quadratically_and_flames_out() {
+        let spec = &F29_SPEC;
+        let idle = fuel_flow(spec, 0.0, RHO0);
+        let half = fuel_flow(spec, 0.5, RHO0);
+        let full = fuel_flow(spec, 1.0, RHO0);
+        assert!((idle - spec.fuel_flow_idle_kgps).abs() < 1e-12);
+        assert!((full - spec.fuel_flow_max_kgps).abs() < 1e-9);
+        // quadratisch: halbe Stellung = Grundverbrauch + ein Viertel des Zuwachses
+        assert!((half - (idle + 0.25 * (full - idle))).abs() < 1e-9);
+        // in der Höhe weniger
+        assert!(fuel_flow(spec, 1.0, 0.4) < full * 0.6);
+
+        let mut st = AircraftState::level(0.0, 0.0, 5000.0, 0.0, 200.0);
+        st.fuel_kg = 2.0;
+        run(&mut st, ControlFrame::from_analog(0.0, 0.0, 0.0, 1.0, 0), 3.0);
+        assert!(st.flamed_out());
+        assert_eq!(aero_data(spec, &st).thrust.max(0.0), 0.0, "ohne Treibstoff kein Schub");
+    }
+
+    #[test]
+    fn lighter_aircraft_stalls_slower() {
+        let spec = &F29_SPEC;
+        let full = stall_speed(spec, spec.full_mass_kg(), RHO0, 1.0, 0.0);
+        let empty = stall_speed(spec, spec.empty_mass_kg, RHO0, 1.0, 0.0);
+        assert!(empty < 0.9 * full, "{empty} vs {full}");
+    }
+
+    fn on_runway() -> AircraftState {
+        let mut st = AircraftState::level(0.0, 0.0, 100.0 + F29_SPEC.gear_height_m, 0.0, 0.0);
+        st.on_ground = true;
+        st.gear = 1.0;
+        st.engine = 0.0;
+        st
+    }
+
+    fn roll(st: &mut AircraftState, c: ControlFrame, seconds: f64) -> bool {
+        for _ in 0..(seconds * 120.0) as usize {
+            if ground_step(&F29_SPEC, st, &c, 100.0, 1.0 / 120.0) {
+                return true;
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn takeoff_roll_needs_rotation_speed() {
+        let mut st = on_runway();
+        let full = ControlFrame::from_analog(1.0, 0.0, 0.0, 1.0, flags::GEAR | flags::FLAPS);
+        // Volles Ziehen von Anfang an: Die Nase hebt sich erst ab der Abhebefahrt.
+        let mut lifted = false;
+        let mut dist = 0.0;
+        for _ in 0..(60.0 * 120.0) as usize {
+            let before = st.position;
+            let (_, pitch, _) = st.attitude.to_euler();
+            let v = st.velocity.length();
+            if v < 0.9 * rotate_speed(&F29_SPEC, &st, RHO0) {
+                assert!(pitch < 1e-9, "Nase hebt sich bei {v} m/s");
+            }
+            lifted = ground_step(&F29_SPEC, &mut st, &full, 100.0, 1.0 / 120.0);
+            dist += (st.position - before).length();
+            if lifted {
+                break;
+            }
+        }
+        assert!(lifted, "kein Abheben");
+        assert!((500.0..1_400.0).contains(&dist), "Startrollstrecke {dist} m");
+        assert!(st.attitude.to_euler().2.abs() < 1e-12, "am Boden keine Querlage");
+    }
+
+    #[test]
+    fn brakes_stop_and_steering_turns_on_the_spot() {
+        let mut st = on_runway();
+        st.velocity = DVec3::new(70.0, 0.0, 0.0);
+        let brake = ControlFrame::from_analog(0.0, 0.0, 0.0, 0.0, flags::GEAR | flags::AIRBRAKE);
+        let x0 = st.position.x;
+        roll(&mut st, brake, 30.0);
+        let dist = st.position.x - x0;
+        assert!(st.velocity.length() < 1e-9, "steht nicht");
+        assert!((300.0..900.0).contains(&dist), "Bremsweg {dist} m");
+        // Auf der Stelle wenden: 180° in wenigen Sekunden, ohne sich zu bewegen
+        let turn = ControlFrame::from_analog(0.0, 1.0, 0.0, 0.0, flags::GEAR | flags::AIRBRAKE);
+        let p0 = st.position;
+        roll(&mut st, turn, 6.0);
+        let hdg = st.attitude.to_euler().0;
+        assert!(detmath::wrap_pi(hdg).abs() > 2.5, "Kurs nach Wenden {hdg}");
+        assert!((st.position - p0).length() < 1e-6);
+        // Im Leerlauf bleibt es stehen, mit etwas Schub rollt es an.
+        roll(&mut st, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.0, flags::GEAR), 3.0);
+        assert!(st.velocity.length() < 1e-9);
+        roll(&mut st, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.25, flags::GEAR), 10.0);
+        let v = st.velocity.length();
+        assert!(v > 3.0 && v < 40.0, "Rollen mit 25 % Schub: {v} m/s");
+    }
+
+    #[test]
+    fn gear_cannot_retract_on_ground_and_takes_time() {
+        let mut st = on_runway();
+        roll(&mut st, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.0, 0), 2.0);
+        assert_eq!(st.gear, 1.0);
+        let mut air = AircraftState::level(0.0, 0.0, 3000.0, 0.0, 150.0);
+        run(&mut air, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.6, flags::GEAR), 2.5);
+        assert!(air.gear > 0.3 && air.gear < 0.7, "{}", air.gear);
+        run(&mut air, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.6, flags::GEAR), 3.0);
+        assert!(air.gear_down());
     }
 
     #[test]

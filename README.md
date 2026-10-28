@@ -10,7 +10,8 @@ jeder Auflösung scharf bleibt.
 > Originals. Mechaniken werden nach Verhaltensbeschreibung nachgebaut; das Vorgehen ist
 > in [`docs/MECHANICS.md`](docs/MECHANICS.md) festgelegt und protokolliert.
 
-**Status:** v0.1 in Arbeit: Freiflug über prozeduralem Gelände mit HUD.
+**Status:** v0.1 in Arbeit: Freiflug über prozeduralem Gelände mit HUD, Start und
+Landung auf der Heimatbasis und geheimen Pisten, Treibstoff.
 
 [![CI](https://github.com/peddn/f-29-silent-sniper/actions/workflows/ci.yml/badge.svg)](https://github.com/peddn/f-29-silent-sniper/actions/workflows/ci.yml)
 
@@ -28,6 +29,9 @@ cargo run --release -p f29-app
 
 # anderer Seed = anderes Gelände, Start in der Verfolgeransicht
 cargo run --release -p f29-app -- --seed 1234 --view chase
+
+# Luftstart statt Start auf der Bahn
+cargo run --release -p f29-app -- --start air
 
 # nach 10 s automatisch einen Screenshot speichern und beenden
 cargo run --release -p f29-app -- --screenshot bild.png --after 10
@@ -47,12 +51,13 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev pkg-config
 | Taste | Gamepad | Funktion |
 |---|---|---|
 | ↑ / W, ↓ / S | linker Stick vor/zurück | drücken / ziehen |
-| ← / A, → / D | linker Stick links/rechts | rollen |
+| ← / A, → / D | linker Stick links/rechts | rollen; am Boden lenken (auch im Stand) |
 | Q / E | Trigger links/rechts | Seitenruder |
 | `+` / `-` | rechter Stick vor/zurück | Schub stufenlos |
 | 1 … 9, 0, `^`/`` ` `` | | Schub 10 … 90 %, 100 %, Leerlauf |
-| B | B / Kreis | Luftbremse ein/aus |
-| F | | Landeklappen ein/aus (fahren über ≈ 250 kt selbsttätig ein) |
+| B | B / Kreis | Luftbremse ein/aus; am Boden Radbremse |
+| F | X / Quadrat | Landeklappen ein/aus (fahren über ≈ 250 kt selbsttätig ein) |
+| G | Y / Dreieck | Fahrwerk aus/ein (am Boden gesperrt) |
 | N | A / Kreuz | nächster Navigationspunkt |
 | F1 / F2 / V | Select | Cockpit / Verfolger / umschalten |
 | H | | HUD ein/aus |
@@ -70,6 +75,7 @@ cargo run --release -p f29-headless -- replay flug.replay        # Hash-Prüfung
 cargo run --release -p f29-headless -- replay replays/last.replay # letzter Flug aus dem Spiel
 cargo run --release -p f29-headless -- hud-svg --seconds 30 --out hud.svg
 cargo run --release -p f29-headless -- terrain --seed 7 --out karte.ppm
+cargo run --release -p f29-headless -- airfields --seed 7          # Flugplätze und Route
 cargo run --release -p f29-headless -- bench
 ```
 
@@ -110,6 +116,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Feinschliff Flugverhalten nach erstem Spielerfeedback (v0.1.1)
 - [x] Radarhöhe über Grund immer im HUD
 - [x] Turbulenz unter 1000 ft über Grund, Landeklappen, stärkere Schubwirkung (v0.1.4/0.1.5)
+- [x] Treibstoff als Masse, quadratischer Verbrauch, Flameout, FUEL LOW / BINGO (v0.1.6)
+- [x] Heimatbasis und geheime Pisten, Fahrwerk, Rollen und Wenden am Boden,
+      Aufsetzbewertung, PAPI und Landehilfen im HUD, Start auf der Bahn (v0.1.6)
 
 ### v0.2: Angriff und Tarnung
 - [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD
@@ -121,8 +130,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### v0.3: Missionen
 - [ ] Missionsdaten: Primär- und Sekundärziel, Route, Bedrohungslage
-- [ ] Start und Landung (Flugplatz, Fahrwerk, Bodenrollen), Treibstoff
-- [ ] Bewaffnung vor dem Start, Missionsauswertung
+- [ ] Bewaffnung und Betankung vor dem Start (Zusatztanks), Missionsauswertung
+      mit Landebewertung, Verbrauchsvorschau auf der Karte
+- [ ] Flugzeugträger
 
 ### v0.4: Luftkampf
 - [ ] Luft-Luft-Raketen und Bordkanone

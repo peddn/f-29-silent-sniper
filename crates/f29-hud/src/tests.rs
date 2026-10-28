@@ -98,3 +98,52 @@ fn heading_formatting() {
     assert_eq!(heading_deg(std::f64::consts::TAU - 1e-6), 0);
     assert_eq!(heading_deg(std::f64::consts::FRAC_PI_2), 90);
 }
+
+#[test]
+fn sink_marks_match_aircraft_limits() {
+    let spec = &f29_core::data::F29_SPEC;
+    let hard = f29_core::units::mps_to_fpm(spec.hard_landing_sink_mps) as f32;
+    let max = f29_core::units::mps_to_fpm(spec.max_landing_sink_mps) as f32;
+    assert!((crate::hud::HARD_SINK_FPM - hard).abs() < 2.0, "{hard}");
+    assert!((crate::hud::MAX_SINK_FPM - max).abs() < 2.0, "{max}");
+}
+
+/// Endanflug mit ausgefahrenem Fahrwerk: Landehilfen erscheinen, alles bleibt im Bild.
+#[test]
+fn landing_aids_and_ground_messages_stay_on_screen() {
+    use f29_core::controls::flags;
+    use f29_core::sim::Spawn;
+    let mut sim = Sim::new(SimConfig {
+        seed: 0x0F29,
+        spawn: Spawn {
+            altitude: 600.0,
+            min_clearance: 300.0,
+            speed: 80.0,
+            throttle: 0.5,
+            ..Spawn::default()
+        },
+    });
+    for _ in 0..(7 * 120) {
+        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.5, flags::GEAR | flags::FLAPS));
+    }
+    let fd = sim.flight_data();
+    assert!(fd.gear > 0.99);
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let with = build(&fd, &layout, &HudOptions::default());
+    let mut clean = fd.clone();
+    clean.gear = 0.0;
+    let without = build(&clean, &layout, &HudOptions::default());
+    assert!(with.lines.len() > without.lines.len() + 8, "keine Landehilfen");
+
+    let mut ground = Sim::new(SimConfig::runway(0x0F29));
+    ground.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.0, flags::GEAR));
+    for aspect in [4.0 / 3.0, 16.0 / 9.0, 21.0 / 9.0] {
+        let layout = ScreenLayout::cockpit(aspect);
+        for fd in [fd.clone(), ground.flight_data()] {
+            let dl = build(&fd, &layout, &HudOptions::default());
+            let (min, max) = bounds(&dl);
+            assert!(min[0] >= -aspect / 2.0 - 1e-4 && max[0] <= aspect / 2.0 + 1e-4);
+            assert!(min[1] >= -0.5 - 1e-4 && max[1] <= 0.5 + 1e-4);
+        }
+    }
+}

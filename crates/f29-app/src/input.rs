@@ -11,8 +11,7 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PilotInput>()
-            .configure_sets(Update, (SimSystems::Input, SimSystems::Step, SimSystems::Present).chain())
+        app.configure_sets(Update, (SimSystems::Input, SimSystems::Step, SimSystems::Present).chain())
             .add_systems(Update, (flight_input, hotkeys).in_set(SimSystems::Input));
     }
 }
@@ -26,6 +25,8 @@ pub struct PilotInput {
     pub throttle: f64,
     pub airbrake: bool,
     pub flaps: bool,
+    /// Fahrwerk ausgefahren.
+    pub gear: bool,
     /// Wird beim nächsten Tick einmalig gesendet.
     next_steerpoint: bool,
 }
@@ -39,12 +40,18 @@ impl Default for PilotInput {
             throttle: 0.55,
             airbrake: false,
             flaps: false,
+            gear: false,
             next_steerpoint: false,
         }
     }
 }
 
 impl PilotInput {
+    /// Steuerorgane passend zum Startzustand (Schub, Fahrwerk).
+    pub fn matching(sim: &f29_core::Sim) -> Self {
+        Self { throttle: sim.config().spawn.throttle, gear: sim.aircraft().gear > 0.5, ..Self::default() }
+    }
+
     /// Erzeugt die Eingabe für einen Tick und verbraucht einmalige Ereignisse.
     pub fn take_frame(&mut self) -> ControlFrame {
         let mut f = 0;
@@ -53,6 +60,9 @@ impl PilotInput {
         }
         if self.flaps {
             f |= flags::FLAPS;
+        }
+        if self.gear {
+            f |= flags::GEAR;
         }
         if std::mem::take(&mut self.next_steerpoint) {
             f |= flags::NEXT_STEERPOINT;
@@ -121,6 +131,9 @@ fn flight_input(
     if keys.just_pressed(KeyCode::KeyF) {
         pilot.flaps = !pilot.flaps;
     }
+    if keys.just_pressed(KeyCode::KeyG) {
+        pilot.gear = !pilot.gear;
+    }
     if keys.just_pressed(KeyCode::KeyN) {
         pilot.next_steerpoint = true;
     }
@@ -147,6 +160,12 @@ fn flight_input(
         if pad.just_pressed(GamepadButton::South) {
             pilot.next_steerpoint = true;
         }
+        if pad.just_pressed(GamepadButton::North) {
+            pilot.gear = !pilot.gear;
+        }
+        if pad.just_pressed(GamepadButton::West) {
+            pilot.flaps = !pilot.flaps;
+        }
     }
 }
 
@@ -168,7 +187,7 @@ fn hotkeys(
     }
     if keys.just_pressed(KeyCode::KeyR) {
         state.restart();
-        *pilot = PilotInput::default();
+        *pilot = PilotInput::matching(&state.sim);
     }
     if keys.just_pressed(KeyCode::F1) {
         view.mode = ViewMode::Cockpit;

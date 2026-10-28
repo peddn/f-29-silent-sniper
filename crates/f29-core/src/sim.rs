@@ -7,7 +7,7 @@ use crate::math::DVec3;
 use crate::nav::{self, Steerpoint};
 use crate::rng::Pcg32;
 use f29_data::{AircraftSpec, F29_SPEC};
-use f29_terrain::Terrain;
+use f29_terrain::{AirfieldKind, Terrain};
 
 /// Abrisswarnung unterhalb dieses Vielfachen der Abrissgeschwindigkeit.
 const STALL_WARNING_MARGIN: f64 = 1.1;
@@ -21,15 +21,43 @@ pub const TURBULENCE_CEILING_M: f64 = 304.8;
 const TURBULENCE_ROLL: f64 = 1.05;
 /// Glättung der Turbulenz (s) – verhindert hochfrequentes Zittern.
 const TURBULENCE_TIME_CONSTANT_S: f64 = 0.15;
+/// Rütteln (rad/s) bei ausgefahrenem Fahrwerk, voll erreicht 25 m/s über
+/// dessen Höchstfahrt.
+const GEAR_BUFFET: f64 = 0.5;
+/// Schneller als das darf man die befestigte Bahn nicht verlassen (m/s).
+const OFF_RUNWAY_MAX_SPEED: f64 = 12.0;
+/// Startpunkt auf der Bahn: Abstand vom Bahnanfang (m).
+const RUNWAY_START_OFFSET_M: f64 = 150.0;
+/// Treibstoffreserve, die bei der Heimkehr übrig bleiben soll (kg).
+pub const FUEL_RESERVE_KG: f64 = 450.0;
+/// „FUEL LOW“ unter diesem Anteil der Tankfüllung.
+const FUEL_LOW_FRACTION: f64 = 0.15;
+/// Stillstand: langsamer als das (m/s).
+const STOPPED_SPEED: f64 = 0.5;
 
 /// Simulationsfrequenz.
 pub const TICK_HZ: u32 = 120;
 /// Zeitschritt in Sekunden.
 pub const DT: f64 = 1.0 / TICK_HZ as f64;
 
+/// Wo das Flugzeug startet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SpawnKind {
+    /// In der Luft, mit den Werten aus [`Spawn`].
+    #[default]
+    Air,
+    /// Am Anfang der Bahn der Heimatbasis, stehend, Fahrwerk unten,
+    /// Triebwerk im Leerlauf. Position, Höhe, Kurs und Fahrt aus [`Spawn`]
+    /// werden ignoriert.
+    Runway,
+}
+
 /// Startbedingungen.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Spawn {
+    pub kind: SpawnKind,
+    /// Tankfüllung 0..1.
+    pub fuel: f64,
     pub north: f64,
     pub east: f64,
     /// Gewünschte Höhe MSL; wird angehoben, falls das Gelände zu hoch ist.
@@ -47,6 +75,8 @@ pub struct Spawn {
 impl Default for Spawn {
     fn default() -> Self {
         Self {
+            kind: SpawnKind::Air,
+            fuel: 1.0,
             north: 0.0,
             east: 0.0,
             altitude: 2_500.0,
@@ -66,15 +96,75 @@ pub struct SimConfig {
 }
 
 impl SimConfig {
+    /// Luftstart (für Tests, Demo und Replays).
     pub fn new(seed: u64) -> Self {
         Self { seed, spawn: Spawn::default() }
     }
+
+    /// Start auf der Bahn der Heimatbasis.
+    pub fn runway(seed: u64) -> Self {
+        Self { seed, spawn: Spawn { kind: SpawnKind::Runway, throttle: 0.0, ..Spawn::default() } }
+    }
+}
+
+/// Warum das Flugzeug verloren ging.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CrashCause {
+    /// In Gelände oder außerhalb einer Bahn aufgeschlagen.
+    Terrain,
+    /// Ins Wasser gestürzt.
+    Water,
+    /// Mit eingefahrenem Fahrwerk aufgesetzt.
+    GearUp,
+    /// Zu hart (oder mit der Nase zuerst) aufgesetzt – das Fahrwerk bricht.
+    GearCollapse,
+    /// Mit zu viel Querlage aufgesetzt – eine Fläche schlägt auf.
+    WingStrike,
+    /// Zu schnell von der Bahn abgekommen.
+    OffRunway,
+}
+
+impl CrashCause {
+    fn code(self) -> u64 {
+        match self {
+            Self::Terrain => 0,
+            Self::Water => 1,
+            Self::GearUp => 2,
+            Self::GearCollapse => 3,
+            Self::WingStrike => 4,
+            Self::OffRunway => 5,
+        }
+    }
+
+    /// Kurztext für HUD und Nachbesprechung.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Terrain => "GROUND IMPACT",
+            Self::Water => "WATER IMPACT",
+            Self::GearUp => "GEAR UP LANDING",
+            Self::GearCollapse => "GEAR COLLAPSED",
+            Self::WingStrike => "WING STRIKE",
+            Self::OffRunway => "OFF RUNWAY",
+        }
+    }
+}
+
+/// Bewertung des letzten Aufsetzens.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Touchdown {
+    pub tick: u64,
+    /// Index in [`Terrain::runways`].
+    pub runway: usize,
+    /// Sinkrate beim Aufsetzen (m/s, positiv = sinken).
+    pub sink_mps: f64,
+    /// Harte Landung (über der Grenze für „gut“, unter der Bruchgrenze).
+    pub hard: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     Flying,
-    Crashed { tick: u64 },
+    Crashed { tick: u64, cause: CrashCause },
 }
 
 /// Warnungen für HUD und Ton.
@@ -84,6 +174,16 @@ pub struct Warnings {
     pub pull_up: bool,
     pub over_g: bool,
     pub crashed: bool,
+    /// Weniger als 15 % Treibstoff.
+    pub fuel_low: bool,
+    /// Der Rest reicht nicht mehr bis zur Heimatbasis plus Reserve.
+    pub bingo: bool,
+    /// Tanks leer, Triebwerk aus.
+    pub flameout: bool,
+    /// Fahrwerk draußen und zu schnell.
+    pub gear_overspeed: bool,
+    /// Im Landeanflug, aber Fahrwerk nicht ausgefahren.
+    pub gear_up: bool,
 }
 
 /// Informationen zum aktiven Navigationspunkt.
@@ -97,6 +197,8 @@ pub struct SteerpointInfo {
     pub range: f64,
     /// Richtung zum Punkt (am Boden) in Körperachsen, normiert.
     pub direction_body: DVec3,
+    /// Bahnrichtung (rad, 0..π), falls der Punkt ein Flugplatz ist.
+    pub runway_heading: Option<f64>,
 }
 
 /// Abgeleitete Flugdaten – alles, was Anzeigen brauchen.
@@ -127,6 +229,31 @@ pub struct FlightData {
     pub flaps: f64,
     /// Stärke der Turbulenz (Betrag der Störraten, rad/s).
     pub turbulence: f64,
+    /// Treibstoff, kg.
+    pub fuel_kg: f64,
+    /// Tankinhalt 0..1.
+    pub fuel_fraction: f64,
+    /// Aktueller Verbrauch, kg/s.
+    pub fuel_flow_kgps: f64,
+    /// Restflugzeit beim aktuellen Verbrauch, s.
+    pub endurance_s: f64,
+    /// Fahrwerk 0..1.
+    pub gear: f64,
+    pub on_ground: bool,
+    /// Steht still auf einer Bahn (gelandet bzw. startbereit).
+    pub stopped_on_runway: bool,
+    /// Letztes Aufsetzen, solange das Flugzeug am Boden ist.
+    pub touchdown: Option<Touchdown>,
+    /// Name der Bahn unter dem Flugzeug (am Boden).
+    pub runway_name: Option<&'static str>,
+    /// Entfernung zur Heimatbasis, m.
+    pub home_range_m: f64,
+    /// Aktuelle Masse, kg.
+    pub mass_kg: f64,
+    /// Staudruck, Pa.
+    pub qbar_pa: f64,
+    /// 1-g-Abrissfahrt bei aktueller Masse, Höhe und Klappenstellung, m/s.
+    pub stall_speed_mps: f64,
     pub steerpoint: Option<SteerpointInfo>,
     pub warnings: Warnings,
 }
@@ -147,6 +274,7 @@ pub struct Sim {
     turbulence_rng: Pcg32,
     /// Geglättete Turbulenz-Störraten (p, q, r) in rad/s.
     gust: DVec3,
+    touchdown: Option<Touchdown>,
 }
 
 impl Sim {
@@ -155,20 +283,37 @@ impl Sim {
         let terrain = Terrain::new(seed);
         let spec = F29_SPEC;
         let sp = &config.spawn;
-        let ground = terrain.elevation(sp.north, sp.east);
-        let altitude = sp.altitude.max(ground + sp.min_clearance);
-        let mut aircraft = AircraftState::level(sp.north, sp.east, altitude, sp.heading, sp.speed);
+        let home = terrain.runways().first().cloned();
+        let mut aircraft = match (sp.kind, &home) {
+            (SpawnKind::Runway, Some(rw)) => {
+                let p = rw.world(-rw.length_m * 0.5 + RUNWAY_START_OFFSET_M, 0.0);
+                let heading = rw.heading_deg * (std::f64::consts::PI / 180.0);
+                let mut a =
+                    AircraftState::level(p[0], p[1], rw.elevation_m + spec.gear_height_m, heading, 0.0);
+                a.on_ground = true;
+                a.gear = 1.0;
+                a
+            }
+            _ => {
+                let ground = terrain.elevation(sp.north, sp.east);
+                let altitude = sp.altitude.max(ground + sp.min_clearance);
+                AircraftState::level(sp.north, sp.east, altitude, sp.heading, sp.speed)
+            }
+        };
         aircraft.engine = sp.throttle.clamp(0.0, 1.0);
-        // Getrimmt starten: Nase um den Anstellwinkel anheben, bei dem der
-        // Auftrieb das Gewicht trägt – sonst sackt das Flugzeug zuerst durch.
-        let air = crate::atmosphere::isa(altitude);
-        let qbar = 0.5 * air.density * sp.speed * sp.speed;
-        if qbar > 0.0 {
-            let cl_req = spec.mass_kg * crate::atmosphere::G0 / (qbar * spec.wing_area_m2);
-            let alpha_trim = ((cl_req - spec.cl0) / spec.cl_alpha).clamp(0.0, spec.alpha_warning_rad);
-            aircraft.attitude = crate::math::DQuat::from_euler(sp.heading, alpha_trim, 0.0);
+        aircraft.fuel_kg = spec.fuel_capacity_kg * sp.fuel.clamp(0.0, 1.0);
+        if !aircraft.on_ground {
+            // Getrimmt starten: Nase um den Anstellwinkel anheben, bei dem der
+            // Auftrieb das Gewicht trägt – sonst sackt das Flugzeug zuerst durch.
+            let air = crate::atmosphere::isa(aircraft.altitude());
+            let qbar = 0.5 * air.density * sp.speed * sp.speed;
+            if qbar > 0.0 {
+                let cl_req = aircraft.mass(&spec) * crate::atmosphere::G0 / (qbar * spec.wing_area_m2);
+                let alpha_trim = ((cl_req - spec.cl0) / spec.cl_alpha).clamp(0.0, spec.alpha_warning_rad);
+                aircraft.attitude = crate::math::DQuat::from_euler(sp.heading, alpha_trim, 0.0);
+            }
         }
-        let route = nav::generate_route(&terrain, config.seed, sp.north, sp.east, 4);
+        let route = build_route(&terrain, config.seed, sp);
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
         Self {
@@ -184,6 +329,7 @@ impl Sim {
             last_controls,
             turbulence_rng: Pcg32::new(seed, STREAM_TURBULENCE),
             gust: DVec3::ZERO,
+            touchdown: None,
         }
     }
 
@@ -198,17 +344,101 @@ impl Sim {
             return;
         }
         self.update_turbulence();
-        flight::step(&self.spec, &mut self.aircraft, &controls, self.gust, DT);
+        if self.aircraft.on_ground {
+            self.step_ground(&controls);
+        } else {
+            flight::step(&self.spec, &mut self.aircraft, &controls, self.gust, DT);
+            self.check_contact();
+        }
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
+    }
 
+    fn crash(&mut self, cause: CrashCause) {
         let p = self.aircraft.position;
         let ground = self.terrain.elevation(p.x, p.y);
-        if self.aircraft.altitude() <= ground || !self.aircraft.is_finite() {
-            self.status = Status::Crashed { tick: self.tick };
-            self.aircraft.position.z = -ground;
-            self.aircraft.velocity = DVec3::ZERO;
-            self.aircraft.body_rates = DVec3::ZERO;
+        self.status = Status::Crashed { tick: self.tick, cause };
+        self.aircraft.position.z = -ground;
+        self.aircraft.velocity = DVec3::ZERO;
+        self.aircraft.body_rates = DVec3::ZERO;
+        self.aircraft.on_ground = false;
+    }
+
+    /// Rollmodus: Abheben erkennen, Abkommen von der Bahn bestrafen.
+    fn step_ground(&mut self, controls: &ControlFrame) {
+        let p = self.aircraft.position;
+        let elevation = self.terrain.elevation(p.x, p.y);
+        if flight::ground_step(&self.spec, &mut self.aircraft, controls, elevation, DT) {
+            self.touchdown = None;
+            return;
         }
+        let p = self.aircraft.position;
+        if self.terrain.ground_height(p.x, p.y) < f29_terrain::SEA_LEVEL_M {
+            self.crash(CrashCause::Water);
+        } else if self.terrain.runway_at(p.x, p.y).is_none()
+            && self.aircraft.velocity.length() > OFF_RUNWAY_MAX_SPEED
+        {
+            self.crash(CrashCause::OffRunway);
+        }
+    }
+
+    /// Im Flug: Bodenberührung erkennen und das Aufsetzen bewerten.
+    fn check_contact(&mut self) {
+        if !self.aircraft.is_finite() {
+            self.crash(CrashCause::Terrain);
+            return;
+        }
+        let a = &self.aircraft;
+        let p = a.position;
+        let ground = self.terrain.elevation(p.x, p.y);
+        let agl = a.altitude() - ground;
+        let contact = if a.gear_down() { self.spec.gear_height_m } else { self.spec.belly_height_m };
+        let sinking = a.velocity.z > 0.0;
+        if agl > contact || (!sinking && agl > 0.0) {
+            return;
+        }
+        match self.evaluate_touchdown() {
+            Ok(td) => {
+                let a = &mut self.aircraft;
+                let (yaw, pitch, _) = a.attitude.to_euler();
+                a.on_ground = true;
+                a.position.z = -(ground + self.spec.gear_height_m);
+                a.velocity.z = 0.0;
+                a.attitude = crate::math::DQuat::from_euler(yaw, pitch.max(0.0), 0.0);
+                a.body_rates = DVec3::ZERO;
+                a.stall = 0.0;
+                self.touchdown = Some(td);
+            }
+            Err(cause) => self.crash(cause),
+        }
+    }
+
+    /// Bewertet die Bodenberührung: Bahn, Fahrwerk, Sinkrate, Querlage.
+    fn evaluate_touchdown(&self) -> Result<Touchdown, CrashCause> {
+        let a = &self.aircraft;
+        let p = a.position;
+        if self.terrain.ground_height(p.x, p.y) < f29_terrain::SEA_LEVEL_M {
+            return Err(CrashCause::Water);
+        }
+        let Some(runway) = self.terrain.runway_at(p.x, p.y) else {
+            return Err(CrashCause::Terrain);
+        };
+        if !a.gear_down() {
+            return Err(CrashCause::GearUp);
+        }
+        let sink = a.velocity.z;
+        let (_, pitch, roll) = a.attitude.to_euler();
+        if sink > self.spec.max_landing_sink_mps || pitch < NOSE_FIRST_PITCH {
+            return Err(CrashCause::GearCollapse);
+        }
+        if roll.abs() > self.spec.max_landing_bank_rad {
+            return Err(CrashCause::WingStrike);
+        }
+        Ok(Touchdown {
+            tick: self.tick,
+            runway,
+            sink_mps: sink,
+            hard: sink > self.spec.hard_landing_sink_mps,
+        })
     }
 
     /// Turbulenz in Bodennähe: unter 500 ft über Grund, stärker je tiefer und
@@ -219,8 +449,11 @@ impl Sim {
         let ground = self.terrain.elevation(a.position.x, a.position.y);
         let agl = a.altitude() - ground;
         let depth = (1.0 - agl / TURBULENCE_CEILING_M).clamp(0.0, 1.0);
-        let speed = a.velocity.length() / 200.0;
-        let amplitude = TURBULENCE_ROLL * depth * speed * (1.0 - 0.5 * a.flaps);
+        let v = a.velocity.length();
+        let speed = v / 200.0;
+        let buffet = GEAR_BUFFET * a.gear * ((v - self.spec.gear_max_speed_mps) / 25.0).clamp(0.0, 1.0);
+        let amplitude =
+            if a.on_ground { 0.0 } else { TURBULENCE_ROLL * depth * speed * (1.0 - 0.5 * a.flaps) + buffet };
         // Zufallszahlen immer ziehen, damit der Strom nicht von der Höhe abhängt.
         let wp = self.turbulence_rng.range_f64(-1.0, 1.0);
         let wq = self.turbulence_rng.range_f64(-1.0, 1.0);
@@ -280,11 +513,14 @@ impl Sim {
         let aero = &self.aero;
         let (yaw, pitch, roll) = a.attitude.to_euler();
         let ground = self.terrain.elevation(a.position.x, a.position.y);
-        let radar_alt = a.altitude() - ground;
+        // Radarhöhe bezogen auf die Räder: am Boden 0.
+        let radar_alt = (a.altitude() - ground - self.spec.gear_height_m).max(0.0);
         let vs = -a.velocity.z;
         let vel_body = a.attitude.inverse_rotate(a.velocity).normalize_or_zero();
         let velocity_dir_body = if vel_body == DVec3::ZERO { DVec3::X } else { vel_body };
         let crashed = matches!(self.status, Status::Crashed { .. });
+        let airborne = !crashed && !a.on_ground;
+        let mass = a.mass(&self.spec);
 
         let steerpoint = self.route.get(self.active_steerpoint).map(|sp| {
             let dn = sp.north - a.position.x;
@@ -296,23 +532,54 @@ impl Sim {
                 bearing: detmath::wrap_two_pi(detmath::atan2(de, dn)),
                 range: (dn * dn + de * de).sqrt(),
                 direction_body: a.attitude.inverse_rotate(to_point).normalize_or_zero(),
+                runway_heading: sp
+                    .runway
+                    .and_then(|i| self.terrain.runways().get(i))
+                    .map(|rw| rw.heading_deg * (std::f64::consts::PI / 180.0)),
             }
         });
 
         let time_to_impact = if vs < -0.5 { radar_alt / -vs } else { f64::INFINITY };
         // Abrisswarnung: knapp über der (g-abhängigen) Abrissgeschwindigkeit,
         // bei hohem Anstellwinkel oder wenn der Abriss schon einsetzt.
-        let n_demand = flight::demanded_load_factor(&self.spec, &self.last_controls);
-        let v_stall = flight::stall_speed(&self.spec, aero.density, n_demand, a.flaps);
+        let n_demand = flight::demanded_load_factor(&self.spec, &self.last_controls, aero.tas, aero.qbar);
+        let v_stall = flight::stall_speed(&self.spec, mass, aero.density, n_demand, a.flaps);
+
+        // Treibstoff: Restzeit beim aktuellen Verbrauch und Bedarf bis nach Hause.
+        let flow = if a.flamed_out() { 0.0 } else { flight::fuel_flow(&self.spec, a.engine, aero.density) };
+        let endurance_s = if flow > 0.0 { a.fuel_kg / flow } else { 0.0 };
+        let home_range_m = self.terrain.runways().first().map_or(0.0, |h| {
+            let (dn, de) = (h.center[0] - a.position.x, h.center[1] - a.position.y);
+            (dn * dn + de * de).sqrt()
+        });
+        // Rückweg mit mindestens Reisefahrt und mindestens halbem Schub gerechnet.
+        let cruise_flow = flight::fuel_flow(&self.spec, a.engine.max(0.5), aero.density);
+        let fuel_needed = home_range_m / aero.tas.max(150.0) * cruise_flow + FUEL_RESERVE_KG;
+        let runway_here = self.terrain.runway_at(a.position.x, a.position.y);
+        let stopped_on_runway = a.on_ground && runway_here.is_some() && a.velocity.length() < STOPPED_SPEED;
+        // Landeanflug: tief, sinkend, langsam.
+        let approach = radar_alt < 300.0
+            && vs < -1.0
+            && aero.tas < 1.6 * self.spec.stall_speed_1g(mass, aero.density, 0.0);
+
         let warnings = Warnings {
-            stall: !crashed
+            stall: airborne
                 && (a.stall > 0.02
                     || aero.alpha.abs() >= self.spec.alpha_warning_rad
                     || aero.tas < STALL_WARNING_MARGIN * v_stall)
                 && aero.tas > 1.0,
-            pull_up: !crashed && radar_alt < 900.0 && time_to_impact < 6.0,
-            over_g: !crashed && aero.load_factor > self.spec.g_limit_pos * 0.95,
+            // Mit ausgefahrenem Fahrwerk nur bei gefährlicher Sinkrate (Landeanflug).
+            pull_up: airborne
+                && radar_alt < 900.0
+                && time_to_impact < 6.0
+                && (!a.gear_down() || -vs > 2.0 * self.spec.max_landing_sink_mps),
+            over_g: airborne && aero.load_factor > self.spec.g_limit_pos * 0.95,
             crashed,
+            fuel_low: !crashed && a.fuel_kg < FUEL_LOW_FRACTION * self.spec.fuel_capacity_kg,
+            bingo: airborne && a.fuel_kg < fuel_needed,
+            flameout: !crashed && a.flamed_out(),
+            gear_overspeed: airborne && a.gear > 0.05 && aero.tas > self.spec.gear_max_speed_mps,
+            gear_up: airborne && !a.gear_down() && approach,
         };
 
         FlightData {
@@ -338,6 +605,19 @@ impl Sim {
             airbrake: a.airbrake,
             flaps: a.flaps,
             turbulence: self.gust.length(),
+            fuel_kg: a.fuel_kg,
+            fuel_fraction: a.fuel_kg / self.spec.fuel_capacity_kg,
+            fuel_flow_kgps: flow,
+            endurance_s,
+            gear: a.gear,
+            on_ground: a.on_ground,
+            stopped_on_runway,
+            touchdown: if a.on_ground { self.touchdown } else { None },
+            runway_name: if a.on_ground { runway_here.map(|i| self.terrain.runways()[i].name) } else { None },
+            home_range_m,
+            mass_kg: mass,
+            qbar_pa: aero.qbar,
+            stall_speed_mps: self.spec.stall_speed_1g(mass, aero.density, a.flaps),
             steerpoint,
             warnings,
         }
@@ -352,9 +632,10 @@ impl Sim {
         h.u64(self.tick);
         match self.status {
             Status::Flying => h.u64(0),
-            Status::Crashed { tick } => {
+            Status::Crashed { tick, cause } => {
                 h.u64(1);
                 h.u64(tick);
+                h.u64(cause.code());
             }
         }
         let a = &self.aircraft;
@@ -371,6 +652,13 @@ impl Sim {
         h.f64(a.airbrake);
         h.f64(a.stall);
         h.f64(a.flaps);
+        h.f64(a.fuel_kg);
+        h.f64(a.gear);
+        h.u64(u64::from(a.on_ground));
+        if let Some(td) = &self.touchdown {
+            h.u64(td.tick);
+            h.f64(td.sink_mps);
+        }
         h.f64(self.gust.x);
         h.f64(self.gust.y);
         let (rs, ri) = self.turbulence_rng.raw_state();
@@ -379,6 +667,30 @@ impl Sim {
         h.u64(self.active_steerpoint as u64);
         h.finish()
     }
+}
+
+/// Nicklage beim Aufsetzen, unter der das Bugrad zuerst aufschlägt (rad).
+const NOSE_FIRST_PITCH: f64 = -0.035;
+
+/// Route: zwei Wegpunkte, dann die nächstgelegene geheime Piste, dann nach Hause.
+fn build_route(terrain: &Terrain, seed: u64, sp: &Spawn) -> Vec<Steerpoint> {
+    let runways = terrain.runways();
+    let Some(home) = runways.first() else {
+        return nav::generate_route(terrain, seed, sp.north, sp.east, 4);
+    };
+    let mut route = nav::generate_route(terrain, seed, home.center[0], home.center[1], 2);
+    let last = route.last().map_or(home.center, |p| [p.north, p.east]);
+    let dist = |c: [f64; 2]| (c[0] - last[0]) * (c[0] - last[0]) + (c[1] - last[1]) * (c[1] - last[1]);
+    let strip = runways
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.kind == AirfieldKind::Secret)
+        .min_by(|a, b| dist(a.1.center).total_cmp(&dist(b.1.center)));
+    if let Some((i, rw)) = strip {
+        route.push(Steerpoint::runway(rw, i));
+    }
+    route.push(Steerpoint::runway(home, 0));
+    route
 }
 
 /// FNV-1a über 64-Bit-Wörter.

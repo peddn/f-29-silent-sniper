@@ -107,6 +107,10 @@ Format jedes Eintrags:
     etwa +13 m/s bei Vollgas und −30 m/s im Leerlauf.
 
   Die Flugtests prüfen genau diese Eigenschaften.
+
+  *v0.1.6:* Die Masse setzt sich jetzt aus Leermasse und Treibstoff zusammen
+  (M-009). Die oben genannten Werte gelten für volle Tanks; gegen Ende eines
+  Flugs ist das Flugzeug leichter, steigt besser und reißt später ab.
 - **Status:** umgesetzt (v0.1)
 
 ### M-004 Strömungsabriss
@@ -197,7 +201,121 @@ Format jedes Eintrags:
   gibt es jetzt einen tieferen Auftriebseinbruch, schnelleres Abkippen, früher
   volle Stärke und noch schwächere Ruder. Bei 160 kt steht die Nase nach 2 s auf
   etwa −78°.
+
+  *v0.1.6:* Die g-Anforderung aus dem Knüppel ist jetzt nach oben durch die
+  Nickrate begrenzt, die die Ruder beim aktuellen Staudruck überhaupt erzeugen
+  können (n = 1 + V·q/g). Vorher galt voller Knüppel auch bei Landefahrt als
+  5-g-Anforderung, und schon behutsames Abfangen riss die Strömung ab. Bei
+  Kampffahrt ändert sich nichts; bei 250 kt fällt die Abrissstärke unter vollem
+  Zug um wenige Prozent. Voller Zug bei Anfluggeschwindigkeit reißt weiterhin ab –
+  abgefangen wird mit Gefühl.
 - **Status:** umgesetzt (v0.1.4)
+
+### M-009 Treibstoff
+
+- **Verhalten:** Der Vorrat sinkt mit der Zeit. Der Verbrauch wächst mit dem
+  Quadrat der Schubstellung, Vollgas ist also überproportional teuer. Ein
+  Zusatztank lässt sich in die Haupttanks umpumpen. Volle Tanks machen das
+  Flugzeug etwas langsamer, leere etwas schneller. Bei leerem Tank fällt der Schub
+  weg, und man segelt; die Nachbesprechung nennt leere Tanks als Absturzursache.
+  Eine Kontrollanzeige warnt, sobald der Rest nicht mehr bis zur Heimatbasis
+  reicht, und die Karte zeigt eine Vorschau des Verbrauchs je Wegabschnitt.
+- **Referenzstelle:** f19re `src/egflight.c` (`stepFlightModel`: Verbrauch, Schub
+  bei leerem Tank, Fahrteinfluss), `src/egtacmap.c` (Warnanzeige,
+  Verbrauchsvorschau), `src/egcombat.c` (Umpumpen des Zusatztanks),
+  `src_end/enbrief.c` (Absturzursache).
+- **Unser Design:**
+  - Treibstoff ist **echte Masse** (Leermasse + Treibstoff). Abrissfahrt,
+    Steigleistung und Kurven ändern sich dadurch physikalisch, ohne pauschalen
+    Fahrtfaktor.
+  - Verbrauch = Grundverbrauch + (Vollgas − Grund) × Triebwerksstellung² ×
+    Dichteverhältnis^k (wie der Schub). In der Höhe reicht der Tank also länger.
+    Anders als im Original verbraucht auch der Leerlauf etwas.
+  - Leerer Tank: Das Triebwerk läuft aus, kein Neustart, HUD „FLAMEOUT“.
+  - Anzeige im Instrumentenbrett in Pfund mit Restflugzeit beim aktuellen
+    Verbrauch. „FUEL LOW“ unter 15 %. „BINGO“, sobald der Rest bis zur
+    Heimatbasis (mit mindestens Reisefahrt und halbem Schub gerechnet) plus
+    Reserve nicht mehr reicht – mit der echten Strecke statt einer Faustformel.
+  - Zusatztanks und Verbrauchsvorschau auf der Karte kommen mit v0.3.
+- **Unsere Werte:** `crates/f29-data/src/aircraft.rs`: 5 200 kg intern (≈ 11 500 lb),
+  Leerlauf 0,35 kg/s, Vollgas 4,3 kg/s auf Meereshöhe. Ergibt rund 20 min bei
+  Vollgas und knapp eine Stunde im Reiseflug. Reserve für BINGO: 450 kg.
+- **Status:** umgesetzt (v0.1.6)
+
+### M-040 Flugplätze
+
+- **Verhalten:** Flugplätze sind im Original keine echten Bahnen, sondern ein
+  schmaler, langer Bereich um einen Mittelpunkt, alle in Nord-Süd-Richtung. Auf der
+  leichtesten Landestufe ist der Bereich größer. Flugzeugträger haben einen kürzeren
+  Bereich auf Deckhöhe; wer über das Deckende hinausrollt, stürzt ab.
+- **Referenzstelle:** f19re `src/egframe.c` (Suche des nächsten Flugplatzes,
+  Landekorridor, Startposition), `src/egflight.c` (Trägerstart).
+- **Unser Design:**
+  - Pro Seed eine **Heimatbasis** (3 km × 45 m, voll markiert, PAPI) und zwei
+    **geheime Pisten** (1,5 km × 30 m, unbefestigt, kaum markiert, unbefeuert),
+    deterministisch auf flachem Land gewählt.
+  - Echte Bahnen in 22,5°-Schritten statt nur Nord-Süd. Das Gelände wird unter
+    der Bahn eingeebnet und weich übergeblendet; Kollision, Radarhöhe und
+    Darstellung gelten damit automatisch.
+  - Die Route führt über zwei Wegpunkte zur nächstgelegenen geheimen Piste und
+    zurück zur Heimatbasis. HSI zeigt bei Flugplätzen die Bahnrichtung.
+  - Standardstart steht am Anfang der Heimatbahn (`--start air` für den Luftstart).
+  - Flugzeugträger folgen mit Szenarien auf See.
+- **Unsere Werte:** `crates/f29-terrain/src/airfield.rs`.
+- **Status:** umgesetzt (v0.1.6)
+
+### M-041 Fahrwerk und Rollen am Boden
+
+- **Verhalten:** Das Fahrwerk ist ein Schalter, der sich am Boden nicht einfahren
+  lässt. Ausgefahren kostet es Fahrt, rüttelt bei hoher Fahrt, und eine Leuchte
+  blinkt, wenn man zu schnell ist. Am Boden wird die Querlage aufgehoben, der
+  Rollknüppel lenkt (auch im Stand), die Nase kann nicht unter den Horizont, und
+  hochziehen geht erst ab einer Mindestfahrt. Dieselbe Taste wirkt in der Luft als
+  Luftbremse und am Boden als Radbremse.
+- **Referenzstelle:** f19re `src/egkeys.c` (Tasten), `src/egflight.c`
+  (`stepFlightModel`: Bodenbehandlung, Bremse, Fahrwerkswiderstand, Rütteln).
+- **Unser Design:** Bewusst einfach wie im Original, ohne Federbeine:
+  - Fahrwerk mit Ausfahrzeit (5 s), Widerstandsbeiwert, Rütteln über die
+    Turbulenz oberhalb von ≈ 250 kt, Panel „GEAR DN/UP“ (blinkt in Bewegung).
+  - Rollmodus: Höhe auf den Boden geklemmt, keine Querlage, Lenken über Quer- und
+    Seitenruder mit einer Drehrate, die mit der Fahrt abnimmt – auf der Stelle
+    wenden geht. Rollreibung, Radbremse (Taste B) abhängig von der Radlast.
+  - Rotieren erst ab 1,05 × Abrissfahrt (masseabhängig); Abheben, sobald der
+    Auftrieb das Gewicht trägt.
+  - Wer schneller als ≈ 23 kt von der befestigten Fläche rollt, verunglückt.
+- **Unsere Werte:** `crates/f29-data/src/aircraft.rs` (Abschnitt Fahrwerk und Boden).
+  Startrollstrecke mit vollen Tanks und Klappen ≈ 0,7–1 km; eine geheime Piste
+  reicht nach dem Wenden am Bahnende für einen Start mit halbvollen Tanks.
+- **Status:** umgesetzt (v0.1.6)
+
+### M-042 Aufsetzen und Landung
+
+- **Verhalten:** Beim Aufsetzen auf einem Flugplatz ist die Landung ein Absturz,
+  wenn die Sinkrate für die Landestufe zu hoch ist, das Fahrwerk eingefahren ist
+  oder die Querlage zu groß ist. Außerhalb eines Flugplatzes ist jede schnelle
+  Bodenberührung ein Absturz (außer auf der Stufe ohne Bruchlandungen). Wer auf
+  einem Platz zum Stehen kommt, hat gelandet. Mit ausgefahrenem Fahrwerk zeigt das
+  HUD die Sinkrate mit einer Marke für die höchste zulässige.
+- **Referenzstelle:** f19re `src/egflight.c` (Aufsetzprüfung), `src/egframe.c`
+  (Stillstand auf dem Platz), `src/egtacmap.c` (Sinkratenanzeige),
+  `src_end/enbrief.c` (Bewertung in der Nachbesprechung).
+- **Unser Design:**
+  - Bewertung beim ersten Bodenkontakt: Wasser, Gelände (nicht auf der Bahn),
+    Fahrwerk nicht verriegelt, Sinkrate über der Bruchgrenze oder Bugrad zuerst,
+    Querlage über der Grenze → Absturz mit Ursache (im HUD angezeigt).
+    Darunter: „GOOD LANDING“ oder „HARD LANDING“ mit Sinkrate in ft/min.
+  - Stillstand auf einer Bahn: „STOPPED – <Bahn>“. Die Simulation läuft weiter,
+    man kann wenden und wieder starten. Missionsende und Punkte kommen mit v0.3.
+  - Landemodus im HUD (Fahrwerk unten, in der Luft): Sinkratenskala neben dem
+    Glas mit Marken für „hart“ und „Bruch“, gestrichelte −3°-Linie in der Leiter.
+  - PAPI an der Heimatbasis: vier Lichter links der Bahn, auf dem 3°-Gleitpfad
+    zwei weiß, zwei rot.
+  - „PULL UP“ ist mit ausgefahrenem Fahrwerk nur bei gefährlicher Sinkrate aktiv;
+    „GEAR“ warnt im Anflug mit eingefahrenem Fahrwerk.
+  - Schwierigkeitsstufen für die Grenzwerte folgen mit M-008.
+- **Unsere Werte:** gut bis 3 m/s (≈ 590 ft/min), Bruch ab 5 m/s (≈ 980 ft/min),
+  Querlage bis 10°, Nicklage nicht unter −2°.
+- **Status:** umgesetzt (v0.1.6)
 
 ### M-006 Turbulenz in Bodennähe
 
@@ -215,8 +333,9 @@ Format jedes Eintrags:
   bewusst schon bei 1000 ft statt 500 ft (Spielerwunsch, v0.1.5), etwas stärker
   als in v0.1.4. Die Zufallszahlen kommen aus
   einem eigenen deterministischen RNG-Strom, damit Replays exakt bleiben. Sie
-  werden geglättet, damit es rüttelt statt zittert. Schwierigkeitsstufen,
-  Fahrwerk und Schäden folgen später.
+  werden geglättet, damit es rüttelt statt zittert. Seit v0.1.6 rüttelt es
+  zusätzlich bei ausgefahrenem Fahrwerk über dessen Höchstfahrt; am Boden ruht
+  die Turbulenz. Schwierigkeitsstufen und Schäden folgen später.
 - **Unsere Werte:** `TURBULENCE_*` in `crates/f29-core/src/sim.rs`.
 - **Status:** umgesetzt (v0.1.4)
 
