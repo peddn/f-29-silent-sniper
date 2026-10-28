@@ -1,0 +1,12 @@
+[package]
+name = "f29-data"
+description = "Spieldaten von F-29 Silent Sniper: Flugzeugparameter und (später) Waffen, Bedrohungen, Szenarien"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true

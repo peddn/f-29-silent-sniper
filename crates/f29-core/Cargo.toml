@@ -1,0 +1,16 @@
+[package]
+name = "f29-core"
+description = "Deterministischer Simulationskern von F-29 Silent Sniper (ohne Engine-Abhängigkeiten)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+f29-data.workspace = true
+f29-terrain.workspace = true
+
+[lints]
+workspace = true

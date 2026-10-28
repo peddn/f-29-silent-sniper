@@ -1,0 +1,5 @@
+/target
+/replays
+*.ppm
+/hud.svg
+.DS_Store

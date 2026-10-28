@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    name: Formatierung
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  core:
+    # Engine-freie Crates: Tests inkl. Golden Replay auf drei Plattformen.
+    # Gleicher Hash überall = plattformübergreifender Determinismus.
+    name: Kern (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: core
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test
+      - name: Tests (Release)
+        run: cargo test --release -p f29-core
+      - name: Golden-Replay über die Kommandozeile
+        run: cargo run --release -p f29-headless -- replay crates/f29-core/tests/golden/patrol.replay
+
+  app:
+    name: Spiel (Bevy, Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Systempakete
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev libwayland-dev libxkbcommon-dev pkg-config
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: app
+      - name: Clippy
+        run: cargo clippy -p f29-app --all-targets -- -D warnings
+      - name: Build
+        run: cargo build -p f29-app

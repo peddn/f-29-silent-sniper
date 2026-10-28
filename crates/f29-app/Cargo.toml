@@ -1,0 +1,26 @@
+[package]
+name = "f29-app"
+description = "F-29 Silent Sniper – spielbares Frontend (Bevy)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+default-run = "f29-silent-sniper"
+
+[[bin]]
+name = "f29-silent-sniper"
+path = "src/main.rs"
+
+[dependencies]
+f29-core.workspace = true
+f29-hud.workspace = true
+f29-render.workspace = true
+f29-terrain.workspace = true
+
+# Nur die benötigten Teile von Bevy: 2D (HUD-Overlay) und 3D, ohne UI und Audio.
+bevy = { version = "0.20", default-features = false, features = ["2d", "3d"] }
+
+[lints]
+workspace = true

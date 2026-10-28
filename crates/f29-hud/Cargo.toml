@@ -1,0 +1,15 @@
+[package]
+name = "f29-hud"
+description = "HUD und Cockpit-Instrumente von F-29 Silent Sniper als engine-neutrale Vektor-Display-Liste"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+f29-core.workspace = true
+
+[lints]
+workspace = true

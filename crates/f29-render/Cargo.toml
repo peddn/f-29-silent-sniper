@@ -1,0 +1,16 @@
+[package]
+name = "f29-render"
+description = "Engine-neutrale Rendering-Geometrie: Terrain-Meshes, Flugzeugmodell, Palette, Koordinatenumrechnung"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+f29-core.workspace = true
+f29-terrain.workspace = true
+
+[lints]
+workspace = true

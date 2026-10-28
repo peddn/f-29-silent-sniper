@@ -1,0 +1,56 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/f29-core",
+    "crates/f29-terrain",
+    "crates/f29-data",
+    "crates/f29-hud",
+    "crates/f29-render",
+    "crates/f29-headless",
+    "crates/f29-app",
+]
+# `cargo test` / `cargo run` ohne `-p` arbeiten nur mit den engine-freien Crates.
+# Das Bevy-Frontend wird explizit gebaut: `cargo run -p f29-app`.
+default-members = [
+    "crates/f29-core",
+    "crates/f29-terrain",
+    "crates/f29-data",
+    "crates/f29-hud",
+    "crates/f29-render",
+    "crates/f29-headless",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/peddn/f-29-silent-sniper"
+authors = ["F-29 Silent Sniper contributors"]
+
+[workspace.dependencies]
+f29-core = { path = "crates/f29-core" }
+f29-terrain = { path = "crates/f29-terrain" }
+f29-data = { path = "crates/f29-data" }
+f29-hud = { path = "crates/f29-hud" }
+f29-render = { path = "crates/f29-render" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+# Fließkomma-Vergleiche sind im Sim-Kern bewusst exakt (Determinismus-Tests).
+float_cmp = "allow"
+
+# Bevy-Empfehlung: eigener Code mit leichter Optimierung, Abhängigkeiten voll optimiert.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

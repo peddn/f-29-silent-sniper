@@ -1,0 +1,21 @@
+[package]
+name = "f29-headless"
+description = "Kommandozeilenwerkzeug: Simulation ohne Grafik, Replays, HUD- und Terrain-Vorschau"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "f29-headless"
+path = "src/main.rs"
+
+[dependencies]
+f29-core.workspace = true
+f29-hud.workspace = true
+f29-terrain.workspace = true
+
+[lints]
+workspace = true
