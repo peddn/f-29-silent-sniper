@@ -108,21 +108,78 @@ fn g_limiter_caps_load_factor() {
 }
 
 #[test]
-fn alpha_limiter_prevents_stall_at_low_speed() {
-    // Leerlauf, voll ziehen: Geschwindigkeit sinkt, Anstellwinkel bleibt begrenzt.
-    let mut sim = high_sim(6_000.0, 150.0, 0.0);
-    let mut max_alpha: f64 = 0.0;
-    for _ in 0..ticks(40.0) {
-        sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 0.0, 0));
-        max_alpha = max_alpha.max(sim.flight_data().alpha);
+fn hard_pull_stalls_sinks_and_recovers_when_released() {
+    // 250 kt in 5000 m: voll ziehen überschreitet den Abrisswinkel schnell.
+    let mut sim = high_sim(5_000.0, 130.0, 0.7);
+    let mut stalled_at = None;
+    for t in 0..ticks(6.0) {
+        sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 0.7, 0));
+        if sim.aircraft().stalled && stalled_at.is_none() {
+            stalled_at = Some(t);
+        }
     }
-    let spec = sim.spec();
-    assert!(
-        max_alpha < spec.alpha_stall_rad,
-        "Strömungsabriss: α = {max_alpha:.3} rad (Abriss bei {})",
-        spec.alpha_stall_rad
-    );
-    assert!(max_alpha > spec.alpha_limit_rad - 0.05, "Begrenzer greift zu früh: {max_alpha:.3}");
+    let stalled_at = stalled_at.expect("kein Strömungsabriss trotz vollem Ziehen");
+    assert!(stalled_at < ticks(3.0), "Abriss erst nach {stalled_at} Ticks");
+
+    // Im Abriss bricht der Auftrieb ein: kein Lastvielfaches nahe der Grenze möglich.
+    assert!(sim.flight_data().load_factor < 3.5);
+
+    // Loslassen: Nase fällt, Strömung liegt wieder an.
+    let mut recovered = false;
+    for _ in 0..ticks(10.0) {
+        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0));
+        if !sim.aircraft().stalled {
+            recovered = true;
+            break;
+        }
+    }
+    assert!(recovered, "keine Erholung nach dem Loslassen");
+}
+
+#[test]
+fn stall_warning_precedes_stall() {
+    let mut sim = high_sim(5_000.0, 130.0, 0.7);
+    let mut warned_before = false;
+    for _ in 0..ticks(5.0) {
+        let fd = sim.flight_data();
+        if fd.warnings.stall && !sim.aircraft().stalled {
+            warned_before = true;
+        }
+        if sim.aircraft().stalled {
+            break;
+        }
+        sim.step(ControlFrame::from_analog(0.6, 0.0, 0.0, 0.7, 0));
+    }
+    assert!(warned_before, "keine Warnung vor dem Abriss");
+}
+
+#[test]
+fn hard_turn_bleeds_speed() {
+    // 70° Querlage, voll ziehen, 10 s: deutlicher Fahrtverlust.
+    let mut sim = high_sim(2_000.0, 180.0, 1.0);
+    let v0 = sim.flight_data().tas_mps;
+    for _ in 0..ticks(10.0) {
+        let fd = sim.flight_data();
+        let roll = ((70.0_f64.to_radians() - fd.roll) * 3.0).clamp(-1.0, 1.0);
+        sim.step(ControlFrame::from_analog(1.0, roll, 0.0, 1.0, 0));
+    }
+    let lost = v0 - sim.flight_data().tas_mps;
+    assert!(lost > 30.0, "nur {lost:.1} m/s Fahrtverlust in 10 s harter Kurve");
+}
+
+#[test]
+fn steep_zoom_climb_ends_in_stall() {
+    // Steil hochziehen und halten: die Fahrt reicht nicht, die Strömung reißt ab.
+    let mut sim = high_sim(3_000.0, 200.0, 1.0);
+    let mut stalled = false;
+    for _ in 0..ticks(60.0) {
+        let fd = sim.flight_data();
+        // 45° Nicklage anstreben und halten
+        let pitch = ((45.0_f64.to_radians() - fd.pitch) * 2.0).clamp(-1.0, 1.0);
+        sim.step(ControlFrame::from_analog(pitch, 0.0, 0.0, 1.0, 0));
+        stalled |= sim.aircraft().stalled;
+    }
+    assert!(stalled, "45°-Steigflug mit Vollschub endet nicht im Abriss");
 }
 
 #[test]
@@ -135,7 +192,9 @@ fn full_throttle_climbs_and_idle_descends() {
         climb.step(c);
     }
     let gained = climb.flight_data().altitude_m - h0;
-    assert!(gained > 1_500.0, "Steigleistung zu gering: {gained:.0} m/min");
+    // Begrenztes Steigvermögen: spürbar, aber deutlich unter einem Jäger.
+    assert!(gained > 600.0, "Steigleistung zu gering: {gained:.0} m/min");
+    assert!(gained < 3_000.0, "Steigleistung zu hoch: {gained:.0} m/min");
 
     let mut glide = high_sim(5_000.0, 200.0, 0.0);
     let h0 = glide.flight_data().altitude_m;

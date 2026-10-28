@@ -40,9 +40,20 @@ impl Autopilot {
         // Höhe → gewünschter Bahnwinkel → Nickknüppel.
         let gamma = if fd.tas_mps > 1.0 { detmath::asin(fd.vertical_speed_mps / fd.tas_mps) } else { 0.0 };
         let alt_err = self.target_altitude_m - fd.altitude_m;
-        let gamma_cmd = (alt_err * 0.003).clamp(-0.2, 0.2);
+        let mut gamma_cmd = (alt_err * 0.003).clamp(-0.2, 0.2);
+        // Energieschutz: Steigen nur, solange genug Fahrt da ist. Das Flugzeug
+        // hat keinen Abrissschutz – der Autopilot muss selbst aufpassen.
+        if gamma_cmd > 0.0 {
+            let energy = ((fd.tas_mps - 0.75 * self.target_speed_mps) / (0.25 * self.target_speed_mps))
+                .clamp(0.0, 1.0);
+            gamma_cmd *= energy;
+        }
         // Nachdrücken nur sanft (negative g sind unangenehm und unnötig).
-        let pitch = ((gamma_cmd - gamma) * 1.2 / spec.max_pitch_rate).clamp(-0.35, 1.0);
+        let mut pitch = ((gamma_cmd - gamma) * 1.2 / spec.max_pitch_rate).clamp(-0.35, 1.0);
+        // Abrissschutz: nie über den Warnwinkel ziehen.
+        if fd.alpha > 0.85 * spec.alpha_warning_rad {
+            pitch = pitch.min(-0.2);
+        }
 
         // Kurs → Querneigung → Rollknüppel.
         let hdg_err = detmath::wrap_pi(self.target_heading - fd.heading);

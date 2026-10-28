@@ -97,7 +97,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### v0.1: Freiflug ✈️ *(aktuell)*
 - [x] Deterministischer Simulationskern, 120 Hz, Replays mit Hash-Prüfung
-- [x] Flugmodell: Kräftebilanz + Fly-by-Wire (g-/Alpha-Begrenzer), ISA-Atmosphäre
+- [x] Flugmodell: Kräftebilanz + Fly-by-Wire (g-Begrenzer), ISA-Atmosphäre
+- [x] Strömungsabriss mit Durchsacken, Fahrtverlust in Kurven, begrenzte Steigleistung
 - [x] Prozedurales Gelände (Meer, Küsten, Gebirge, Wald) mit Kollision
 - [x] HUD: Pitch-Ladder, Flight Path Marker, Kursband, Fahrt/Höhe, Querlage, Warnungen
 - [x] Instrumente: Triebwerk, HSI mit Navigationspunkt, künstlicher Horizont
@@ -105,7 +106,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Retro-Look: 16-Farben-Palette, Dithering, auflösungsunabhängig
 - [x] Cockpit- und Verfolgeransicht, Tastatur und Gamepad
 - [x] Erster Spieltest auf echter Hardware (Linux, AMD Radeon, Vulkan)
-- [ ] Feinschliff Flugverhalten nach Spielerfeedback
+- [x] Feinschliff Flugverhalten nach erstem Spielerfeedback (v0.1.1)
+- [x] Radarhöhe über Grund immer im HUD
 
 ### v0.2: Angriff und Tarnung
 - [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD

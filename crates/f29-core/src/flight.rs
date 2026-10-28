@@ -7,7 +7,10 @@
 //! Ruderderivative zu modellieren, folgen die Drehraten einem kommandierten
 //! Wert mit einer Zeitkonstante erster Ordnung. Die Flugsteuerung enthält
 //! Ratenhaltung (Knüppel neutral = Lage bleibt), Turn-Koordination,
-//! Gierdämpfer, g- und Anstellwinkelbegrenzer.
+//! Gierdämpfer und einen g-Begrenzer – aber bewusst **keinen**
+//! Anstellwinkelbegrenzer. Wer zu langsam zu hart zieht, reißt die Strömung
+//! ab: Der Auftrieb bricht ein, die Ruder verlieren Wirkung, die Nase fällt
+//! und das Flugzeug sackt durch, bis wieder Fahrt aufgebaut ist.
 //!
 //! Damit entstehen Anstellwinkel, Schiebewinkel, Lastvielfaches,
 //! Energieverlust im Kurvenflug und Strömungsabriss physikalisch aus der
@@ -38,6 +41,9 @@ pub struct AircraftState {
     pub engine: f64,
     /// Luftbremse 0..1.
     pub airbrake: f64,
+    /// Strömung abgerissen. Hysterese: wird beim Überschreiten des
+    /// Abrisswinkels gesetzt und erst unter `alpha_reattach_rad` zurückgesetzt.
+    pub stalled: bool,
 }
 
 impl AircraftState {
@@ -51,6 +57,7 @@ impl AircraftState {
             body_rates: DVec3::ZERO,
             engine: 0.6,
             airbrake: 0.0,
+            stalled: false,
         }
     }
 
@@ -82,7 +89,7 @@ pub struct AeroData {
     pub cl: f64,
     pub cd: f64,
     pub thrust: f64,
-    /// Ob der Anstellwinkel jenseits des Abrisswinkels liegt.
+    /// Strömung abgerissen (Zustand aus [`AircraftState::stalled`]).
     pub stalled: bool,
 }
 
@@ -90,8 +97,10 @@ pub struct AeroData {
 const MIN_AERO_SPEED: f64 = 1.0;
 /// Unterhalb dieser Geschwindigkeit sind Bahnhaltung und Koordination aus.
 const MIN_FBW_SPEED: f64 = 40.0;
-/// Verstärkung des Anstellwinkelbegrenzers, 1/s.
-const ALPHA_LIMITER_GAIN: f64 = 3.0;
+/// Zusätzlicher Nickabfall pro rad Abrisstiefe, 1/s.
+const STALL_BREAK_GAIN: f64 = 3.0;
+/// Zusätzlicher Widerstandsbeiwert bei abgerissener Strömung.
+const STALL_EXTRA_DRAG: f64 = 0.08;
 /// Ausfahrgeschwindigkeit der Luftbremse, 1/s.
 const AIRBRAKE_RATE: f64 = 1.25;
 
@@ -106,7 +115,7 @@ pub fn lift_coefficient(spec: &AircraftSpec, alpha: f64) -> f64 {
     let excess = alpha.abs() - stall;
     let degraded = cl_peak * (1.0 - spec.post_stall_lift_drop * excess).max(0.0);
     // Jenseits des Abrisses bleibt eine Plattenströmung übrig (~ sin 2α).
-    let plate = 0.8 * detmath::sin(2.0 * alpha);
+    let plate = 0.5 * detmath::sin(2.0 * alpha);
     if sign > 0.0 { degraded.max(plate) } else { degraded.min(plate) }
 }
 
@@ -135,8 +144,14 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
     let alpha = detmath::atan2(vb.z, vb.x);
     let beta = detmath::asin(vb.y / tas);
     let qbar = 0.5 * air.density * tas * tas;
-    let cl = lift_coefficient(spec, alpha);
-    let cd = drag_coefficient(spec, alpha, cl, s.airbrake);
+    let mut cl = lift_coefficient(spec, alpha);
+    let mut cd = drag_coefficient(spec, alpha, cl, s.airbrake);
+    if s.stalled {
+        // Abgerissene Strömung: Auftrieb bricht ein, Widerstand steigt – auch
+        // wenn der Anstellwinkel schon wieder unter dem Abrisswinkel liegt.
+        cl *= spec.stall_lift_factor;
+        cd += STALL_EXTRA_DRAG;
+    }
     let ca = detmath::cos(alpha);
     // Normalkraft in Körper-z (Auftrieb und Widerstand projiziert).
     let fz = qbar * spec.wing_area_m2 * (-cl * ca - cd * (vb.z / tas));
@@ -151,7 +166,7 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
         cl,
         cd,
         thrust,
-        stalled: alpha.abs() > spec.alpha_stall_rad,
+        stalled: s.stalled,
     }
 }
 
@@ -169,31 +184,27 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
     // Ratenkommando: Knüppel neutral ⇒ q = 0. Der Geradeausflug ist damit
     // ein stabiles Gleichgewicht (zu wenig Auftrieb ⇒ Bahn krümmt sich nach
     // unten ⇒ α wächst ⇒ Auftrieb wächst), es braucht keine Kompensation.
-    let mut q_cmd = c.pitch_f() * spec.max_pitch_rate * eff;
+    let stall_excess = (aero.alpha.abs() - spec.alpha_stall_rad).max(0.0);
+    let stalled = aero.stalled;
+    // Im Abriss verlieren die Ruder einen Großteil ihrer Wirkung.
+    let stall_eff = if stalled { spec.stall_control_factor } else { 1.0 };
+    let mut q_cmd = c.pitch_f() * spec.max_pitch_rate * eff * stall_eff;
     if v > MIN_FBW_SPEED {
         // g-Begrenzer über die Bahnkrümmung n ≈ V·q/g + cosθ·cosφ.
         let q_max = (spec.g_limit_pos - ctheta * cphi) * G0 / v;
         let q_min = (-spec.g_limit_neg - ctheta * cphi) * G0 / v;
         q_cmd = q_cmd.clamp(q_min, q_max);
     }
-    // Anstellwinkelbegrenzer (positiv und – mit 60 % – negativ).
-    // Vorausschauend: α̇ = q − γ̇, also darf q höchstens γ̇ plus eine
-    // Rückführung auf den Grenzwert betragen. γ̇ wird aus dem aktuellen
-    // Lastvielfachen geschätzt.
-    if v > MIN_AERO_SPEED {
-        let path_rate = (aero.load_factor - ctheta * cphi) * G0 / v;
-        let a_hi = spec.alpha_limit_rad;
-        let a_lo = -0.6 * spec.alpha_limit_rad;
-        if aero.alpha > a_hi - 0.05 {
-            q_cmd = q_cmd.min(path_rate + ALPHA_LIMITER_GAIN * (a_hi - aero.alpha));
-        }
-        if aero.alpha < a_lo + 0.05 {
-            q_cmd = q_cmd.max(path_rate + ALPHA_LIMITER_GAIN * (a_lo - aero.alpha));
-        }
+    // Nickabfall im Abriss: Die Nase fällt mit einer Mindestrate, die mit der
+    // Tiefe des Abrisses weiter wächst. Ziehen kommt dagegen nicht an – das
+    // Flugzeug muss erst wieder Fahrt aufnehmen.
+    if stalled {
+        let sign = if aero.alpha > 0.0 { 1.0 } else { -1.0 };
+        q_cmd -= sign * (spec.stall_pitch_break + STALL_BREAK_GAIN * stall_excess);
     }
 
     // --- Rollen ---
-    let p_cmd = c.roll_f() * spec.max_roll_rate * eff;
+    let p_cmd = c.roll_f() * spec.max_roll_rate * eff * stall_eff;
 
     // --- Gieren ---
     let mut r_cmd = c.yaw_f() * spec.max_yaw_rate * eff + spec.yaw_damper_gain * aero.beta;
@@ -240,6 +251,17 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, dt: f6
     s.position += s.velocity * dt;
     s.attitude = (s.attitude * DQuat::from_rotation_vector(s.body_rates * dt)).normalize();
 
+    // Abriss-Hysterese: Abriss oberhalb des Abrisswinkels, Wiederanlegen der
+    // Strömung erst deutlich darunter.
+    let a = aero.alpha.abs();
+    if aero.tas >= MIN_AERO_SPEED {
+        if a > spec.alpha_stall_rad {
+            s.stalled = true;
+        } else if a < spec.alpha_reattach_rad {
+            s.stalled = false;
+        }
+    }
+
     aero
 }
 
@@ -265,6 +287,28 @@ mod tests {
         let s = &F29_SPEC;
         assert!(drag_coefficient(s, 0.1, 0.5, 0.0) > drag_coefficient(s, 0.0, 0.0, 0.0));
         assert!(drag_coefficient(s, 0.0, 0.0, 1.0) > drag_coefficient(s, 0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn stall_hysteresis() {
+        let spec = &F29_SPEC;
+        let mut st = AircraftState::level(0.0, 0.0, 5000.0, 0.0, 150.0);
+        // Nase weit über die Flugbahn: Anstellwinkel jenseits des Abrisses
+        st.attitude = DQuat::from_euler(0.0, spec.alpha_stall_rad + 0.05, 0.0);
+        step(spec, &mut st, &ControlFrame::default(), 1.0 / 120.0);
+        assert!(st.stalled);
+        // Zwischen Wiederanlege- und Abrisswinkel bleibt der Abriss bestehen
+        st.attitude = DQuat::from_euler(0.0, (spec.alpha_reattach_rad + spec.alpha_stall_rad) * 0.5, 0.0);
+        st.velocity = DVec3::new(150.0, 0.0, 0.0);
+        step(spec, &mut st, &ControlFrame::default(), 1.0 / 120.0);
+        assert!(st.stalled);
+        let stalled_lift = aero_data(spec, &st).cl;
+        // Unter dem Wiederanlegewinkel liegt die Strömung wieder an
+        st.attitude = DQuat::from_euler(0.0, spec.alpha_reattach_rad * 0.5, 0.0);
+        st.velocity = DVec3::new(150.0, 0.0, 0.0);
+        step(spec, &mut st, &ControlFrame::default(), 1.0 / 120.0);
+        assert!(!st.stalled);
+        assert!(stalled_lift < lift_coefficient(spec, spec.alpha_stall_rad) * 0.7);
     }
 
     #[test]

@@ -87,7 +87,7 @@ Terrain-Streaming in Threads), solange es den Simulationszustand nur liest.
 | Ebene | Was | Wo |
 |---|---|---|
 | Unit | detmath vs. `std` (≤ 1e-14), Quaternionen, ISA-Tabellenwerte, PCG32-Referenzfolge, Rauschen | `src/**` |
-| Flugtests | Autopilot hält Höhe/Kurs/Fahrt, Rollrate, g-Begrenzer, Alpha-Begrenzer, Steigleistung, Höchstgeschwindigkeit, Luftbremse, Absturz, PULL-UP-Warnung | `f29-core/tests/flight.rs` |
+| Flugtests | Autopilot hält Höhe/Kurs/Fahrt, Rollrate, g-Begrenzer, Strömungsabriss mit Erholung, Abrisswarnung, Fahrtverlust in harter Kurve, Abriss im Steilflug, begrenzte Steigleistung, Höchstgeschwindigkeit, Luftbremse, Absturz, PULL-UP-Warnung | `f29-core/tests/flight.rs` |
 | Determinismus | identische Eingaben ⇒ identischer Hash; eine Quantisierungsstufe Unterschied ⇒ anderer Hash; Replay-Textformat verlustfrei | `f29-core/tests/determinism.rs` |
 | Golden Replay | 90-s-Flug mit festem Hash, läuft in CI auf Linux, Windows und macOS | `f29-core/tests/golden/patrol.replay` |
 | Terrain | Seed-Stabilität, Kachelränder bitgleich, Stetigkeit, Normalen | `f29-terrain`, `f29-render` |

@@ -55,8 +55,19 @@ pub struct AircraftSpec {
     pub g_limit_pos: f64,
     /// Negatives Lastvielfaches (Betrag), das die Steuerung zulässt.
     pub g_limit_neg: f64,
-    /// Anstellwinkelbegrenzer (muss unter `alpha_stall_rad` liegen).
-    pub alpha_limit_rad: f64,
+    /// Anstellwinkel, ab dem die Abrisswarnung kommt (muss unter `alpha_stall_rad` liegen).
+    /// Es gibt bewusst **keinen** Anstellwinkelbegrenzer: Wer zu hart zieht, reißt ab.
+    pub alpha_warning_rad: f64,
+    /// Nickabfall im Strömungsabriss: Nase-runter-Rate (rad/s), die im Abriss
+    /// mindestens wirkt; sie wächst mit der Tiefe des Abrisses weiter an.
+    pub stall_pitch_break: f64,
+    /// Anteil der Höhenruderwirkung, der im Strömungsabriss erhalten bleibt (0..1).
+    pub stall_control_factor: f64,
+    /// Anteil des Auftriebs, der bei abgerissener Strömung bleibt (0..1).
+    pub stall_lift_factor: f64,
+    /// Anstellwinkel, unter dem die Strömung nach einem Abriss wieder anliegt
+    /// (Hysterese; deutlich kleiner als `alpha_stall_rad`).
+    pub alpha_reattach_rad: f64,
     /// Verstärkung der Schiebewinkel-Kompensation (Gierdämpfer).
     pub yaw_damper_gain: f64,
 }
@@ -64,24 +75,25 @@ pub struct AircraftSpec {
 /// Der F-29 „Silent Sniper“: einsitziges Tarnkappen-Angriffsflugzeug mit
 /// zwei Triebwerken ohne Nachbrenner.
 ///
-/// Die Werte sind bewusst eigenständig gewählt: ein schweres, eher träges
-/// Angriffsflugzeug mit hohem Gleitwiderstand der facettierten Zelle,
-/// aber gutmütigem Abreißverhalten.
+/// Die Werte sind bewusst eigenständig gewählt: ein schweres, untermotorisiertes
+/// Angriffsflugzeug (Schub/Gewicht ≈ 0,38) mit hohem induziertem Widerstand
+/// der facettierten Zelle. Harte Kurven kosten viel Fahrt, das Steigvermögen
+/// ist begrenzt, und wer zu hart zieht, reißt die Strömung ab und sackt durch.
 pub const F29_SPEC: AircraftSpec = AircraftSpec {
     name: "F-29",
     mass_kg: 21_500.0,
-    wing_area_m2: 84.0,
+    wing_area_m2: 70.0,
 
-    thrust_max_n: 98_000.0,
+    thrust_max_n: 80_000.0,
     thrust_density_exponent: 0.75,
     engine_spool_time_s: 2.5,
 
     cl0: 0.04,
     cl_alpha: 3.6,
     alpha_stall_rad: 0.30,
-    post_stall_lift_drop: 1.8,
+    post_stall_lift_drop: 8.0,
     cd0: 0.024,
-    induced_drag_k: 0.13,
+    induced_drag_k: 0.20,
     airbrake_cd: 0.07,
     cy_beta: 0.65,
 
@@ -92,7 +104,11 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     control_q_ref_pa: 9_000.0,
     g_limit_pos: 7.0,
     g_limit_neg: 2.5,
-    alpha_limit_rad: 0.26,
+    alpha_warning_rad: 0.25,
+    stall_pitch_break: 0.25,
+    stall_control_factor: 0.3,
+    stall_lift_factor: 0.55,
+    alpha_reattach_rad: 0.14,
     yaw_damper_gain: 2.5,
 };
 
@@ -104,7 +120,7 @@ impl AircraftSpec {
             field,
             reason,
         };
-        let positive: [(&'static str, f64); 19] = [
+        let positive: [(&'static str, f64); 20] = [
             ("mass_kg", self.mass_kg),
             ("wing_area_m2", self.wing_area_m2),
             ("thrust_max_n", self.thrust_max_n),
@@ -123,7 +139,8 @@ impl AircraftSpec {
             ("control_q_ref_pa", self.control_q_ref_pa),
             ("g_limit_pos", self.g_limit_pos),
             ("g_limit_neg", self.g_limit_neg),
-            ("alpha_limit_rad", self.alpha_limit_rad),
+            ("alpha_warning_rad", self.alpha_warning_rad),
+            ("stall_pitch_break", self.stall_pitch_break),
         ];
         for (field, value) in positive {
             if !(value.is_finite() && value > 0.0) {
@@ -136,10 +153,22 @@ impl AircraftSpec {
         if !(self.yaw_damper_gain.is_finite() && self.yaw_damper_gain >= 0.0) {
             return Err(err("yaw_damper_gain", "muss >= 0 sein".into()));
         }
-        if self.alpha_limit_rad >= self.alpha_stall_rad {
+        if self.alpha_warning_rad >= self.alpha_stall_rad {
             return Err(err(
-                "alpha_limit_rad",
-                "muss kleiner als alpha_stall_rad sein, sonst schützt der Begrenzer nicht".into(),
+                "alpha_warning_rad",
+                "muss kleiner als alpha_stall_rad sein, sonst kommt die Warnung zu spät".into(),
+            ));
+        }
+        if !(0.0..=1.0).contains(&self.stall_control_factor) {
+            return Err(err("stall_control_factor", "muss zwischen 0 und 1 liegen".into()));
+        }
+        if !(0.0..=1.0).contains(&self.stall_lift_factor) {
+            return Err(err("stall_lift_factor", "muss zwischen 0 und 1 liegen".into()));
+        }
+        if !(self.alpha_reattach_rad > 0.0 && self.alpha_reattach_rad < self.alpha_warning_rad) {
+            return Err(err(
+                "alpha_reattach_rad",
+                "muss zwischen 0 und alpha_warning_rad liegen (Hysterese)".into(),
             ));
         }
         if self.alpha_stall_rad > 0.6 {
@@ -167,10 +196,10 @@ mod tests {
     }
 
     #[test]
-    fn validation_rejects_limiter_above_stall() {
-        let spec = AircraftSpec { alpha_limit_rad: F29_SPEC.alpha_stall_rad + 0.01, ..F29_SPEC };
+    fn validation_rejects_warning_above_stall() {
+        let spec = AircraftSpec { alpha_warning_rad: F29_SPEC.alpha_stall_rad + 0.01, ..F29_SPEC };
         let e = spec.validate().unwrap_err();
-        assert_eq!(e.field, "alpha_limit_rad");
+        assert_eq!(e.field, "alpha_warning_rad");
     }
 
     #[test]
@@ -180,11 +209,17 @@ mod tests {
     }
 
     #[test]
+    fn thrust_to_weight_is_low() {
+        let tw = F29_SPEC.thrust_max_n / (F29_SPEC.mass_kg * 9.80665);
+        assert!((0.3..0.45).contains(&tw), "Schub/Gewicht {tw}");
+    }
+
+    #[test]
     fn stall_speed_is_plausible() {
         // Mindestgeschwindigkeit im Horizontalflug auf Meereshöhe: Größenordnung
-        // 70–100 m/s für ein schweres Angriffsflugzeug ohne Landeklappen.
+        // 60–80 m/s (120–155 kt) für ein schweres Angriffsflugzeug ohne Landeklappen.
         let w = F29_SPEC.mass_kg * 9.80665;
         let v_stall = (2.0 * w / (1.225 * F29_SPEC.wing_area_m2 * F29_SPEC.cl_max())).sqrt();
-        assert!((60.0..110.0).contains(&v_stall), "v_stall = {v_stall}");
+        assert!((60.0..80.0).contains(&v_stall), "v_stall = {v_stall}");
     }
 }

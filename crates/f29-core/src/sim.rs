@@ -143,7 +143,7 @@ impl Sim {
         let qbar = 0.5 * air.density * sp.speed * sp.speed;
         if qbar > 0.0 {
             let cl_req = spec.mass_kg * crate::atmosphere::G0 / (qbar * spec.wing_area_m2);
-            let alpha_trim = ((cl_req - spec.cl0) / spec.cl_alpha).clamp(0.0, spec.alpha_limit_rad);
+            let alpha_trim = ((cl_req - spec.cl0) / spec.cl_alpha).clamp(0.0, spec.alpha_warning_rad);
             aircraft.attitude = crate::math::DQuat::from_euler(sp.heading, alpha_trim, 0.0);
         }
         let route = nav::generate_route(&terrain, config.seed, sp.north, sp.east, 4);
@@ -254,7 +254,7 @@ impl Sim {
         let time_to_impact = if vs < -0.5 { radar_alt / -vs } else { f64::INFINITY };
         let warnings = Warnings {
             stall: !crashed
-                && (aero.stalled || aero.alpha >= self.spec.alpha_limit_rad * 0.97)
+                && (aero.stalled || aero.alpha.abs() >= self.spec.alpha_warning_rad)
                 && aero.tas > 1.0,
             pull_up: !crashed && radar_alt < 900.0 && time_to_impact < 6.0,
             over_g: !crashed && aero.load_factor > self.spec.g_limit_pos * 0.95,
@@ -313,6 +313,7 @@ impl Sim {
         h.f64(a.attitude.z);
         h.f64(a.engine);
         h.f64(a.airbrake);
+        h.u64(u64::from(a.stalled));
         h.u64(self.active_steerpoint as u64);
         h.finish()
     }

@@ -71,21 +71,70 @@ Format jedes Eintrags:
 - **Verhalten:** Das Flugzeug fliegt gutmütig und arcadenah, verliert in engen Kurven
   Energie, reißt bei zu hohem Anstellwinkel ab und kann ins Gelände stürzen.
 - **Referenzstelle:** keine. Das Flugmodell ist von Grund auf eigenständig entworfen.
-- **Unser Design:** Translation als 3D-Kräftebilanz (Auftrieb über CL(α) mit
-  Abrissverhalten, Widerstand CD0 + k·CL², Seitenkraft, Schub abhängig von der
-  Luftdichte). Rotation über eine Fly-by-Wire-Ratenregelung mit g- und
-  Anstellwinkelbegrenzer, Turn-Koordination und Gierdämpfer. Details in
-  `crates/f29-core/src/flight.rs`.
+- **Unser Design:** Translation als 3D-Kräftebilanz (Auftrieb über CL(α),
+  Widerstand CD0 + k·CL², Seitenkraft, Schub abhängig von der Luftdichte).
+  Rotation über eine Fly-by-Wire-Ratenregelung mit g-Begrenzer,
+  Turn-Koordination und Gierdämpfer, aber **ohne** Anstellwinkelbegrenzer
+  (siehe M-004). Details in `crates/f29-core/src/flight.rs`.
 - **Unsere Werte:** `crates/f29-data/src/aircraft.rs` (`F29_SPEC`). Die Werte sind in
   der Größenordnung eines schweren zweistrahligen Angriffsflugzeugs ohne Nachbrenner
   gewählt und so abgestimmt, dass folgende Ziele erreicht werden:
-  - Abrissgeschwindigkeit ≈ 60–65 m/s
+  - Abrissgeschwindigkeit im Horizontalflug ≈ 66 m/s (≈ 130 kt) auf Meereshöhe
+  - Schub/Gewicht ≈ 0,38: begrenztes Steigvermögen, ein steiler Steigflug endet im Abriss
+  - hoher induzierter Widerstand: Eine harte Kurve kostet in 10 s mehr als 30 m/s Fahrt
   - Höchstgeschwindigkeit in Bodennähe ≈ Mach 0,8
-  - Begrenzung auf 7 g
+  - Begrenzung auf 7 g, die in Bodennähe erst oberhalb von ≈ 340 kt erreichbar sind; darunter reißt
+    die Strömung vorher ab
   - Rollrate ≈ 150°/s
+
+  *v0.1.1:* Nach dem ersten Spieltest wurden Schub, Flügelfläche und induzierter
+  Widerstand angepasst, weil Kurven zu wenig Energie kosteten und der Abriss nicht
+  spürbar war.
 
   Die Flugtests prüfen genau diese Eigenschaften.
 - **Status:** umgesetzt (v0.1)
+
+### M-004 Strömungsabriss
+
+- **Verhalten:** Aggressives Fliegen ist gefährlich. Die Abrissgeschwindigkeit
+  steigt mit der Flughöhe und mit der g-Last. Fällt die Fahrt darunter, wird die
+  Nase fortlaufend nach unten gedrückt, umso stärker, je größer das Defizit ist. Das
+  Flugzeug sackt durch und fängt sich erst wieder, wenn es Fahrt aufgenommen hat.
+  Ziehen kostet deutlich Fahrt, und auch Steigen kostet Fahrt.
+- **Referenzstelle:** f19re `src/egflight.c`, Flugzustands-Aktualisierung des
+  Spielerflugzeugs (Berechnung von Eck- und Abrissgeschwindigkeit sowie das
+  Nase-runter-Drücken unterhalb der Abrissgeschwindigkeit).
+  Spielerbeobachtung (erster Spieltest): „Im Original sackt das Flugzeug aggressiv
+  senkrecht nach unten ab, wenn man aggressiv fliegt.“
+- **Unser Design:** Das Original rechnet mit einer Geschwindigkeitsschwelle. Wir
+  bilden das Verhalten physikalisch über den **Anstellwinkel** ab; die
+  Abhängigkeit von Höhe (Luftdichte) und g-Last ergibt sich dabei von selbst
+  (v_Abriss ∝ √(n/ρ)).
+  - kein Anstellwinkelbegrenzer, nur eine Warnung kurz vor dem Abrisswinkel
+  - **Hysterese:** Abriss beim Überschreiten von `alpha_stall_rad`, Wiederanlegen
+    der Strömung erst unter `alpha_reattach_rad`
+  - im Abriss: Auftrieb auf `stall_lift_factor`, zusätzlicher Widerstand,
+    Ruderwirkung auf `stall_control_factor`, Nickabfall mit Mindestrate
+    `stall_pitch_break` plus Anteil proportional zur Abrisstiefe
+  - Der Autopilot schützt sich selbst (Energie- und Anstellwinkelschutz), das
+    Flugzeug tut es nicht.
+- **Unsere Werte:** `crates/f29-data/src/aircraft.rs`. Abgestimmt über die
+  Flugtests `hard_pull_stalls_sinks_and_recovers_when_released`,
+  `hard_turn_bleeds_speed`, `steep_zoom_climb_ends_in_stall` und
+  `stall_warning_precedes_stall`. Keine Werte aus der Referenz übernommen.
+- **Status:** umgesetzt (v0.1.1)
+
+### M-005 Höhenanzeige
+
+- **Verhalten:** Im Original ist der Boden praktisch eben auf Höhe 0; erhöhter
+  Boden gibt es nur an wenigen Objekten (z. B. Schiffsdeck). Die angezeigte Höhe ist
+  dort faktisch die Höhe über Grund.
+- **Referenzstelle:** f19re `src/egflight.c` und `src/egframe.c` (Bodenhöhe des
+  Spielerflugzeugs, Aufsetzen).
+- **Unser Design:** Unser Gelände hat echte Berge. Das HUD zeigt deshalb beides:
+  die barometrische Höhe über dem Meer im Kasten und darunter **immer** die
+  Radarhöhe über Grund („R …“), rot unter 500 ft.
+- **Status:** umgesetzt (v0.1.1)
 
 ### M-002 Prozedurales Gelände
 

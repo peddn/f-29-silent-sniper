@@ -259,16 +259,13 @@ fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let vs = (units::mps_to_fpm(fd.vertical_speed_mps) / 100.0).round() as i64 * 100;
     dl.text_mid([x, cy + 0.045], TXT_SMALL, Align::Right, &format!("{vs:+}"), Ink::Hud);
     dl.boxed_text([x - 0.006, cy], TXT, Align::Right, &format!("{ft:>5}"), Ink::Hud);
+    // Höhe über Grund (Radarhöhe) immer anzeigen: Das Gelände hat echte Berge,
+    // die Höhe über dem Meer allein reicht für den Tiefflug nicht.
     let rft = units::m_to_ft(fd.radar_altitude_m).max(0.0);
-    if rft < 5_000.0 {
-        dl.text_mid(
-            [x, cy - 0.045],
-            TXT_SMALL,
-            Align::Right,
-            &format!("R {:>4}", (rft / 10.0).round() as i64 * 10),
-            Ink::Hud,
-        );
-    }
+    let step = if rft < 1_000.0 { 10.0 } else { 50.0 };
+    let r = (rft / step).round() as i64 * step as i64;
+    let ink = if rft < 500.0 { Ink::Warning } else { Ink::Hud };
+    dl.text_mid([x, cy - 0.045], TXT_SMALL, Align::Right, &format!("R {r:>5}"), ink);
     if let Some(sp) = &fd.steerpoint {
         let nm = units::m_to_nm(sp.range);
         let txt = format!("{} {:.1}", sp.name, nm);
