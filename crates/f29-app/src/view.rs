@@ -6,7 +6,7 @@ use crate::sim::{SimState, SimSystems};
 use crate::terrain::{VIEW_DISTANCE, to_bevy_mesh, vertex_color_material};
 use bevy::camera::Viewport;
 use bevy::camera::visibility::RenderLayers;
-use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use f29_core::DVec3;
@@ -105,7 +105,9 @@ fn setup(
             far: (VIEW_DISTANCE * 1.5) as f32,
             ..default()
         }),
+        // Exakte Farben für die Palettenquantisierung: kein Tonemapping, kein Debanding.
         Tonemapping::None,
+        DebandDither::Disabled,
         Msaa::Off,
         DistanceFog {
             color: haze_color(),
