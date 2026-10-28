@@ -104,8 +104,9 @@ pub fn contours(grid: &HeightGrid) -> Vec<ContourSegment> {
                     }
                 }
                 // 2 Schnittpunkte: ein Segment; 4 (Sattel): zwei Segmente
-                for pair in pts.chunks_exact(2) {
-                    out.push(ContourSegment { level: level as u8, a: pair[0], b: pair[1] });
+                let (pairs, _) = pts.as_chunks::<2>();
+                for [a, b] in pairs {
+                    out.push(ContourSegment { level: level as u8, a: *a, b: *b });
                 }
             }
         }
