@@ -51,10 +51,6 @@ pub struct AircraftState {
     pub stall: f64,
     /// Landeklappen 0..1.
     pub flaps: f64,
-    /// Bahnhaltung aktiv (Knüppel neutral, wenig Querlage).
-    pub path_hold_active: bool,
-    /// Gehaltener Bahnwinkel (rad), gültig wenn `path_hold_active`.
-    pub path_hold: f64,
 }
 
 impl AircraftState {
@@ -70,8 +66,6 @@ impl AircraftState {
             airbrake: 0.0,
             stall: 0.0,
             flaps: 0.0,
-            path_hold_active: false,
-            path_hold: 0.0,
         }
     }
 
@@ -93,7 +87,6 @@ impl AircraftState {
             && self.airbrake.is_finite()
             && self.stall.is_finite()
             && self.flaps.is_finite()
-            && self.path_hold.is_finite()
     }
 }
 
@@ -122,13 +115,6 @@ const MIN_FBW_SPEED: f64 = 40.0;
 /// Wie schnell sich die Flugbahn bei vollem Abriss zur Nase dreht (1/s).
 /// Das Flugzeug fällt dadurch der Nase nach, statt flach durchzusacken.
 const STALL_PATH_ALIGN: f64 = 1.6;
-/// Bahnhaltung: Verstärkungen und maximale Korrekturrate (rad/s).
-const PATH_HOLD_KP: f64 = 0.8;
-const PATH_HOLD_KD: f64 = 0.9;
-const PATH_HOLD_MAX_RATE: f64 = 0.12;
-/// Bahnhaltung nur bei kleiner Querlage (rad) und neutralem Knüppel.
-const PATH_HOLD_MAX_BANK: f64 = 0.26;
-const PATH_HOLD_STICK_DEADBAND: f64 = 0.03;
 /// Anstellwinkel jenseits des Abrisswinkels, bei dem der Abriss voll ist (rad).
 const STALL_ALPHA_FULL: f64 = 0.15;
 /// Ab diesem Winkel zur Senkrechten (rad) kippt die Nase im Abriss nicht weiter.
@@ -225,15 +211,6 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
     // Im Abriss verlieren die Ruder ihre Wirkung (stetig mit der Abrissstärke).
     let stall_eff = 1.0 + (spec.stall_control_factor - 1.0) * aero.stall;
     let mut q_cmd = c.pitch_f() * spec.max_pitch_rate * eff * stall_eff;
-    // Bahnhaltung: Knüppel neutral ⇒ Flugbahnwinkel halten (PD-Regler auf γ,
-    // γ̇ aus dem Lastvielfachen). So bleibt der Horizontalflug horizontal, auch
-    // wenn sich die Fahrt ändert.
-    if s.path_hold_active && v > MIN_FBW_SPEED {
-        let gamma = flight_path_angle(s);
-        let gamma_rate = (aero.load_factor - detmath::cos(gamma) * cphi) * G0 / v;
-        q_cmd += (PATH_HOLD_KP * (s.path_hold - gamma) - PATH_HOLD_KD * gamma_rate)
-            .clamp(-PATH_HOLD_MAX_RATE, PATH_HOLD_MAX_RATE);
-    }
     if v > MIN_FBW_SPEED {
         // g-Begrenzer über die Bahnkrümmung n ≈ V·q/g + cosθ·cosφ.
         let q_max = (spec.g_limit_pos - ctheta * cphi) * G0 / v;
@@ -314,17 +291,6 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
     let flap_target = if c.has(flags::FLAPS) && aero.tas < spec.flap_max_speed_mps { 1.0 } else { 0.0 };
     let flap_move = spec.flap_rate * dt;
     s.flaps += (flap_target - s.flaps).clamp(-flap_move, flap_move);
-
-    // Bahnhaltung ein-/ausschalten (beim Einschalten den aktuellen Bahnwinkel merken).
-    let (_, _, roll) = s.attitude.to_euler();
-    let hold = c.pitch_f().abs() < PATH_HOLD_STICK_DEADBAND
-        && roll.abs() < PATH_HOLD_MAX_BANK
-        && s.stall < STALL_NOTICEABLE
-        && aero.tas > MIN_FBW_SPEED;
-    if hold && !s.path_hold_active {
-        s.path_hold = flight_path_angle(s);
-    }
-    s.path_hold_active = hold;
 
     // Flugsteuerung: Raten folgen dem Kommando mit Verzögerung erster Ordnung.
     let cmd = fbw_rate_command(spec, s, &aero, c) + gust;

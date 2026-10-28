@@ -357,20 +357,6 @@ fn pull_up_warning_in_steep_dive_near_ground() {
 }
 
 #[test]
-fn neutral_stick_holds_altitude_even_when_speed_changes() {
-    // Waagerecht, Knüppel los, Gas weg und wieder auf: die Höhe bleibt.
-    let mut sim = high_sim(4_000.0, 200.0, 0.6);
-    let h0 = sim.flight_data().altitude_m;
-    let mut max_dev: f64 = 0.0;
-    for t in 0..ticks(60.0) {
-        let thr = if t < ticks(20.0) { 0.2 } else { 0.9 };
-        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, thr, 0));
-        max_dev = max_dev.max((sim.flight_data().altitude_m - h0).abs());
-    }
-    assert!(max_dev < 25.0, "Höhenabweichung {max_dev:.1} m im Geradeausflug");
-}
-
-#[test]
 fn throttle_changes_speed_noticeably() {
     // 10 s Vollgas gegen 10 s Leerlauf aus demselben Reiseflug.
     let run = |thr: f64| {

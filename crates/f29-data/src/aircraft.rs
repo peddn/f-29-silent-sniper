@@ -130,12 +130,12 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     g_limit_pos: 7.0,
     g_limit_neg: 2.5,
     alpha_warning_rad: 0.25,
-    stall_deficit_full: 0.22,
+    stall_deficit_full: 0.18,
     stall_stick_g: 4.0,
     stall_time_constant_s: 0.3,
-    stall_pitch_break: 1.35,
-    stall_control_factor: 0.12,
-    stall_lift_factor: 0.25,
+    stall_pitch_break: 1.7,
+    stall_control_factor: 0.1,
+    stall_lift_factor: 0.18,
     yaw_damper_gain: 2.5,
 };
 

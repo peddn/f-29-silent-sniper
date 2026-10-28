@@ -14,11 +14,11 @@ const STALL_WARNING_MARGIN: f64 = 1.1;
 
 /// RNG-Strom der Turbulenz.
 pub const STREAM_TURBULENCE: u64 = 0x5455_5242;
-/// Unterhalb dieser Höhe über Grund setzt Turbulenz ein (500 ft).
-pub const TURBULENCE_CEILING_M: f64 = 152.4;
+/// Unterhalb dieser Höhe über Grund setzt Turbulenz ein (1000 ft).
+pub const TURBULENCE_CEILING_M: f64 = 304.8;
 /// Störrate (rad/s) um die Längsachse bei 200 m/s direkt über dem Boden,
 /// vor der Glättung. Um die Querachse halb so viel.
-const TURBULENCE_ROLL: f64 = 0.9;
+const TURBULENCE_ROLL: f64 = 1.05;
 /// Glättung der Turbulenz (s) – verhindert hochfrequentes Zittern.
 const TURBULENCE_TIME_CONSTANT_S: f64 = 0.15;
 
@@ -371,8 +371,6 @@ impl Sim {
         h.f64(a.airbrake);
         h.f64(a.stall);
         h.f64(a.flaps);
-        h.u64(u64::from(a.path_hold_active));
-        h.f64(a.path_hold);
         h.f64(self.gust.x);
         h.f64(self.gust.y);
         let (rs, ri) = self.turbulence_rng.raw_state();

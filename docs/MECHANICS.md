@@ -97,10 +97,11 @@ Format jedes Eintrags:
     Flugsteuerung den Bahnwinkel, den das Flugzeug beim Loslassen hat. Kurven mit
     Querlage sinken weiterhin, wenn man nicht zieht.
 
-  *v0.1.5:* Das Einrasten auf exakt waagerecht wurde wieder entfernt. Der
+  *v0.1.5:* Die Bahnhaltung wurde vollständig entfernt (Spielerwunsch). Der
   beobachtete Höhenverlust war korrektes Verhalten: Die Nase lag auf dem
   Horizont, für den Horizontalflug muss sie aber um den Anstellwinkel darüber
-  stehen. Maßgeblich für die Flugbahn ist der Flight Path Marker im HUD.
+  stehen. Maßgeblich für die Flugbahn ist der Flight Path Marker im HUD. Ein
+  losgelassener Knüppel hält wieder die Lage der Nase.
   - **Schnelleres Triebwerk und Staudruckwiderstand im Leerlauf:** Gas wegnehmen
     bremst deutlich, und der Maximalschub ist etwas höher. In 10 s ergeben sich
     etwa +13 m/s bei Vollgas und −30 m/s im Leerlauf.
@@ -192,9 +193,10 @@ Format jedes Eintrags:
   `stall_strength_grows_with_speed_deficit`, `stall_strength_changes_smoothly`,
   `hard_pull_stalls_sinks_and_recovers_when_released`, `hard_turn_bleeds_energy`,
   `steep_zoom_climb_ends_in_stall` und `stall_warning_precedes_stall`. Keine Werte aus der Referenz übernommen.
-  *v0.1.4:* Laut Spieltest durfte der Abriss noch aggressiver sein. Deshalb gibt es
-  jetzt einen tieferen Auftriebseinbruch, schnelleres Abkippen, früher volle
-  Stärke und noch schwächere Ruder.
+  *v0.1.4/v0.1.5:* Laut Spieltest durfte der Abriss noch aggressiver sein. Deshalb
+  gibt es jetzt einen tieferen Auftriebseinbruch, schnelleres Abkippen, früher
+  volle Stärke und noch schwächere Ruder. Bei 160 kt steht die Nase nach 2 s auf
+  etwa −78°.
 - **Status:** umgesetzt (v0.1.4)
 
 ### M-006 Turbulenz in Bodennähe
@@ -209,7 +211,9 @@ Format jedes Eintrags:
 - **Unser Design:** Wir verwenden die **Höhe über Grund** (Radarhöhe), weil unser
   Gelände echte Berge hat; das Original misst über einem praktisch ebenen Boden.
   Störraten auf Rollen und Nicken (Nicken halb), proportional zu
-  `(1 − Höhe/500 ft) × Fahrt`, Klappen halbieren sie. Die Zufallszahlen kommen aus
+  `(1 − Höhe/1000 ft) × Fahrt`, Klappen halbieren sie. Die Turbulenz beginnt
+  bewusst schon bei 1000 ft statt 500 ft (Spielerwunsch, v0.1.5), etwas stärker
+  als in v0.1.4. Die Zufallszahlen kommen aus
   einem eigenen deterministischen RNG-Strom, damit Replays exakt bleiben. Sie
   werden geglättet, damit es rüttelt statt zittert. Schwierigkeitsstufen,
   Fahrwerk und Schäden folgen später.
