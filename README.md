@@ -26,8 +26,11 @@ Voraussetzung: aktuelles stabiles Rust (≥ 1.97).
 # Spiel starten (beim ersten Mal dauert der Build einige Minuten)
 cargo run --release -p f29-app
 
-# anderer Seed = anderes Gelände
-cargo run --release -p f29-app -- --seed 1234
+# anderer Seed = anderes Gelände, Start in der Verfolgeransicht
+cargo run --release -p f29-app -- --seed 1234 --view chase
+
+# nach 10 s automatisch einen Screenshot speichern und beenden
+cargo run --release -p f29-app -- --screenshot bild.png --after 10
 
 # Tests (ohne Grafik, ohne Bevy – in Sekunden)
 cargo test
@@ -54,6 +57,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev pkg-config
 | H | | HUD ein/aus |
 | F3 | | Retro-Look: voll → nur Palette → aus |
 | P | Start | Pause |
+| F12 | | Screenshot nach `screenshots/` |
 | R | | Neustart (Flug wird als Replay gesichert) |
 | Esc | | Beenden (Flug wird als Replay gesichert) |
 

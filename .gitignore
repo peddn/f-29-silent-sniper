@@ -3,3 +3,4 @@
 *.ppm
 /hud.svg
 .DS_Store
+/screenshots
