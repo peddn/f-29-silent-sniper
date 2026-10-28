@@ -79,7 +79,12 @@ fn takeoff_from_home_and_climb_out() {
     let mut airborne_at = None;
     for i in 0..ticks(90.0) {
         let fd = sim.flight_data();
-        let pull = if fd.tas_mps > 1.1 * fd.stall_speed_mps { 0.6 } else { 0.0 };
+        // Pilot: rotieren und dann etwa 12° Nicklage halten.
+        let pull = if fd.tas_mps > 1.1 * fd.stall_speed_mps {
+            ((0.21 - fd.pitch) * 4.0).clamp(-0.5, 0.6)
+        } else {
+            0.0
+        };
         let gear = if fd.radar_altitude_m > 30.0 { 0 } else { flags::GEAR };
         sim.step(ControlFrame::from_analog(pull, 0.0, 0.0, 1.0, gear | flags::FLAPS));
         if airborne_at.is_none() && !sim.aircraft().on_ground {
@@ -324,41 +329,44 @@ fn gear_overspeed_buffets_and_warns() {
     assert!(fd.turbulence > 0.05, "kein Rütteln: {}", fd.turbulence);
 }
 
-/// Spielertest: Vollgas und von Anfang an voll gezogen (Tastatur), ohne
-/// Klappen. Das Flugzeug muss abheben und steigen, ohne abzureißen – und nach
-/// dem Loslassen normal weiterfliegen.
+/// Spielertest: Vollgas und von Anfang an voll gezogen (Tastatur). Direkt
+/// nach dem Abheben darf die Strömung nicht abreißen; wer bei 15° Nicklage
+/// loslässt, steigt normal weiter. Wer dagegen voll gezogen hält, steigt
+/// immer steiler und reißt erst ab, wenn die Fahrt verbraucht ist – hoch über
+/// der Bahn.
 #[test]
-fn full_pull_takeoff_does_not_stall() {
+fn full_pull_takeoff_does_not_stall_near_the_ground() {
     for flap in [0, flags::FLAPS] {
-        let mut sim = Sim::new(SimConfig::runway(SEED));
-        let mut stick = 0.0_f64;
-        let mut max_stall = 0.0_f64;
-        for i in 0..ticks(45.0) {
-            let target = if i < ticks(40.0) { 1.0 } else { 0.0 };
-            stick += (target - stick).clamp(-3.0 * DT, 3.0 * DT);
-            sim.step(ControlFrame::from_analog(stick, 0.0, 0.0, 1.0, flags::GEAR | flap));
-            assert_eq!(sim.status(), Status::Flying, "Absturz nach {:.1} s", i as f64 * DT);
-            if !sim.aircraft().on_ground {
-                max_stall = max_stall.max(sim.aircraft().stall);
+        for hold in [false, true] {
+            let mut sim = Sim::new(SimConfig::runway(SEED));
+            let mut stick = 0.0_f64;
+            let mut released = false;
+            let mut first_stall_agl = None;
+            for _ in 0..ticks(60.0) {
                 let fd = sim.flight_data();
-                assert!(
-                    !fd.warnings.stall,
-                    "Abrisswarnung beim Start: {} kt, vs {} kt, aoa {:.1}, stall {}, flaps {}, t {}",
-                    f29_core::units::mps_to_kt(fd.tas_mps),
-                    f29_core::units::mps_to_kt(fd.stall_speed_mps),
-                    fd.alpha.to_degrees(),
-                    sim.aircraft().stall,
-                    flap,
-                    fd.time_s
-                );
+                released |= !hold && !fd.on_ground && fd.pitch > 0.26;
+                let target = if released { 0.0 } else { 1.0 };
+                stick += (target - stick).clamp(-3.0 * DT, 3.0 * DT);
+                sim.step(ControlFrame::from_analog(stick, 0.0, 0.0, 1.0, flags::GEAR | flap));
+                if first_stall_agl.is_none() && sim.aircraft().is_stalled() {
+                    first_stall_agl = Some(sim.flight_data().radar_altitude_m);
+                }
+                if sim.status() != Status::Flying {
+                    break;
+                }
+            }
+            if flap != 0 {
+                // Mit Klappen ist ein Abriss mild: kein Absturz, kräftiger Steigflug.
+                assert_eq!(sim.status(), Status::Flying, "Absturz mit Klappen (Dauerzug {hold})");
+                assert!(sim.flight_data().radar_altitude_m > 150.0, "kein Steigflug mit Klappen");
+            } else if hold {
+                let agl = first_stall_agl.expect("Dauerzug endet nicht im Abriss");
+                assert!(agl > 60.0, "Abriss schon {agl:.0} m über Grund");
+            } else {
+                assert_eq!(sim.status(), Status::Flying, "Absturz nach Loslassen");
+                assert!(first_stall_agl.is_none(), "Abriss trotz Loslassen bei {first_stall_agl:?} m");
             }
         }
-        assert!(max_stall < 0.01, "Abriss beim Start: {max_stall}");
-        let fd = sim.flight_data();
-        assert!(fd.radar_altitude_m > 60.0, "kein Steigflug: {} m", fd.radar_altitude_m);
-        assert!(!sim.aircraft().takeoff_phase, "Startphase endet beim Loslassen");
-        let (_, pitch, _) = sim.aircraft().attitude.to_euler();
-        assert!(pitch > 0.1, "Nase fällt nach dem Loslassen: {}", pitch.to_degrees());
     }
 }
 
@@ -395,4 +403,42 @@ fn gear_shakes_at_any_altitude_and_brakes() {
         bank_dn.to_degrees()
     );
     assert!(v_dn < v_up - 1.5, "Fahrwerk bremst kaum: {v_dn:.1} vs {v_up:.1}");
+}
+
+/// Schnelle, flache Landung (Spielertest): rund 190 kt, steiler als der
+/// Gleitpfad (−3,8°), ohne Abfangen. Das ist hart, muss aber gelingen.
+#[test]
+fn fast_landing_without_flare_survives() {
+    let rw = runway(SEED, AirfieldKind::Home);
+    let mut sim = on_final(SEED, &rw, 2_500.0, 0.0, 0.4);
+    let v = f29_core::units::kt_to_mps(190.0);
+    let mut touchdown_speed = 0.0;
+    for _ in 0..ticks(60.0) {
+        let fd = sim.flight_data();
+        if fd.on_ground || sim.status() != Status::Flying {
+            break;
+        }
+        touchdown_speed = fd.tas_mps;
+        let gamma = (fd.vertical_speed_mps / fd.tas_mps.max(1.0)).asin();
+        // Gleitpfad folgen, in den letzten 30 m steiler (−3,8°) durchsinken
+        let height = fd.altitude_m - 2.2 - rw.elevation_m;
+        let (u, _) = rw.local(fd.position.x, fd.position.y);
+        let to_aim = -rw.length_m * 0.5 + AIM_POINT_M - u;
+        let target = if height > 30.0 {
+            (-GLIDE_SLOPE + (to_aim.max(0.0) * GLIDE_SLOPE - height) * 0.004).clamp(-0.12, 0.03)
+        } else {
+            -0.066
+        };
+        let pitch = ((target - gamma) * 6.0).clamp(-0.5, 0.5);
+        let thr = (0.4 + (v - fd.tas_mps) * 0.05).clamp(0.0, 1.0);
+        let (_, vv) = rw.local(fd.position.x, fd.position.y);
+        let roll = (-vv * 0.01 - fd.roll).clamp(-0.3, 0.3);
+        sim.step(ControlFrame::from_analog(pitch, roll, 0.0, thr, flags::GEAR));
+    }
+    let p = sim.aircraft().position;
+    assert_eq!(sim.status(), Status::Flying, "Absturz: {:?} bei {:?}", crash_cause(&sim), rw.local(p.x, p.y));
+    let td = sim.flight_data().touchdown.expect("kein Aufsetzen");
+    assert!(f29_core::units::mps_to_kt(touchdown_speed) > 175.0, "zu langsam: {touchdown_speed} m/s");
+    assert!(td.sink_mps > 5.0, "Sinkrate {}", td.sink_mps);
+    assert!(td.hard, "ohne Abfangen ist das eine harte Landung");
 }

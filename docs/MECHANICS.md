@@ -216,6 +216,14 @@ Format jedes Eintrags:
   Kampffahrt ändert sich nichts; bei 250 kt fällt die Abrissstärke unter vollem
   Zug um wenige Prozent. Voller Zug bei Anfluggeschwindigkeit reißt weiterhin ab –
   abgefangen wird mit Gefühl.
+
+  *v0.1.9 (Spielerwunsch):* Die g-Anforderung aus dem Knüppel hängt von der
+  Querlage ab: Mit waagerechten Flächen zählen nur 40 %, in steiler Kurve die
+  volle Anforderung (Gewichtung über sin² der Querlage). Harte Kurven reißen
+  damit schnell ab, Hochziehen und Steigflug erst, wenn die Fahrt verbraucht
+  ist. Voll gezogen nach dem Start steigt das Flugzeug immer steiler und reißt
+  ohne Klappen in einigen hundert Fuß ab, statt direkt über der Bahn. Langsame
+  Kurven ohne Klappen reißen weiterhin ab, etwas milder als zuvor.
 - **Status:** umgesetzt (v0.1.4)
 
 ### M-009 Treibstoff
@@ -293,13 +301,15 @@ Format jedes Eintrags:
     wenden geht. Rollreibung, Radbremse (Taste B) abhängig von der Radlast.
   - Rotieren erst ab 1,1 × Abrissfahrt (masseabhängig); Abheben, sobald der
     Auftrieb das Gewicht trägt.
-  - *v0.1.7:* **Startphase.** Beim Rotieren und nach dem Abheben steuert der
+  - *v0.1.7 (in v0.1.9 wieder entfernt):* **Startphase.** Beim Rotieren und nach dem Abheben steuert der
     Knüppel die Nicklage (voll gezogen = 12°) statt der Nickrate, und es wird
     keine g-Last angefordert. Vorher hob voller Zug die Nase in einer halben
     Sekunde auf 14°, und direkt nach dem Abheben riss die Strömung ab
     (Spielertest). Die Startphase endet, sobald der Knüppel losgelassen wird;
     danach gilt wieder die normale Ratensteuerung mit der gewohnt gefährlichen
-    Abrissgrenze.
+    Abrissgrenze. Seit v0.1.9 ersetzt die querlagenabhängige Abrissanforderung
+    (M-004) die Startphase; nur das Rotieren am Boden steuert weiter die
+    Nicklage (bis 12°).
   - Wer schneller als ≈ 23 kt von der befestigten Fläche rollt, verunglückt.
 - **Unsere Werte:** `crates/f29-data/src/aircraft.rs` (Abschnitt Fahrwerk und Boden).
   Startrollstrecke mit vollen Tanks und Klappen ≈ 0,7–1 km; eine geheime Piste
@@ -331,8 +341,11 @@ Format jedes Eintrags:
   - „PULL UP“ ist mit ausgefahrenem Fahrwerk nur bei gefährlicher Sinkrate aktiv;
     „GEAR“ warnt im Anflug mit eingefahrenem Fahrwerk.
   - Schwierigkeitsstufen für die Grenzwerte folgen mit M-008.
-- **Unsere Werte:** gut bis 3 m/s (≈ 590 ft/min), Bruch ab 5 m/s (≈ 980 ft/min),
-  Querlage bis 10°, Nicklage nicht unter −2°.
+- **Unsere Werte:** gut bis 4 m/s (≈ 790 ft/min), Bruch ab 7 m/s (≈ 1 380 ft/min),
+  Querlage bis 15°, Nicklage nicht unter −5°. *v0.1.9:* gelockert nach Spieltest
+  (vorher 3 / 5 m/s, 10°, −2°); eine flache Landung mit 190 kt ohne Abfangen
+  gelingt jetzt als harte Landung. Die Fahrt beim Aufsetzen wird wie im
+  Original nicht bewertet.
 - **Status:** umgesetzt (v0.1.6)
 
 ### M-006 Turbulenz in Bodennähe

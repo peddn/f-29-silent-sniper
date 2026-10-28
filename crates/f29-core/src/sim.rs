@@ -546,7 +546,7 @@ impl Sim {
         let time_to_impact = if vs < -0.5 { radar_alt / -vs } else { f64::INFINITY };
         // Abrisswarnung: knapp über der (g-abhängigen) Abrissgeschwindigkeit,
         // bei hohem Anstellwinkel oder wenn der Abriss schon einsetzt.
-        let n_demand = flight::stall_load_factor(&self.spec, a, &self.last_controls, aero);
+        let n_demand = flight::demanded_load_factor(&self.spec, a, &self.last_controls, aero.tas, aero.qbar);
         let v_stall = flight::stall_speed(&self.spec, mass, aero.density, n_demand, a.flaps);
 
         // Treibstoff: Restzeit beim aktuellen Verbrauch und Bedarf bis nach Hause.
@@ -659,7 +659,6 @@ impl Sim {
         h.f64(a.fuel_kg);
         h.f64(a.gear);
         h.u64(u64::from(a.on_ground));
-        h.u64(u64::from(a.takeoff_phase));
         if let Some(td) = &self.touchdown {
             h.u64(td.tick);
             h.f64(td.sink_mps);
@@ -675,7 +674,7 @@ impl Sim {
 }
 
 /// Nicklage beim Aufsetzen, unter der das Bugrad zuerst aufschlägt (rad).
-const NOSE_FIRST_PITCH: f64 = -0.035;
+const NOSE_FIRST_PITCH: f64 = -0.087;
 
 /// Route: zwei Wegpunkte, dann die nächstgelegene geheime Piste, dann nach Hause.
 fn build_route(terrain: &Terrain, seed: u64, sp: &Spawn) -> Vec<Steerpoint> {

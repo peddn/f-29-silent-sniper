@@ -116,6 +116,10 @@ pub struct AircraftSpec {
     /// Zusätzliche g-Last, die voller Zug am Knüppel für die Abrissgeschwindigkeit
     /// anfordert (v_s = v_s1g · √(1 + Zug · stall_stick_g)).
     pub stall_stick_g: f64,
+    /// Anteil dieser Anforderung bei waagerechten Flächen (0..1). In steiler
+    /// Querlage gilt die volle Anforderung: Harte Kurven reißen früher ab als
+    /// das Hochziehen im Geradeausflug.
+    pub stall_stick_level_factor: f64,
     /// Zeitkonstante, mit der die Abrissstärke dem Fahrtdefizit folgt (s).
     pub stall_time_constant_s: f64,
     /// Abkippen bei vollem Abriss: Drehrate (rad/s), mit der die Nase aus
@@ -173,9 +177,9 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     rolling_friction: 0.03,
     wheel_brake_decel: 5.0,
     ground_steer_rate: 0.6,
-    hard_landing_sink_mps: 3.0,
-    max_landing_sink_mps: 5.0,
-    max_landing_bank_rad: 0.17,
+    hard_landing_sink_mps: 4.0,
+    max_landing_sink_mps: 7.0,
+    max_landing_bank_rad: 0.26,
 
     max_roll_rate: 2.6,
     max_pitch_rate: 0.45,
@@ -187,6 +191,7 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     alpha_warning_rad: 0.27,
     stall_deficit_full: 0.18,
     stall_stick_g: 3.5,
+    stall_stick_level_factor: 0.4,
     stall_time_constant_s: 0.3,
     stall_pitch_break: 1.7,
     stall_control_factor: 0.1,
@@ -272,6 +277,9 @@ impl AircraftSpec {
         }
         if !(0.0..=1.0).contains(&self.stall_control_factor) {
             return Err(err("stall_control_factor", "muss zwischen 0 und 1 liegen".into()));
+        }
+        if !(0.0..=1.0).contains(&self.stall_stick_level_factor) {
+            return Err(err("stall_stick_level_factor", "muss zwischen 0 und 1 liegen".into()));
         }
         if !(0.0..=1.0).contains(&self.flap_stall_softening) {
             return Err(err("flap_stall_softening", "muss zwischen 0 und 1 liegen".into()));

@@ -348,8 +348,8 @@ fn glide_line(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glas
 const GLIDE_DEG: f32 = 3.0;
 /// Sinkrate, ab der eine Landung hart wird bzw. das Fahrwerk bricht (ft/min).
 /// Muss zu den Flugzeugdaten passen; ein Test prüft das.
-pub(crate) const HARD_SINK_FPM: f32 = 590.0;
-pub(crate) const MAX_SINK_FPM: f32 = 984.0;
+pub(crate) const HARD_SINK_FPM: f32 = 787.0;
+pub(crate) const MAX_SINK_FPM: f32 = 1_378.0;
 
 /// Sinkratenskala rechts im Glas (Landemodus): Balken für die Steig-/Sinkrate,
 /// Marken für „hart“ und „Bruch“ – wie die Landehilfe im Original, eigene Form.
@@ -357,7 +357,7 @@ fn sink_scale(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     // rechts neben dem Glas, damit Höhe und Pitch-Leiter frei bleiben
     let x = glass.max[0] + 0.03;
     let top = glass.center()[1] + 0.03;
-    let full = 1_500.0_f32; // fpm über die ganze Skala
+    let full = 2_000.0_f32; // fpm über die ganze Skala
     let len = 0.17_f32;
     let y_of = |fpm: f32| top - (fpm.clamp(0.0, full) / full) * len;
     dl.line([x, top], [x, top - len], Ink::HudDim);

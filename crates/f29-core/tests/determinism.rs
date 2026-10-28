@@ -83,7 +83,12 @@ fn scripted_landing(seed: u64) -> Replay {
                 ControlFrame::from_analog(0.0, steer, 0.0, 0.0, flags::GEAR | flags::AIRBRAKE)
             }
             Some(_) => {
-                let pull = if fd.tas_mps > 1.1 * fd.stall_speed_mps { 0.6 } else { 0.0 };
+                // rotieren und etwa 12° Nicklage halten
+                let pull = if fd.tas_mps > 1.1 * fd.stall_speed_mps {
+                    ((0.21 - fd.pitch) * 4.0).clamp(-0.5, 0.6)
+                } else {
+                    0.0
+                };
                 ControlFrame::from_analog(pull, 0.0, 0.0, 1.0, flags::GEAR | flags::FLAPS)
             }
         };

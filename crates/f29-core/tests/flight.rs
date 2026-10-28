@@ -26,6 +26,15 @@ fn enter_steep_dive(sim: &mut Sim) {
     assert!(sim.flight_data().pitch < -0.4, "kein Sturzflug: θ = {}", sim.flight_data().pitch);
 }
 
+/// Steuereingabe, die die Querlage `bank` (rad) hält und `pull` zieht –
+/// gezogen wird erst, wenn die Querlage fast erreicht ist.
+fn banked(sim: &Sim, bank: f64, pull: f64, throttle: f64, flags: u8) -> ControlFrame {
+    let err = bank - sim.flight_data().roll;
+    let roll = (err * 3.0).clamp(-1.0, 1.0);
+    let pull = if err.abs() < 0.15 { pull } else { 0.0 };
+    ControlFrame::from_analog(pull, roll, 0.0, throttle, flags)
+}
+
 fn fly(sim: &mut Sim, seconds: f64, c: ControlFrame) {
     for _ in 0..ticks(seconds) {
         sim.step(c);
@@ -138,12 +147,13 @@ fn hard_pull_stalls_sinks_and_recovers_when_released() {
 
 #[test]
 fn slow_stall_drops_nose_steeply_then_recovers_with_speed() {
-    // 160 kt: hart ziehen bis zum Abriss, dann loslassen.
+    // 160 kt: in 60° Querlage hart ziehen bis zum Abriss, dann loslassen.
     let mut sim = high_sim(2_500.0, 82.0, 0.7);
     let h0 = sim.flight_data().altitude_m;
     let mut t = 0;
     while !sim.aircraft().is_stalled() {
-        sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 0.7, 0));
+        let c = banked(&sim, 1.05, 1.0, 0.7, 0);
+        sim.step(c);
         t += 1;
         assert!(t < ticks(5.0), "kein Abriss");
     }
@@ -171,13 +181,15 @@ fn slow_stall_drops_nose_steeply_then_recovers_with_speed() {
 
 #[test]
 fn stall_strength_grows_with_speed_deficit() {
-    // Gleich hartes Ziehen: bei hoher Fahrt nur ein leichtes Schütteln an der
-    // Grenze, bei niedriger Fahrt ein voller Abriss mit abkippender Nase.
+    // Gleich hartes Ziehen in 60° Querlage: bei hoher Fahrt nur ein leichtes
+    // Schütteln an der Grenze, bei niedriger Fahrt ein voller Abriss mit
+    // abkippender Nase.
     let pull = |speed: f64| {
         let mut sim = high_sim(1_500.0, speed, 1.0);
         let (mut max_stall, mut min_pitch) = (0.0_f64, 0.0_f64);
         for _ in 0..ticks(4.0) {
-            sim.step(ControlFrame::from_analog(1.0, 0.0, 0.0, 1.0, 0));
+            let c = banked(&sim, 1.05, 1.0, 1.0, 0);
+            sim.step(c);
             max_stall = max_stall.max(sim.aircraft().stall);
             min_pitch = min_pitch.min(sim.flight_data().pitch);
         }
@@ -187,8 +199,8 @@ fn stall_strength_grows_with_speed_deficit() {
     let (slow_stall, slow_pitch) = pull(90.0);
     assert!(fast_stall < 0.5, "schnell: Abrissstärke {fast_stall:.2}");
     assert!(fast_pitch > -0.35, "schnell: Nase fällt auf {:.0}°", fast_pitch.to_degrees());
-    assert!(slow_stall > 0.8, "langsam: Abrissstärke {slow_stall:.2}");
-    assert!(slow_pitch < -0.8, "langsam: Nase nur auf {:.0}°", slow_pitch.to_degrees());
+    assert!(slow_stall > 0.55, "langsam: Abrissstärke {slow_stall:.2}");
+    assert!(slow_pitch < -0.3, "langsam: Nase nur auf {:.0}°", slow_pitch.to_degrees());
 }
 
 #[test]
@@ -448,13 +460,18 @@ fn flaps_reduce_energy_loss_in_hard_turns() {
 #[test]
 fn flaps_make_slow_flight_controllable() {
     use f29_core::controls::flags;
+    // Langsame Kurve mit 45° Querlage und halbem Zug.
     let probe = |f: u8| {
         let mut sim = high_sim(1_500.0, 70.0, 0.8);
         fly(&mut sim, 3.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, f));
         let (mut q, mut min_pitch) = (0.0_f64, f64::MAX);
         for i in 0..ticks(10.0) {
-            let pull = if i < ticks(4.0) { 0.6 } else { 0.0 };
-            sim.step(ControlFrame::from_analog(pull, 0.0, 0.0, 0.8, f));
+            let c = if i < ticks(4.0) {
+                banked(&sim, 0.785, 0.6, 0.8, f)
+            } else {
+                ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, f)
+            };
+            sim.step(c);
             q = q.max(sim.aircraft().body_rates.y);
             min_pitch = min_pitch.min(sim.flight_data().pitch);
         }
@@ -463,6 +480,27 @@ fn flaps_make_slow_flight_controllable() {
     let (q_clean, nose_clean) = probe(0);
     let (q_flaps, nose_flaps) = probe(flags::FLAPS);
     assert!(q_flaps > 1.4 * q_clean, "Nickrate mit Klappen {q_flaps:.3}, ohne {q_clean:.3}");
-    assert!(nose_clean < -0.8, "ohne Klappen kein Abkippen: {:.0}°", nose_clean.to_degrees());
+    assert!(nose_clean < -0.3, "ohne Klappen kein Abkippen: {:.0}°", nose_clean.to_degrees());
     assert!(nose_flaps > -0.2, "mit Klappen kippt die Nase ab: {:.0}°", nose_flaps.to_degrees());
+}
+
+/// Hochziehen im Geradeausflug reißt später ab als derselbe Zug in steiler
+/// Kurve: Im Steigflug ist erst die verbrauchte Fahrt das Ende.
+#[test]
+fn hard_turn_stalls_sooner_than_wings_level_pull() {
+    let first_stall = |bank: f64| {
+        let mut sim = high_sim(2_000.0, 95.0, 1.0);
+        for i in 0..ticks(20.0) {
+            let c = banked(&sim, bank, 1.0, 1.0, 0);
+            sim.step(c);
+            if sim.aircraft().is_stalled() {
+                return i as f64 / f64::from(TICK_HZ);
+            }
+        }
+        f64::INFINITY
+    };
+    let turn = first_stall(1.22);
+    let level = first_stall(0.0);
+    assert!(turn < 2.0, "70°-Kurve reißt erst nach {turn:.1} s ab");
+    assert!(level > turn + 2.0, "Hochziehen reißt nach {level:.1} s ab, Kurve nach {turn:.1} s");
 }

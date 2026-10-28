@@ -26,9 +26,8 @@
 //! Rollmodus: Höhe auf die Bahn geklemmt, keine Querlage, Lenken über Quer-
 //! und Seitenruder (auch auf der Stelle), Radbremse, Rotieren erst ab der
 //! Abhebefahrt. Sobald der Auftrieb das Gewicht trägt, hebt das Flugzeug ab.
-//! Beim Rotieren und in der Startphase danach steuert der Knüppel die
-//! Nicklage (voll gezogen = [`TAKEOFF_PITCH`]) – so lässt sich mit gezogenem
-//! Knüppel starten, ohne dass die Strömung direkt nach dem Abheben abreißt.
+//! Beim Rotieren steuert der Knüppel die Nicklage (voll gezogen =
+//! [`TAKEOFF_PITCH`]).
 //!
 //! Damit entstehen Anstellwinkel, Schiebewinkel, Lastvielfaches,
 //! Energieverlust im Kurvenflug und Strömungsabriss physikalisch aus der
@@ -69,10 +68,6 @@ pub struct AircraftState {
     pub gear: f64,
     /// Steht bzw. rollt auf dem Boden (Rollmodus statt Flugmodell).
     pub on_ground: bool,
-    /// Startphase nach dem Abheben: Der Knüppel steuert die Nicklage statt
-    /// der Nickrate (siehe [`TAKEOFF_PITCH`]). Endet, sobald der Knüppel
-    /// losgelassen wird – danach gilt wieder die normale Ratensteuerung.
-    pub takeoff_phase: bool,
 }
 
 impl AircraftState {
@@ -91,7 +86,6 @@ impl AircraftState {
             fuel_kg: f29_data::F29_SPEC.fuel_capacity_kg,
             gear: 0.0,
             on_ground: false,
-            takeoff_phase: false,
         }
     }
 
@@ -173,11 +167,11 @@ pub const GEAR_LOCKED: f64 = 0.999;
 /// Abhebefahrt als Vielfaches der 1-g-Abrissfahrt: erst darüber hebt
 /// Ziehen am Boden die Nase.
 pub const ROTATE_FACTOR: f64 = 1.1;
-/// Nicklage bei voll gezogenem Knüppel beim Rotieren und in der Startphase (rad, 12°).
+/// Nicklage bei voll gezogenem Knüppel beim Rotieren am Boden (rad, 12°).
 pub const TAKEOFF_PITCH: f64 = 0.209;
-/// Größte Nickrate beim Rotieren und in der Startphase (rad/s).
+/// Größte Nickrate beim Rotieren am Boden (rad/s).
 const TAKEOFF_PITCH_RATE: f64 = 0.12;
-/// Ab diesem Knüppelausschlag gilt der Knüppel als gezogen (Startphase).
+/// Ab diesem Knüppelausschlag gilt der Knüppel am Boden als gezogen.
 const TAKEOFF_STICK: f64 = 0.05;
 /// Rate, mit der die Nase am Boden ohne Zug wieder absinkt (rad/s).
 const NOSE_SETTLE_RATE: f64 = 0.15;
@@ -355,13 +349,12 @@ pub fn ground_step(
     // Abheben: Der Auftrieb trägt das Gewicht und die Nase ist oben.
     if lift > weight && new_pitch > 0.02 {
         s.on_ground = false;
-        s.takeoff_phase = c.pitch_f() > TAKEOFF_STICK;
         return true;
     }
     false
 }
 
-/// Nickrate, die die Nicklage zum Knüppel-Sollwert führt (Startphase).
+/// Nickrate, die die Nicklage zum Knüppel-Sollwert führt (Rotieren am Boden).
 fn takeoff_pitch_rate(c: &ControlFrame, pitch: f64) -> f64 {
     let target = c.pitch_f().max(0.0) * TAKEOFF_PITCH;
     ((target - pitch) * 1.5).clamp(-TAKEOFF_PITCH_RATE, TAKEOFF_PITCH_RATE)
@@ -383,11 +376,7 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
     // unten ⇒ α wächst ⇒ Auftrieb wächst), es braucht keine Kompensation.
     // Im Abriss verlieren die Ruder ihre Wirkung (stetig mit der Abrissstärke).
     let stall_eff = 1.0 + (stall_control_factor(spec, s.flaps) - 1.0) * aero.stall;
-    let mut q_cmd = if s.takeoff_phase {
-        takeoff_pitch_rate(c, pitch)
-    } else {
-        c.pitch_f() * spec.max_pitch_rate * eff * stall_eff
-    };
+    let mut q_cmd = c.pitch_f() * spec.max_pitch_rate * eff * stall_eff;
     if v > MIN_FBW_SPEED {
         // g-Begrenzer über die Bahnkrümmung n ≈ V·q/g + cosθ·cosφ.
         let q_max = (spec.g_limit_pos - ctheta * cphi) * G0 / v;
@@ -414,15 +403,23 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
 /// weniger, wenn die Ruder bei geringem Staudruck gar nicht mehr Nickrate
 /// erzeugen können (n = 1 + V·q/g). So lässt sich bei Landefahrt behutsam
 /// abfangen, während harter Zug bei Kampffahrt unverändert früh abreißt.
-pub fn demanded_load_factor(spec: &AircraftSpec, c: &ControlFrame, tas: f64, qbar: f64) -> f64 {
-    1.0 + c.pitch_f().max(0.0) * stick_g_per_unit(spec, tas, qbar)
-}
-
-/// g-Last, gegen die die Abrissfahrt bestimmt wird: die Knüppelanforderung,
-/// in der Startphase dagegen 1 g – dort hält die Steuerung nur sanft eine
-/// Nicklage von höchstens 12°, der Knüppel fordert keine g-Last an.
-pub fn stall_load_factor(spec: &AircraftSpec, s: &AircraftState, c: &ControlFrame, aero: &AeroData) -> f64 {
-    if s.takeoff_phase { 1.0 } else { demanded_load_factor(spec, c, aero.tas, aero.qbar) }
+///
+/// Die Anforderung hängt außerdem von der Querlage ab: Mit waagerechten
+/// Flächen (Hochziehen, Steigflug, Start) zählt nur der Anteil
+/// `stall_stick_level_factor`, in steiler Kurve die volle Anforderung. Im
+/// Steigflug reißt die Strömung so erst ab, wenn die Fahrt verbraucht ist,
+/// in der harten Kurve dagegen schnell.
+pub fn demanded_load_factor(
+    spec: &AircraftSpec,
+    s: &AircraftState,
+    c: &ControlFrame,
+    tas: f64,
+    qbar: f64,
+) -> f64 {
+    let (_, _, roll) = s.attitude.to_euler();
+    let sr = detmath::sin(roll);
+    let bank = spec.stall_stick_level_factor + (1.0 - spec.stall_stick_level_factor) * sr * sr;
+    1.0 + c.pitch_f().max(0.0) * stick_g_per_unit(spec, tas, qbar) * bank
 }
 
 /// Zusätzliche g-Anforderung pro voller Knüppelauslenkung.
@@ -512,11 +509,6 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
     let aero = aero_data(spec, s);
     let mass = s.mass(spec);
     update_systems(spec, s, c, &aero, dt);
-    // Startphase endet beim Loslassen des Knüppels (kein Sprung in der
-    // Abrissanforderung, solange er gezogen bleibt).
-    if s.takeoff_phase && c.pitch_f() <= TAKEOFF_STICK {
-        s.takeoff_phase = false;
-    }
 
     // Flugsteuerung: Raten folgen dem Kommando mit Verzögerung erster Ordnung.
     let cmd = fbw_rate_command(spec, s, &aero, c) + gust;
@@ -555,7 +547,7 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
     // wächst sie jenseits des Abrisswinkels mit dem Anstellwinkel, damit auch
     // knapp über der Abrissgeschwindigkeit kein absurder Anstellwinkel entsteht.
     let target = if aero.tas >= MIN_AERO_SPEED {
-        let n = stall_load_factor(spec, s, c, &aero);
+        let n = demanded_load_factor(spec, s, c, aero.tas, aero.qbar);
         let by_speed =
             stall_target(spec, stall_speed(spec, mass, aero.density, n, s.flaps), aero.tas, s.flaps);
         let by_alpha = ((aero.alpha.abs() - spec.alpha_stall_rad) / STALL_ALPHA_FULL).clamp(0.0, 1.0);
@@ -626,13 +618,22 @@ mod tests {
         let spec = &F29_SPEC;
         let rho = atmosphere::isa(3000.0).density;
         let v = spec.stall_speed_1g(spec.full_mass_kg(), rho, 0.0) * 1.4;
-        // Ohne Ziehen kein Abriss, mit vollem Ziehen schon (beschleunigter Abriss)
-        let mut neutral = AircraftState::level(0.0, 0.0, 3000.0, 0.0, v);
+        // Ohne Ziehen kein Abriss, mit vollem Ziehen in steiler Querlage
+        // schon (beschleunigter Abriss); waagerecht gezogen deutlich weniger.
+        let banked = |roll: f64| {
+            let mut st = AircraftState::level(0.0, 0.0, 3000.0, 0.0, v);
+            st.attitude = DQuat::from_euler(0.0, 0.0, roll);
+            st
+        };
+        let mut neutral = banked(1.2);
         run(&mut neutral, ControlFrame::default(), 0.5);
-        let mut pulled = AircraftState::level(0.0, 0.0, 3000.0, 0.0, v);
+        let mut pulled = banked(1.2);
         run(&mut pulled, ControlFrame::from_analog(1.0, 0.0, 0.0, 0.6, 0), 0.5);
+        let mut level = banked(0.0);
+        run(&mut level, ControlFrame::from_analog(1.0, 0.0, 0.0, 0.6, 0), 0.5);
         assert!(neutral.stall < 0.05, "neutral: {}", neutral.stall);
         assert!(pulled.stall > neutral.stall + 0.1, "gezogen: {}", pulled.stall);
+        assert!(level.stall < pulled.stall - 0.1, "waagerecht {} vs Kurve {}", level.stall, pulled.stall);
     }
 
     #[test]
