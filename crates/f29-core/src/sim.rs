@@ -24,6 +24,9 @@ const TURBULENCE_TIME_CONSTANT_S: f64 = 0.15;
 /// Rütteln (rad/s) bei ausgefahrenem Fahrwerk, voll erreicht 25 m/s über
 /// dessen Höchstfahrt.
 const GEAR_BUFFET: f64 = 0.5;
+/// Gleichbleibendes leichtes Rütteln (rad/s) mit ausgefahrenem Fahrwerk in
+/// der Luft, unabhängig von Höhe und Fahrt.
+const GEAR_SHAKE: f64 = 0.22;
 /// Schneller als das darf man die befestigte Bahn nicht verlassen (m/s).
 const OFF_RUNWAY_MAX_SPEED: f64 = 12.0;
 /// Startpunkt auf der Bahn: Abstand vom Bahnanfang (m).
@@ -451,7 +454,8 @@ impl Sim {
         let depth = (1.0 - agl / TURBULENCE_CEILING_M).clamp(0.0, 1.0);
         let v = a.velocity.length();
         let speed = v / 200.0;
-        let buffet = GEAR_BUFFET * a.gear * ((v - self.spec.gear_max_speed_mps) / 25.0).clamp(0.0, 1.0);
+        let buffet = GEAR_SHAKE * a.gear
+            + GEAR_BUFFET * a.gear * ((v - self.spec.gear_max_speed_mps) / 25.0).clamp(0.0, 1.0);
         let amplitude =
             if a.on_ground { 0.0 } else { TURBULENCE_ROLL * depth * speed * (1.0 - 0.5 * a.flaps) + buffet };
         // Zufallszahlen immer ziehen, damit der Strom nicht von der Höhe abhängt.

@@ -361,3 +361,38 @@ fn full_pull_takeoff_does_not_stall() {
         assert!(pitch > 0.1, "Nase fällt nach dem Loslassen: {}", pitch.to_degrees());
     }
 }
+
+/// Ausgefahrenes Fahrwerk rüttelt in jeder Höhe leicht und bremst.
+#[test]
+fn gear_shakes_at_any_altitude_and_brakes() {
+    let run = |gear: u8| {
+        let mut sim = Sim::new(SimConfig {
+            seed: SEED,
+            spawn: Spawn {
+                altitude: 6_000.0,
+                min_clearance: 2_500.0,
+                speed: 110.0,
+                throttle: 0.6,
+                ..Spawn::default()
+            },
+        });
+        let mut max_bank = 0.0_f64;
+        for i in 0..ticks(20.0) {
+            sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.6, gear));
+            if i > ticks(6.0) {
+                max_bank = max_bank.max(sim.flight_data().roll.abs());
+            }
+        }
+        (sim.flight_data().turbulence, max_bank, sim.flight_data().tas_mps)
+    };
+    let (t_up, bank_up, v_up) = run(0);
+    let (t_dn, bank_dn, v_dn) = run(flags::GEAR);
+    assert!(t_up < 1e-9 && bank_up < 1e-6, "ohne Fahrwerk kein Rütteln in der Höhe");
+    assert!(t_dn > 0.02, "kein Rütteln: {t_dn}");
+    assert!(
+        bank_dn.to_degrees() > 0.3 && bank_dn.to_degrees() < 4.0,
+        "Querlage {:.1}°",
+        bank_dn.to_degrees()
+    );
+    assert!(v_dn < v_up - 1.5, "Fahrwerk bremst kaum: {v_dn:.1} vs {v_up:.1}");
+}

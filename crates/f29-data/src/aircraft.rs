@@ -55,8 +55,15 @@ pub struct AircraftSpec {
     pub flap_cl: f64,
     /// Zusätzlicher Widerstandsbeiwert bei voll ausgefahrenen Klappen.
     pub flap_cd: f64,
-    /// Oberhalb dieser Fahrt fahren die Klappen selbsttätig ein (m/s).
-    pub flap_max_speed_mps: f64,
+    /// Faktor auf den induzierten Widerstand bei voll ausgefahrenen Klappen
+    /// (Manöverklappen: in harten Kurven weniger Fahrtverlust).
+    pub flap_induced_factor: f64,
+    /// Faktor auf den Bezugsstaudruck der Ruderwirksamkeit bei voll
+    /// ausgefahrenen Klappen (< 1: Ruder wirken bei geringer Fahrt stärker).
+    pub flap_control_q_factor: f64,
+    /// Wie stark voll ausgefahrene Klappen den Abriss entschärfen (0..1):
+    /// weniger Abkippen, weniger Auftriebs- und Ruderverlust, sanfterer Einsatz.
+    pub flap_stall_softening: f64,
     /// Aus-/Einfahrgeschwindigkeit der Klappen (Anteil pro s).
     pub flap_rate: f64,
 
@@ -144,19 +151,21 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
 
     cl0: 0.04,
     cl_alpha: 3.6,
-    alpha_stall_rad: 0.30,
+    alpha_stall_rad: 0.32,
     post_stall_lift_drop: 8.0,
     cd0: 0.024,
-    induced_drag_k: 0.20,
+    induced_drag_k: 0.15,
     airbrake_cd: 0.07,
     cy_beta: 0.65,
 
     flap_cl: 0.40,
-    flap_cd: 0.05,
-    flap_max_speed_mps: 130.0,
+    flap_cd: 0.016,
+    flap_induced_factor: 0.6,
+    flap_control_q_factor: 0.35,
+    flap_stall_softening: 0.6,
     flap_rate: 0.5,
 
-    gear_cd: 0.025,
+    gear_cd: 0.045,
     gear_time_s: 5.0,
     gear_max_speed_mps: 128.6,
     gear_height_m: 2.2,
@@ -175,9 +184,9 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     control_q_ref_pa: 14_000.0,
     g_limit_pos: 7.0,
     g_limit_neg: 2.5,
-    alpha_warning_rad: 0.25,
+    alpha_warning_rad: 0.27,
     stall_deficit_full: 0.18,
-    stall_stick_g: 4.0,
+    stall_stick_g: 3.5,
     stall_time_constant_s: 0.3,
     stall_pitch_break: 1.7,
     stall_control_factor: 0.1,
@@ -193,7 +202,7 @@ impl AircraftSpec {
             field,
             reason,
         };
-        let positive: [(&'static str, f64); 37] = [
+        let positive: [(&'static str, f64); 38] = [
             ("empty_mass_kg", self.empty_mass_kg),
             ("fuel_capacity_kg", self.fuel_capacity_kg),
             ("fuel_flow_idle_kgps", self.fuel_flow_idle_kgps),
@@ -228,7 +237,8 @@ impl AircraftSpec {
             ("stall_pitch_break", self.stall_pitch_break),
             ("stall_deficit_full", self.stall_deficit_full),
             ("stall_stick_g", self.stall_stick_g),
-            ("flap_max_speed_mps", self.flap_max_speed_mps),
+            ("flap_induced_factor", self.flap_induced_factor),
+            ("flap_control_q_factor", self.flap_control_q_factor),
             ("flap_rate", self.flap_rate),
             ("stall_time_constant_s", self.stall_time_constant_s),
         ];
@@ -262,6 +272,12 @@ impl AircraftSpec {
         }
         if !(0.0..=1.0).contains(&self.stall_control_factor) {
             return Err(err("stall_control_factor", "muss zwischen 0 und 1 liegen".into()));
+        }
+        if !(0.0..=1.0).contains(&self.flap_stall_softening) {
+            return Err(err("flap_stall_softening", "muss zwischen 0 und 1 liegen".into()));
+        }
+        if self.flap_induced_factor > 1.0 || self.flap_control_q_factor > 1.0 {
+            return Err(err("flap_induced_factor", "Klappenfaktoren dürfen höchstens 1 sein".into()));
         }
         if self.stall_deficit_full > 1.0 {
             return Err(err("stall_deficit_full", "muss höchstens 1 sein".into()));
@@ -339,7 +355,6 @@ mod tests {
         let clean = F29_SPEC.stall_speed_1g(m, 1.225, 0.0);
         let flaps = F29_SPEC.stall_speed_1g(m, 1.225, 1.0);
         assert!(flaps < 0.88 * clean && flaps > 0.7 * clean, "{flaps} vs {clean}");
-        assert!(F29_SPEC.flap_max_speed_mps > 1.6 * clean);
     }
 
     #[test]

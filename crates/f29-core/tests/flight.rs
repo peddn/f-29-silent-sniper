@@ -396,7 +396,7 @@ fn turbulence_only_near_the_ground() {
 }
 
 #[test]
-fn flaps_lower_stall_speed_add_drag_and_retract_when_fast() {
+fn flaps_lower_stall_speed_and_work_at_any_speed() {
     use f29_core::controls::flags;
     // Langsam mit Klappen: weniger Anstellwinkel nötig als ohne.
     let alpha_at = |with_flaps: bool| {
@@ -410,8 +410,59 @@ fn flaps_lower_stall_speed_add_drag_and_retract_when_fast() {
     assert!(flaps > 0.99, "Klappen nicht ausgefahren: {flaps}");
     assert!(alpha_flaps < alpha_clean - 0.03, "Klappen senken den Anstellwinkel kaum");
 
-    // Zu schnell: Klappen fahren selbsttätig ein.
-    let mut fast = high_sim(2_000.0, 200.0, 0.8);
+    // Auch schnell fahren sie aus (Manöverklappen).
+    let mut fast = high_sim(2_000.0, 220.0, 0.8);
     fly(&mut fast, 4.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, flags::FLAPS));
-    assert!(fast.flight_data().flaps < 1e-9, "Klappen bei 200 m/s ausgefahren");
+    assert!(fast.flight_data().flaps > 0.99, "Klappen bei 220 m/s nicht ausgefahren");
+}
+
+/// Schnell und am g-Begrenzer: Mit Klappen kostet die Kurve weniger Fahrt,
+/// geradeaus kosten sie etwas Fahrt.
+#[test]
+fn flaps_reduce_energy_loss_in_hard_turns() {
+    use f29_core::controls::flags;
+    let turn = |f: u8| {
+        let mut sim = high_sim(1_500.0, 230.0, 1.0);
+        for _ in 0..ticks(8.0) {
+            let fd = sim.flight_data();
+            let roll = ((80.0_f64.to_radians() - fd.roll) * 3.0).clamp(-1.0, 1.0);
+            sim.step(ControlFrame::from_analog(1.0, roll, 0.0, 1.0, f));
+        }
+        (sim.flight_data().tas_mps, sim.aircraft().stall)
+    };
+    let (v_clean, _) = turn(0);
+    let (v_flaps, stall_flaps) = turn(flags::FLAPS);
+    assert!(v_flaps > v_clean + 5.0, "mit Klappen {v_flaps:.0} m/s, ohne {v_clean:.0} m/s");
+    assert!(stall_flaps < 0.05, "Abriss mit Klappen: {stall_flaps}");
+
+    let cruise = |f: u8| {
+        let mut sim = high_sim(1_500.0, 200.0, 0.7);
+        fly(&mut sim, 20.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, f));
+        sim.flight_data().tas_mps
+    };
+    assert!(cruise(flags::FLAPS) < cruise(0) - 1.0, "Klappen kosten geradeaus keine Fahrt");
+}
+
+/// Langsam: Ohne Klappen kippt das Flugzeug bei halbem Zug ab, mit Klappen
+/// bleibt es beherrschbar (mehr Nickrate, kein Abkippen).
+#[test]
+fn flaps_make_slow_flight_controllable() {
+    use f29_core::controls::flags;
+    let probe = |f: u8| {
+        let mut sim = high_sim(1_500.0, 70.0, 0.8);
+        fly(&mut sim, 3.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, f));
+        let (mut q, mut min_pitch) = (0.0_f64, f64::MAX);
+        for i in 0..ticks(10.0) {
+            let pull = if i < ticks(4.0) { 0.6 } else { 0.0 };
+            sim.step(ControlFrame::from_analog(pull, 0.0, 0.0, 0.8, f));
+            q = q.max(sim.aircraft().body_rates.y);
+            min_pitch = min_pitch.min(sim.flight_data().pitch);
+        }
+        (q, min_pitch)
+    };
+    let (q_clean, nose_clean) = probe(0);
+    let (q_flaps, nose_flaps) = probe(flags::FLAPS);
+    assert!(q_flaps > 1.4 * q_clean, "Nickrate mit Klappen {q_flaps:.3}, ohne {q_clean:.3}");
+    assert!(nose_clean < -0.8, "ohne Klappen kein Abkippen: {:.0}°", nose_clean.to_degrees());
+    assert!(nose_flaps > -0.2, "mit Klappen kippt die Nase ab: {:.0}°", nose_flaps.to_degrees());
 }

@@ -79,7 +79,7 @@ Format jedes Eintrags:
 - **Unsere Werte:** `crates/f29-data/src/aircraft.rs` (`F29_SPEC`). Die Werte sind in
   der Größenordnung eines schweren zweistrahligen Angriffsflugzeugs ohne Nachbrenner
   gewählt und so abgestimmt, dass folgende Ziele erreicht werden:
-  - Abrissgeschwindigkeit im Horizontalflug ≈ 66 m/s (≈ 130 kt) auf Meereshöhe
+  - Abrissgeschwindigkeit im Horizontalflug ≈ 64 m/s (≈ 125 kt) auf Meereshöhe, volle Tanks
   - Schub/Gewicht ≈ 0,38: begrenztes Steigvermögen, ein steiler Steigflug endet im Abriss
   - hoher induzierter Widerstand: Eine harte Kurve kostet in 10 s mehr als 30 m/s Fahrt
   - Höchstgeschwindigkeit in Bodennähe ≈ Mach 0,8
@@ -107,6 +107,13 @@ Format jedes Eintrags:
     etwa +13 m/s bei Vollgas und −30 m/s im Leerlauf.
 
   Die Flugtests prüfen genau diese Eigenschaften.
+
+  *v0.1.8:* Laut Spieltest kosteten harte Kurven etwas zu viel Fahrt, und der
+  Abriss kam etwas zu früh. Deshalb: induzierter Widerstand −25 %, Abrisswinkel
+  17°→18°, Abriss über den Anstellwinkel setzt allmählicher ein, voller Zug
+  fordert 4,5 statt 5 g an. Unterhalb der Eckgeschwindigkeit (≈ 370 kt) reißt
+  voller Zug ohne Klappen weiterhin ab – das Flugzeug hat bewusst keinen
+  Anstellwinkelbegrenzer.
 
   *v0.1.6:* Die Masse setzt sich jetzt aus Leermasse und Treibstoff zusammen
   (M-009). Die oben genannten Werte gelten für volle Tanks; gegen Ende eines
@@ -277,6 +284,10 @@ Format jedes Eintrags:
 - **Unser Design:** Bewusst einfach wie im Original, ohne Federbeine:
   - Fahrwerk mit Ausfahrzeit (5 s), Widerstandsbeiwert, Rütteln über die
     Turbulenz oberhalb von ≈ 250 kt, Panel „GEAR DN/UP“ (blinkt in Bewegung).
+    *v0.1.8 (Spielerwunsch):* Das ausgefahrene Fahrwerk bremst spürbarer
+    (Widerstandsbeiwert fast verdoppelt) und rüttelt in der Luft immer leicht und
+    gleichbleibend, unabhängig von Höhe und Fahrt; über der Höchstfahrt kommt das
+    stärkere Rütteln dazu.
   - Rollmodus: Höhe auf den Boden geklemmt, keine Querlage, Lenken über Quer- und
     Seitenruder mit einer Drehrate, die mit der Fahrt abnimmt – auf der Stelle
     wenden geht. Rollreibung, Radbremse (Taste B) abhängig von der Radlast.
@@ -355,11 +366,28 @@ Format jedes Eintrags:
 - **Unser Design:** Physikalisch über einen zusätzlichen Auftriebsbeiwert
   (`flap_cl`) und Widerstandsbeiwert (`flap_cd`). Der höhere maximale
   Auftriebsbeiwert senkt die Abrissgeschwindigkeit von selbst. Die Klappen fahren
-  mit `flap_rate` aus; oberhalb von `flap_max_speed_mps` (≈ 250 kt) fahren sie
-  selbsttätig ein. Bedienung über Taste F, Anzeige „FLAPS“ im Instrumentenbrett.
+  mit `flap_rate` aus. Bedienung über Taste F, Anzeige „FLAPS“ im Instrumentenbrett.
+
+  *v0.1.8 – eigene Erweiterung, Spielerwunsch:* Die Klappen sind ein
+  Schlüsselelement für Langsamflug und Landung und als Manöverklappen bei jeder
+  Fahrt nutzbar (kein selbsttätiges Einfahren mehr):
+  - **Langsam:** Die Ruder wirken mit Klappen deutlich stärker
+    (`flap_control_q_factor`: Bezugsstaudruck × 0,35), ohne dass voller Zug
+    mehr g anfordert. Der Abriss wird entschärft (`flap_stall_softening`): kein
+    Abkippen der Nase, kaum Ruder- und Auftriebsverlust, allmählicher Einsatz.
+    Ohne Klappen bleibt der Langsamflug so tückisch wie bisher – für Landungen
+    sind Klappen praktisch Pflicht.
+  - **Schnell:** Weniger induzierter Widerstand (`flap_induced_factor` 0,6):
+    Harte Kurven kosten deutlich weniger Fahrt, Geradeausflug kostet etwas
+    Fahrt (`flap_cd`). Später (v0.2) erhöhen ausgefahrene Klappen den
+    Radarquerschnitt (M-020).
+  - Gemessen: Bei 135 kt und halbem Zug kippt das Flugzeug ohne Klappen auf
+    −78° ab; mit Klappen bleibt die Nase oben, die Nickrate ist doppelt so hoch,
+    die Rollrate bei 140 kt steigt von 44°/s auf 126°/s. Bei 450 kt und 8 s am
+    g-Begrenzer bleiben mit Klappen ≈ 25 kt mehr Fahrt.
 - **Unsere Werte:** `crates/f29-data/src/aircraft.rs` (Abrissgeschwindigkeit mit
-  Klappen ≈ 80 % von ohne).
-- **Status:** umgesetzt (v0.1.4)
+  Klappen ≈ 85 % von ohne).
+- **Status:** umgesetzt (v0.1.4, erweitert v0.1.8)
 
 ### M-008 Bodenkollisions-Abfanghilfe (geplant)
 
@@ -451,7 +479,8 @@ Format jedes Eintrags:
   Unterseite) plus Zuschläge für offenen Schacht und eigene Emissionen. Die Detektion
   folgt der Radargleichung (Reichweite ∝ RCS^¼) mit Sichtlinienprüfung gegen das Gelände.
   Erfassung als Zustandsmaschine (Suche → Verfolgung → Abschuss) mit Zufallsanteilen aus
-  einem eigenen RNG-Strom.
+  einem eigenen RNG-Strom. Ausgefahrene Klappen (M-007) und Fahrwerk erhöhen den
+  Radarquerschnitt – der Preis für die bessere Kurven- und Langsamflugleistung.
 - **Status:** geplant (v0.2)
 
 ### M-021 Boden-Luft-Bedrohungen

@@ -56,7 +56,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev pkg-config
 | `+` / `-` | rechter Stick vor/zurück | Schub stufenlos |
 | 1 … 9, 0, `^`/`` ` `` | | Schub 10 … 90 %, 100 %, Leerlauf |
 | B | B / Kreis | Luftbremse ein/aus; am Boden Radbremse |
-| F | X / Quadrat | Landeklappen ein/aus (fahren über ≈ 250 kt selbsttätig ein) |
+| F | X / Quadrat | Klappen ein/aus – bei jeder Fahrt: langsam gut steuerbar, schnell weniger Fahrtverlust in Kurven |
 | G | Y / Dreieck | Fahrwerk aus/ein (am Boden gesperrt) |
 | N | A / Kreuz | nächster Navigationspunkt |
 | F1 / F2 / V | Select | Cockpit / Verfolger / umschalten |
