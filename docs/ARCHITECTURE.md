@@ -32,6 +32,7 @@ kompiliert und testet ohne Grafikkarte, ohne Fenster und ohne externe Crates.
 | `f29-terrain` | Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung, Flugplätze (Platzwahl, Einebnung) |
 | `f29-core` | Flugmodell, Atmosphäre, Sim-Schleife, Navigation, Replays, Autopilot, deterministische Mathematik |
 | `f29-hud` | HUD und MFDs (Karte mit Höhenlinien, Ressourcen) als Liniensegmente, Vektorfont, SVG-Export |
+| `f29-audio` | Prozedurale Klangsynthese (Triebwerk, Systeme, Ereignisse), Formant-Sprachansagen, WAV-Ein-/Ausgabe |
 | `f29-render` | Terrain-Kachel-Meshes, Bahnen mit Markierungen und PAPI, Flugzeugmodell mit Fahrwerk, Satellitenkarte (Raster + kursbezogener Ausschnitt), Palette, NED → Y-up |
 | `f29-headless` | Simulation ohne Grafik: Demo, Replays, HUD als SVG, Höhenkarte, Benchmark |
 | `f29-app` | Fenster, Eingabe, Kameras, Terrain-Streaming, Post-Processing |

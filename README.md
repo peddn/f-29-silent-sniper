@@ -33,6 +33,10 @@ cargo run --release -p f29-app -- --seed 1234 --view chase
 # Luftstart statt Start auf der Bahn
 cargo run --release -p f29-app -- --start air
 
+# Lautstärke in Prozent (Standard 80) bzw. ganz ohne Ton
+cargo run --release -p f29-app -- --volume 50
+cargo run --release -p f29-app -- --no-sound
+
 # nach 10 s automatisch einen Screenshot speichern und beenden
 cargo run --release -p f29-app -- --screenshot bild.png --after 10
 
@@ -43,7 +47,7 @@ cargo test
 Unter **Linux** braucht Bevy einige Systempakete, z. B. für Debian/Ubuntu:
 
 ```sh
-sudo apt install libudev-dev libwayland-dev libxkbcommon-dev pkg-config
+sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-config
 ```
 
 ## Steuerung
@@ -70,6 +74,14 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev pkg-config
 | R | | Neustart (Flug wird als Replay gesichert) |
 | Esc | | Beenden (Flug wird als Replay gesichert) |
 
+## Klang
+
+Alle Klänge entstehen zur Laufzeit per Synthese im Retro-Stil, es gibt keine
+Klangdateien. Die Abrisswarnung ist eine gesprochene Ansage aus einem kleinen
+eigenen Sprachsynthesizer. Wer eine eigene Aufnahme möchte, legt sie als
+16-Bit-PCM-WAV unter `crates/f29-app/assets/sounds/stall.wav` ab. Hörproben
+ohne Spiel: `cargo run -p f29-headless -- sound --out sounds`.
+
 ## Werkzeuge ohne Grafik
 
 ```sh
@@ -79,6 +91,7 @@ cargo run --release -p f29-headless -- replay replays/last.replay # letzter Flug
 cargo run --release -p f29-headless -- hud-svg --seconds 30 --out hud.svg
 cargo run --release -p f29-headless -- terrain --seed 7 --out karte.ppm
 cargo run --release -p f29-headless -- airfields --seed 7          # Flugplätze und Route
+cargo run --release -p f29-headless -- sound --out sounds          # Klänge als WAV-Hörproben
 cargo run --release -p f29-headless -- bench
 ```
 
@@ -91,7 +104,8 @@ crates/
   f29-core/      Simulationskern: Flugmodell, fester Tick, Replays – keine Engine
   f29-hud/       HUD und Instrumente als Vektor-Display-Liste
   f29-render/    engine-neutrale Geometrie: Terrain-Meshes, Modell, Palette
-  f29-headless/  Kommandozeile: Demo, Replays, HUD-SVG, Höhenkarte
+  f29-audio/     prozedurale Klangsynthese und Sprachansagen – keine Engine
+  f29-headless/  Kommandozeile: Demo, Replays, HUD-SVG, Höhenkarte, WAV-Hörproben
   f29-app/       Spiel (Bevy): Fenster, Eingabe, Kameras, Streaming, Retro-Shader
 docs/
   ARCHITECTURE.md  Aufbau, Koordinatensysteme, Determinismus, Teststrategie
@@ -125,6 +139,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Instrumentenbrett mit zwei MFDs: Karte (Gitter/Satellit, Flugrichtung oben,
       zoombar) und Ressourcen (Treibstoff, Waffenstationen); Platz für die
       Stealth-/Radarimpuls-Anzeige (v0.1.10); Schubhebel, Konfiguration im HUD (v0.1.11)
+- [x] Klang: prozedurale Retro-Synthese (Triebwerk, Fahrwerk, Klappen, Luftbremse,
+      Aufsetzen, Absturz), gesprochene Abrisswarnung (v0.1.12)
 - [ ] Weitere MFD-Seiten: Triebwerk, künstlicher Horizont, Systeme
 - [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
 
@@ -156,7 +172,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### v0.6: Präsentation
 - [ ] Menüs, Briefing- und Debriefing-Bildschirme, Karte
-- [ ] Klang: Triebwerk, Warnungen, Waffen
+- [ ] Klang: Waffen, Radarwarnung; Musik im Startbildschirm
 - [ ] Einstellungen, frei belegbare Tasten, Joystick/HOTAS
 
 ### v1.0: Vollständige Karriere

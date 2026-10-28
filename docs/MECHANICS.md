@@ -470,6 +470,42 @@ Format jedes Eintrags:
     HUD).
 - **Status:** umgesetzt (v0.1.10)
 
+### M-060 Klang
+
+- **Verhalten:** Das Original nutzt einen eigenen AdLib-Treiber (FM-Synthese).
+  Das Triebwerk bekommt laufend Fahrt und Schub als Tonhöhe übergeben;
+  Ereignisse wie Aufsetzen und Abrisswarnung sind kurze, nummerierte
+  Klangmuster.
+- **Referenzstelle:** f19re `src/egflight.c` (`audio_setEnginePitch(Fahrt,
+  Schub)`, Aufrufe von `makeSound` bei Aufsetzen und Abriss), `src/asound.c`
+  (Treiber, bisher nur in Bruchstücken rekonstruiert).
+- **Unser Design:** Eigene prozedurale Synthese im Crate `f29-audio`, keine
+  Klangdateien, keine fremden Aufnahmen. Engine-neutral: Ein `Synth` erzeugt aus
+  einer Momentaufnahme der Simulation einen Mono-Datenstrom; Bevy spielt ihn als
+  eigene Audioquelle ab, WAV-Hörproben entstehen ohne Soundkarte
+  (`f29-headless sound`). Charakter: klassisch-retro, aber zurückhaltend.
+  - **Triebwerk:** tiefpassgefiltertes Rauschen (heller und lauter mit dem
+    Schub), zwei leicht verstimmte, weich gefilterte Rechtecktöne mit der
+    Drehzahl als Tonhöhe, leises Turbinenpfeifen. Bei Flameout läuft es langsam aus.
+  - **Wind** wächst mit dem Quadrat der Fahrt, die Luftbremse verstärkt ihn;
+    **Rollgeräusch** am Boden.
+  - **Fahrwerk:** Motorbrummen beim Fahren, dumpfer Schlag beim Verriegeln.
+    **Klappen:** Surren, Klick am Ende. **Luftbremse:** Zischen beim Aus- und
+    Einfahren.
+  - **Aufsetzen:** Reifenquietschen und Schlag, bei harter Landung lauter.
+    **Absturz:** Krachen; das Triebwerk verstummt.
+  - **Abrisswarnung:** gesprochenes „STALL“ alle 1,7 s, solange die Warnung
+    anliegt. Die Stimme kommt aus einem kleinen Formant-Synthesizer (Laute S, T,
+    AO, L; Stimmquelle durch drei Formant-Resonatoren, Zischlaute aus gefiltertem
+    Rauschen) mit grober Abtastung und Quantisierung wie bei frühen
+    Sprachchips. Sie lässt sich durch eine eigene Aufnahme
+    (`assets/sounds/stall.wav`) ersetzen.
+  - Pause schaltet weich stumm. Startparameter `--volume 0..100` und
+    `--no-sound` (dann wird kein Audiogerät geöffnet).
+  - Musik (z. B. im Startbildschirm) kommt später als eigener Kanal über Bevys
+    Dateiwiedergabe dazu und berührt den Synthesizer nicht.
+- **Status:** umgesetzt (v0.1.12)
+
 ### M-002 Prozedurales Gelände
 
 - **Verhalten:** Das Original verwendet handgebaute Einsatzgebiete.

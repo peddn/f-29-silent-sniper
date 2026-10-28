@@ -9,6 +9,7 @@
 //!
 //! ```text
 //! f29-silent-sniper [--seed N] [--view cockpit|chase] [--start runway|air]
+//!                   [--volume 0..100] [--no-sound]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
 
@@ -19,6 +20,7 @@ mod input;
 mod mfd;
 mod retro;
 mod sim;
+mod sound;
 mod terrain;
 mod view;
 
@@ -41,35 +43,48 @@ fn main() {
     if arg(&args, "--view").as_deref() == Some("chase") {
         view_settings.mode = view::ViewMode::Chase;
     }
+    // Klang: Lautstärke in Prozent, `--no-sound` schaltet das Audiogerät ganz ab.
+    let volume = if args.iter().any(|a| a == "--no-sound") {
+        0.0
+    } else {
+        arg(&args, "--volume")
+            .and_then(|v| v.parse::<f32>().ok())
+            .map_or(0.8, |v| (v / 100.0).clamp(0.0, 1.0))
+    };
     let auto_capture = arg(&args, "--screenshot").map(|path| capture::AutoCapture {
         path,
         after_s: arg(&args, "--after").and_then(|v| v.parse().ok()).unwrap_or(8.0),
     });
 
-    App::new()
-        .insert_resource(ClearColor(view::sky_color()))
-        .insert_resource(view_settings)
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "F-29 Silent Sniper".into(),
-                resolution: (1280, 800).into(),
-                present_mode: PresentMode::AutoVsync,
-                ..default()
-            }),
+    let window = WindowPlugin {
+        primary_window: Some(Window {
+            title: "F-29 Silent Sniper".into(),
+            resolution: (1280, 800).into(),
+            present_mode: PresentMode::AutoVsync,
             ..default()
-        }))
-        .add_plugins((
-            sim::SimPlugin { config },
-            airfield::AirfieldPlugin,
-            input::InputPlugin,
-            view::ViewPlugin,
-            terrain::TerrainPlugin,
-            hud::HudPlugin,
-            mfd::MfdPlugin,
-            retro::RetroPlugin,
-            capture::CapturePlugin { auto: auto_capture },
-        ))
-        .run();
+        }),
+        ..default()
+    };
+    let mut app = App::new();
+    app.insert_resource(ClearColor(view::sky_color())).insert_resource(view_settings);
+    if volume > 0.0 {
+        app.add_plugins(DefaultPlugins.set(window)).add_plugins(sound::SoundPlugin { volume });
+    } else {
+        // Ohne Klang wird auch kein Audiogerät geöffnet.
+        app.add_plugins(DefaultPlugins.set(window).disable::<bevy::audio::AudioPlugin>());
+    }
+    app.add_plugins((
+        sim::SimPlugin { config },
+        airfield::AirfieldPlugin,
+        input::InputPlugin,
+        view::ViewPlugin,
+        terrain::TerrainPlugin,
+        hud::HudPlugin,
+        mfd::MfdPlugin,
+        retro::RetroPlugin,
+        capture::CapturePlugin { auto: auto_capture },
+    ))
+    .run();
 }
 
 /// Wert nach einem Schalter, z. B. `--seed 42`.

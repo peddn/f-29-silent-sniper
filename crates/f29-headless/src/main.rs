@@ -6,6 +6,7 @@
 //! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N]
+//! f29-headless sound    [--out VERZEICHNIS]
 //! f29-headless bench    [--seconds S]
 //! ```
 
@@ -16,6 +17,8 @@ use f29_core::{DT, Sim, SimConfig, Status, TICK_HZ, detmath, units};
 use f29_hud::{HudOptions, ScreenLayout};
 use f29_terrain::Surface;
 use std::process::ExitCode;
+
+mod sound;
 use std::time::Instant;
 
 const USAGE: &str = "\
@@ -29,6 +32,7 @@ Befehle:
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N]                                 Flugplätze und Route auflisten
+  sound    [--out VERZEICHNIS]                         Klänge als WAV-Hörproben rendern
   bench    [--seconds S]                               Ticks pro Sekunde messen
 ";
 
@@ -91,6 +95,7 @@ fn main() -> ExitCode {
         "terrain" => terrain(&args),
         "bench" => bench(&args),
         "airfields" => airfields(&args),
+        "sound" => sound(&args),
         "help" | "--help" | "-h" => {
             print!("{USAGE}");
             Ok(())
@@ -337,6 +342,14 @@ fn airfields(args: &Args) -> Result<(), String> {
     println!("Route:");
     for sp in sim.route() {
         println!("  {:<8} N {:.1} km  E {:.1} km", sp.name, sp.north / 1_000.0, sp.east / 1_000.0);
+    }
+    Ok(())
+}
+
+fn sound(args: &Args) -> Result<(), String> {
+    let dir = std::path::PathBuf::from(args.opt("out").unwrap_or("sounds"));
+    for path in sound::render_all(&dir)? {
+        println!("{path}");
     }
     Ok(())
 }
