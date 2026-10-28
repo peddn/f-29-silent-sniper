@@ -15,7 +15,7 @@ impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
         app.init_gizmo_group::<HudGizmos>()
             .add_systems(Startup, setup)
-            .add_systems(Update, draw_hud.in_set(SimSystems::Present));
+            .add_systems(Update, (scale_line_width, draw_hud).chain().in_set(SimSystems::Present));
     }
 }
 
@@ -51,12 +51,23 @@ fn ink_color(ink: Ink) -> Color {
     }
 }
 
+/// Linienstärke wächst mit der Auflösung – das HUD sieht überall gleich aus.
+///
+/// Eigenes System, weil `Gizmos` den `GizmoConfigStore` selbst liest und
+/// Bevy zwei Zugriffe auf dieselbe Ressource in einem System ablehnt.
+fn scale_line_width(
+    window: Single<&Window, With<PrimaryWindow>>,
+    mut config_store: ResMut<GizmoConfigStore>,
+) {
+    let (config, _) = config_store.config_mut::<HudGizmos>();
+    config.line.width = (window.physical_height() as f32 / 420.0).clamp(1.0, 6.0);
+}
+
 fn draw_hud(
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
     view: Res<ViewSettings>,
     mut gizmos: Gizmos<HudGizmos>,
-    mut config_store: ResMut<GizmoConfigStore>,
     mut panel: Single<(&mut Transform, &mut Sprite), With<PanelBackground>>,
 ) {
     let (w, h) = (window.width(), window.height());
@@ -64,10 +75,6 @@ fn draw_hud(
         return;
     }
     let layout = layout_for(&window);
-
-    // Linienstärke wächst mit der Auflösung – das HUD sieht überall gleich aus.
-    let (config, _) = config_store.config_mut::<HudGizmos>();
-    config.line.width = (window.physical_height() as f32 / 420.0).clamp(1.0, 6.0);
 
     // Hintergrund des Instrumentenbretts
     let panel_h = layout.panel_fraction * h;
