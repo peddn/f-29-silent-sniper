@@ -355,3 +355,77 @@ fn pull_up_warning_in_steep_dive_near_ground() {
     }
     assert!(warned, "keine PULL-UP-Warnung vor dem Aufschlag");
 }
+
+#[test]
+fn neutral_stick_holds_altitude_even_when_speed_changes() {
+    // Waagerecht, Knüppel los, Gas weg und wieder auf: die Höhe bleibt.
+    let mut sim = high_sim(4_000.0, 200.0, 0.6);
+    let h0 = sim.flight_data().altitude_m;
+    let mut max_dev: f64 = 0.0;
+    for t in 0..ticks(60.0) {
+        let thr = if t < ticks(20.0) { 0.2 } else { 0.9 };
+        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, thr, 0));
+        max_dev = max_dev.max((sim.flight_data().altitude_m - h0).abs());
+    }
+    assert!(max_dev < 25.0, "Höhenabweichung {max_dev:.1} m im Geradeausflug");
+}
+
+#[test]
+fn throttle_changes_speed_noticeably() {
+    // 10 s Vollgas gegen 10 s Leerlauf aus demselben Reiseflug.
+    let run = |thr: f64| {
+        let mut sim = high_sim(3_000.0, 200.0, 0.55);
+        fly(&mut sim, 10.0, ControlFrame::from_analog(0.0, 0.0, 0.0, thr, 0));
+        sim.flight_data().tas_mps
+    };
+    let (full, idle) = (run(1.0), run(0.0));
+    assert!(full - 200.0 > 8.0, "Vollgas: nur +{:.1} m/s in 10 s", full - 200.0);
+    assert!(200.0 - idle > 25.0, "Leerlauf: nur −{:.1} m/s in 10 s", 200.0 - idle);
+}
+
+#[test]
+fn turbulence_only_near_the_ground() {
+    let roll_activity = |agl_m: f64| {
+        let mut sim = Sim::new(SimConfig {
+            seed: SEED,
+            spawn: Spawn {
+                altitude: 0.0,
+                min_clearance: agl_m,
+                speed: 220.0,
+                throttle: 0.6,
+                ..Spawn::default()
+            },
+        });
+        let mut sum = 0.0;
+        for _ in 0..ticks(3.0) {
+            sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.6, 0));
+            sum += sim.turbulence().x.abs();
+        }
+        sum / ticks(3.0) as f64
+    };
+    let low = roll_activity(40.0);
+    let high = roll_activity(600.0);
+    assert!(high < 1e-12, "Turbulenz in 600 m: {high}");
+    assert!(low > 0.05, "kaum Turbulenz in 40 m über Grund: {low:.3} rad/s");
+}
+
+#[test]
+fn flaps_lower_stall_speed_add_drag_and_retract_when_fast() {
+    use f29_core::controls::flags;
+    // Langsam mit Klappen: weniger Anstellwinkel nötig als ohne.
+    let alpha_at = |with_flaps: bool| {
+        let mut sim = high_sim(2_000.0, 95.0, 0.8);
+        let f = if with_flaps { flags::FLAPS } else { 0 };
+        fly(&mut sim, 6.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, f));
+        (sim.flight_data().alpha, sim.flight_data().flaps)
+    };
+    let (alpha_clean, _) = alpha_at(false);
+    let (alpha_flaps, flaps) = alpha_at(true);
+    assert!(flaps > 0.99, "Klappen nicht ausgefahren: {flaps}");
+    assert!(alpha_flaps < alpha_clean - 0.03, "Klappen senken den Anstellwinkel kaum");
+
+    // Zu schnell: Klappen fahren selbsttätig ein.
+    let mut fast = high_sim(2_000.0, 200.0, 0.8);
+    fly(&mut fast, 4.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, flags::FLAPS));
+    assert!(fast.flight_data().flaps < 1e-9, "Klappen bei 200 m/s ausgefahren");
+}

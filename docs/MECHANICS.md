@@ -91,6 +91,15 @@ Format jedes Eintrags:
   Widerstand angepasst, weil Kurven zu wenig Energie kosteten und der Abriss nicht
   spürbar war.
 
+  *v0.1.4:* Laut Spieltest verlor das Flugzeug im Geradeausflug langsam Höhe, und
+  der Schub wirkte kaum. Deshalb gibt es jetzt:
+  - **Bahnhaltung:** Bei neutralem Knüppel und kleiner Querlage hält die
+    Flugsteuerung den Bahnwinkel; nahe der Horizontalen rastet sie auf waagerecht
+    ein. Kurven mit Querlage sinken weiterhin, wenn man nicht zieht.
+  - **Schnelleres Triebwerk und Staudruckwiderstand im Leerlauf:** Gas wegnehmen
+    bremst deutlich, und der Maximalschub ist etwas höher. In 10 s ergeben sich
+    etwa +13 m/s bei Vollgas und −30 m/s im Leerlauf.
+
   Die Flugtests prüfen genau diese Eigenschaften.
 - **Status:** umgesetzt (v0.1)
 
@@ -178,7 +187,54 @@ Format jedes Eintrags:
   `stall_strength_grows_with_speed_deficit`, `stall_strength_changes_smoothly`,
   `hard_pull_stalls_sinks_and_recovers_when_released`, `hard_turn_bleeds_energy`,
   `steep_zoom_climb_ends_in_stall` und `stall_warning_precedes_stall`. Keine Werte aus der Referenz übernommen.
-- **Status:** umgesetzt (v0.1.3)
+  *v0.1.4:* Laut Spieltest durfte der Abriss noch aggressiver sein. Deshalb gibt es
+  jetzt einen tieferen Auftriebseinbruch, schnelleres Abkippen, früher volle
+  Stärke und noch schwächere Ruder.
+- **Status:** umgesetzt (v0.1.4)
+
+### M-006 Turbulenz in Bodennähe
+
+- **Verhalten:** Unterhalb von etwa 500 ft beginnt das Flugzeug zu wackeln. Die
+  Stärke wächst, je tiefer und je schneller man fliegt. Außerdem gibt es
+  Zusatz-Schütteln bei ausgefahrenem Fahrwerk und hoher Fahrt sowie bei Schäden.
+  Ausgefahrene Landeklappen halbieren das Wackeln. Auf der leichtesten
+  Flug-Schwierigkeitsstufe ist das Bodennähe-Wackeln abgeschaltet.
+- **Referenzstelle:** f19re `src/egflight.c`, `stepFlightModel`: Zufallsanteil
+  auf Roll- und Nickeingabe; um die Querachse halb so stark wie um die Längsachse.
+- **Unser Design:** Wir verwenden die **Höhe über Grund** (Radarhöhe), weil unser
+  Gelände echte Berge hat; das Original misst über einem praktisch ebenen Boden.
+  Störraten auf Rollen und Nicken (Nicken halb), proportional zu
+  `(1 − Höhe/500 ft) × Fahrt`, Klappen halbieren sie. Die Zufallszahlen kommen aus
+  einem eigenen deterministischen RNG-Strom, damit Replays exakt bleiben. Sie
+  werden geglättet, damit es rüttelt statt zittert. Schwierigkeitsstufen,
+  Fahrwerk und Schäden folgen später.
+- **Unsere Werte:** `TURBULENCE_*` in `crates/f29-core/src/sim.rs`.
+- **Status:** umgesetzt (v0.1.4)
+
+### M-007 Landeklappen
+
+- **Verhalten:** Ausgefahrene Landeklappen senken die Abrissgeschwindigkeit um
+  etwa ein Viertel, kosten etwas Fahrt und halbieren die Turbulenz.
+- **Referenzstelle:** f19re `src/egflight.c` (Klappen-Bit der Flugzeugschalter in
+  der Fahrt- und Abrissberechnung) und `src/egkeys.c` (Tastenzuordnung).
+- **Unser Design:** Physikalisch über einen zusätzlichen Auftriebsbeiwert
+  (`flap_cl`) und Widerstandsbeiwert (`flap_cd`). Der höhere maximale
+  Auftriebsbeiwert senkt die Abrissgeschwindigkeit von selbst. Die Klappen fahren
+  mit `flap_rate` aus; oberhalb von `flap_max_speed_mps` (≈ 250 kt) fahren sie
+  selbsttätig ein. Bedienung über Taste F, Anzeige „FLAPS“ im Instrumentenbrett.
+- **Unsere Werte:** `crates/f29-data/src/aircraft.rs` (Abrissgeschwindigkeit mit
+  Klappen ≈ 80 % von ohne).
+- **Status:** umgesetzt (v0.1.4)
+
+### M-008 Bodenkollisions-Abfanghilfe (geplant)
+
+- **Verhalten:** Auf leichten Schwierigkeitsstufen zieht das Original das
+  Flugzeug in sehr geringer Höhe selbsttätig hoch, sofern der Pilot nicht drückt,
+  die Querlage mäßig ist und die Fahrt über der Abrissgeschwindigkeit liegt.
+- **Referenzstelle:** f19re `src/egflight.c`, `stepFlightModel`.
+- **Unser Design:** Kommt mit den Schwierigkeitsstufen. Dann gegen die
+  Radarhöhe und mit Vorausschau auf das Gelände.
+- **Status:** geplant
 
 ### M-005 Höhenanzeige
 

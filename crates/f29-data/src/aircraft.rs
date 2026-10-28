@@ -21,6 +21,9 @@ pub struct AircraftSpec {
     pub thrust_density_exponent: f64,
     /// Zeitkonstante des Triebwerkshochlaufs.
     pub engine_spool_time_s: f64,
+    /// Staudruckwiderstand des Triebwerks (N pro m/s Fahrt) im Leerlauf;
+    /// nimmt mit steigender Drehzahl ab. Sorgt dafür, dass Gas wegnehmen bremst.
+    pub idle_ram_drag: f64,
 
     // --- Aerodynamik ---
     /// Auftriebsbeiwert bei Anstellwinkel 0.
@@ -39,6 +42,16 @@ pub struct AircraftSpec {
     pub airbrake_cd: f64,
     /// Seitenkraftbeiwert pro rad Schiebewinkel.
     pub cy_beta: f64,
+
+    // --- Landeklappen ---
+    /// Zusätzlicher Auftriebsbeiwert bei voll ausgefahrenen Klappen.
+    pub flap_cl: f64,
+    /// Zusätzlicher Widerstandsbeiwert bei voll ausgefahrenen Klappen.
+    pub flap_cd: f64,
+    /// Oberhalb dieser Fahrt fahren die Klappen selbsttätig ein (m/s).
+    pub flap_max_speed_mps: f64,
+    /// Aus-/Einfahrgeschwindigkeit der Klappen (Anteil pro s).
+    pub flap_rate: f64,
 
     // --- Flugsteuerung (Fly-by-Wire, ratenkommandiert) ---
     /// Maximale Rollrate bei voller Ruderwirksamkeit.
@@ -90,9 +103,10 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     mass_kg: 21_500.0,
     wing_area_m2: 70.0,
 
-    thrust_max_n: 80_000.0,
+    thrust_max_n: 92_000.0,
     thrust_density_exponent: 0.75,
-    engine_spool_time_s: 2.5,
+    engine_spool_time_s: 1.2,
+    idle_ram_drag: 200.0,
 
     cl0: 0.04,
     cl_alpha: 3.6,
@@ -103,6 +117,11 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     airbrake_cd: 0.07,
     cy_beta: 0.65,
 
+    flap_cl: 0.40,
+    flap_cd: 0.05,
+    flap_max_speed_mps: 130.0,
+    flap_rate: 0.5,
+
     max_roll_rate: 2.6,
     max_pitch_rate: 0.45,
     max_yaw_rate: 0.20,
@@ -111,12 +130,12 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     g_limit_pos: 7.0,
     g_limit_neg: 2.5,
     alpha_warning_rad: 0.25,
-    stall_deficit_full: 0.3,
+    stall_deficit_full: 0.22,
     stall_stick_g: 4.0,
     stall_time_constant_s: 0.3,
-    stall_pitch_break: 1.0,
-    stall_control_factor: 0.15,
-    stall_lift_factor: 0.35,
+    stall_pitch_break: 1.35,
+    stall_control_factor: 0.12,
+    stall_lift_factor: 0.25,
     yaw_damper_gain: 2.5,
 };
 
@@ -128,7 +147,7 @@ impl AircraftSpec {
             field,
             reason,
         };
-        let positive: [(&'static str, f64); 23] = [
+        let positive: [(&'static str, f64); 25] = [
             ("mass_kg", self.mass_kg),
             ("wing_area_m2", self.wing_area_m2),
             ("thrust_max_n", self.thrust_max_n),
@@ -151,11 +170,20 @@ impl AircraftSpec {
             ("stall_pitch_break", self.stall_pitch_break),
             ("stall_deficit_full", self.stall_deficit_full),
             ("stall_stick_g", self.stall_stick_g),
+            ("flap_max_speed_mps", self.flap_max_speed_mps),
+            ("flap_rate", self.flap_rate),
             ("stall_time_constant_s", self.stall_time_constant_s),
         ];
         for (field, value) in positive {
             if !(value.is_finite() && value > 0.0) {
                 return Err(err(field, format!("muss endlich und > 0 sein, ist {value}")));
+            }
+        }
+        for (field, value) in
+            [("idle_ram_drag", self.idle_ram_drag), ("flap_cl", self.flap_cl), ("flap_cd", self.flap_cd)]
+        {
+            if !(value.is_finite() && value >= 0.0) {
+                return Err(err(field, "muss >= 0 sein".into()));
             }
         }
         if !(self.airbrake_cd.is_finite() && self.airbrake_cd >= 0.0) {
@@ -188,9 +216,11 @@ impl AircraftSpec {
         Ok(())
     }
 
-    /// Abrissgeschwindigkeit im 1-g-Horizontalflug bei Luftdichte `density` (m/s).
-    pub fn stall_speed_1g(&self, density: f64) -> f64 {
-        (2.0 * self.mass_kg * 9.806_65 / (density * self.wing_area_m2 * self.cl_max())).sqrt()
+    /// Abrissgeschwindigkeit im 1-g-Horizontalflug bei Luftdichte `density`
+    /// und Klappenstellung `flaps` (0..1), in m/s.
+    pub fn stall_speed_1g(&self, density: f64, flaps: f64) -> f64 {
+        let cl_max = self.cl_max() + self.flap_cl * flaps.clamp(0.0, 1.0);
+        (2.0 * self.mass_kg * 9.806_65 / (density * self.wing_area_m2 * cl_max)).sqrt()
     }
 
     /// Maximaler Auftriebsbeiwert (am Abreißpunkt).
@@ -225,6 +255,14 @@ mod tests {
     fn thrust_to_weight_is_low() {
         let tw = F29_SPEC.thrust_max_n / (F29_SPEC.mass_kg * 9.80665);
         assert!((0.3..0.45).contains(&tw), "Schub/Gewicht {tw}");
+    }
+
+    #[test]
+    fn flaps_lower_stall_speed_noticeably() {
+        let clean = F29_SPEC.stall_speed_1g(1.225, 0.0);
+        let flaps = F29_SPEC.stall_speed_1g(1.225, 1.0);
+        assert!(flaps < 0.88 * clean && flaps > 0.7 * clean, "{flaps} vs {clean}");
+        assert!(F29_SPEC.flap_max_speed_mps > 1.6 * clean);
     }
 
     #[test]

@@ -25,13 +25,22 @@ pub struct PilotInput {
     pub yaw: f64,
     pub throttle: f64,
     pub airbrake: bool,
+    pub flaps: bool,
     /// Wird beim nächsten Tick einmalig gesendet.
     next_steerpoint: bool,
 }
 
 impl Default for PilotInput {
     fn default() -> Self {
-        Self { pitch: 0.0, roll: 0.0, yaw: 0.0, throttle: 0.55, airbrake: false, next_steerpoint: false }
+        Self {
+            pitch: 0.0,
+            roll: 0.0,
+            yaw: 0.0,
+            throttle: 0.55,
+            airbrake: false,
+            flaps: false,
+            next_steerpoint: false,
+        }
     }
 }
 
@@ -41,6 +50,9 @@ impl PilotInput {
         let mut f = 0;
         if self.airbrake {
             f |= flags::AIRBRAKE;
+        }
+        if self.flaps {
+            f |= flags::FLAPS;
         }
         if std::mem::take(&mut self.next_steerpoint) {
             f |= flags::NEXT_STEERPOINT;
@@ -105,6 +117,9 @@ fn flight_input(
     }
     if keys.just_pressed(KeyCode::KeyB) {
         pilot.airbrake = !pilot.airbrake;
+    }
+    if keys.just_pressed(KeyCode::KeyF) {
+        pilot.flaps = !pilot.flaps;
     }
     if keys.just_pressed(KeyCode::KeyN) {
         pilot.next_steerpoint = true;

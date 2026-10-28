@@ -52,6 +52,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev pkg-config
 | `+` / `-` | rechter Stick vor/zurück | Schub stufenlos |
 | 1 … 9, 0, `^`/`` ` `` | | Schub 10 … 90 %, 100 %, Leerlauf |
 | B | B / Kreis | Luftbremse ein/aus |
+| F | | Landeklappen ein/aus (fahren über ≈ 250 kt selbsttätig ein) |
 | N | A / Kreuz | nächster Navigationspunkt |
 | F1 / F2 / V | Select | Cockpit / Verfolger / umschalten |
 | H | | HUD ein/aus |
@@ -108,6 +109,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Erster Spieltest auf echter Hardware (Linux, AMD Radeon, Vulkan)
 - [x] Feinschliff Flugverhalten nach erstem Spielerfeedback (v0.1.1)
 - [x] Radarhöhe über Grund immer im HUD
+- [x] Bahnhaltung bei losgelassenem Knüppel, Turbulenz in Bodennähe, Landeklappen (v0.1.4)
 
 ### v0.2: Angriff und Tarnung
 - [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD

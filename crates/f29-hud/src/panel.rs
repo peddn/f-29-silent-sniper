@@ -219,11 +219,11 @@ fn attitude_indicator(dl: &mut DisplayList, fd: &FlightData, c: [f32; 2], r: f32
     dl.text_mid([c[0], c[1] - r - TXT], TXT_SMALL, Align::Center, "ADI", Ink::Panel);
 }
 
-/// Linke Spalte: Schub, Luftbremse, g-Messer.
+/// Linke Spalte: Schub, g-Messer, Anstellwinkel, Luftbremse, Klappen.
 fn left_column(dl: &mut DisplayList, fd: &FlightData, top: [f32; 2], ph: f32) {
     let x = top[0];
-    let mut y = top[1] - ph * 0.2;
-    let step = ph * 0.17;
+    let mut y = top[1] - ph * 0.16;
+    let step = ph * 0.16;
     let mut row = |dl: &mut DisplayList, txt: &str, ink: Ink| {
         dl.text_mid([x, y], TXT, Align::Right, txt, ink);
         y -= step;
@@ -233,6 +233,8 @@ fn left_column(dl: &mut DisplayList, fd: &FlightData, top: [f32; 2], ph: f32) {
     row(dl, &format!("AOA {:>4.1}", fd.alpha.to_degrees()), Ink::Panel);
     let brake_ink = if fd.airbrake > 0.05 { Ink::Warning } else { Ink::PanelDim };
     row(dl, "BRAKE", brake_ink);
+    let flaps_ink = if fd.flaps > 0.05 { Ink::Needle } else { Ink::PanelDim };
+    row(dl, "FLAPS", flaps_ink);
 }
 
 /// Rechte Spalte: Missionszeit und Warnleuchten.

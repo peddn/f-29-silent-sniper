@@ -49,6 +49,12 @@ pub struct AircraftState {
     pub airbrake: f64,
     /// Abrissstärke 0..1 (geglättet aus dem Fahrtdefizit, siehe Moduldoku).
     pub stall: f64,
+    /// Landeklappen 0..1.
+    pub flaps: f64,
+    /// Bahnhaltung aktiv (Knüppel neutral, wenig Querlage).
+    pub path_hold_active: bool,
+    /// Gehaltener Bahnwinkel (rad), gültig wenn `path_hold_active`.
+    pub path_hold: f64,
 }
 
 impl AircraftState {
@@ -63,6 +69,9 @@ impl AircraftState {
             engine: 0.6,
             airbrake: 0.0,
             stall: 0.0,
+            flaps: 0.0,
+            path_hold_active: false,
+            path_hold: 0.0,
         }
     }
 
@@ -83,6 +92,8 @@ impl AircraftState {
             && self.engine.is_finite()
             && self.airbrake.is_finite()
             && self.stall.is_finite()
+            && self.flaps.is_finite()
+            && self.path_hold.is_finite()
     }
 }
 
@@ -111,6 +122,15 @@ const MIN_FBW_SPEED: f64 = 40.0;
 /// Wie schnell sich die Flugbahn bei vollem Abriss zur Nase dreht (1/s).
 /// Das Flugzeug fällt dadurch der Nase nach, statt flach durchzusacken.
 const STALL_PATH_ALIGN: f64 = 1.6;
+/// Bahnhaltung: Verstärkungen und maximale Korrekturrate (rad/s).
+const PATH_HOLD_KP: f64 = 0.8;
+const PATH_HOLD_KD: f64 = 0.9;
+const PATH_HOLD_MAX_RATE: f64 = 0.12;
+/// Bahnhaltung nur bei kleiner Querlage (rad) und neutralem Knüppel.
+const PATH_HOLD_MAX_BANK: f64 = 0.26;
+const PATH_HOLD_STICK_DEADBAND: f64 = 0.03;
+/// Bahnwinkel, unterhalb dessen die Bahnhaltung auf exakt horizontal einrastet (rad).
+const PATH_HOLD_LEVEL_SNAP: f64 = 0.05;
 /// Anstellwinkel jenseits des Abrisswinkels, bei dem der Abriss voll ist (rad).
 const STALL_ALPHA_FULL: f64 = 0.15;
 /// Ab diesem Winkel zur Senkrechten (rad) kippt die Nase im Abriss nicht weiter.
@@ -154,16 +174,19 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
     let air = atmosphere::isa(s.altitude());
     let vb = s.attitude.inverse_rotate(s.velocity);
     let tas = vb.length();
-    let thrust =
+    // Nettoschub: Bruttoschub minus Staudruckwiderstand des Triebwerks, der bei
+    // niedriger Drehzahl am größten ist – Gas wegnehmen bremst dadurch spürbar.
+    let gross =
         spec.thrust_max_n * s.engine * detmath::powf(air.density / RHO0, spec.thrust_density_exponent);
+    let thrust = gross - spec.idle_ram_drag * s.velocity.length() * (1.0 - s.engine);
     if tas < MIN_AERO_SPEED {
         return AeroData { tas, density: air.density, thrust, load_factor: 0.0, ..AeroData::default() };
     }
     let alpha = detmath::atan2(vb.z, vb.x);
     let beta = detmath::asin(vb.y / tas);
     let qbar = 0.5 * air.density * tas * tas;
-    let mut cl = lift_coefficient(spec, alpha);
-    let mut cd = drag_coefficient(spec, alpha, cl, s.airbrake);
+    let mut cl = lift_coefficient(spec, alpha) + spec.flap_cl * s.flaps;
+    let mut cd = drag_coefficient(spec, alpha, cl, s.airbrake) + spec.flap_cd * s.flaps;
     if s.stall > 0.0 {
         // Abgerissene Strömung: Auftrieb bricht ein, Widerstand steigt.
         cl *= 1.0 + (spec.stall_lift_factor - 1.0) * s.stall;
@@ -204,6 +227,15 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
     // Im Abriss verlieren die Ruder ihre Wirkung (stetig mit der Abrissstärke).
     let stall_eff = 1.0 + (spec.stall_control_factor - 1.0) * aero.stall;
     let mut q_cmd = c.pitch_f() * spec.max_pitch_rate * eff * stall_eff;
+    // Bahnhaltung: Knüppel neutral ⇒ Flugbahnwinkel halten (PD-Regler auf γ,
+    // γ̇ aus dem Lastvielfachen). So bleibt der Horizontalflug horizontal, auch
+    // wenn sich die Fahrt ändert.
+    if s.path_hold_active && v > MIN_FBW_SPEED {
+        let gamma = flight_path_angle(s);
+        let gamma_rate = (aero.load_factor - detmath::cos(gamma) * cphi) * G0 / v;
+        q_cmd += (PATH_HOLD_KP * (s.path_hold - gamma) - PATH_HOLD_KD * gamma_rate)
+            .clamp(-PATH_HOLD_MAX_RATE, PATH_HOLD_MAX_RATE);
+    }
     if v > MIN_FBW_SPEED {
         // g-Begrenzer über die Bahnkrümmung n ≈ V·q/g + cosθ·cosφ.
         let q_max = (spec.g_limit_pos - ctheta * cphi) * G0 / v;
@@ -230,8 +262,14 @@ pub fn demanded_load_factor(spec: &AircraftSpec, c: &ControlFrame) -> f64 {
 }
 
 /// Abrissgeschwindigkeit bei Luftdichte `density` und g-Last `n` (m/s).
-pub fn stall_speed(spec: &AircraftSpec, density: f64, n: f64) -> f64 {
-    spec.stall_speed_1g(density) * n.max(1.0).sqrt()
+pub fn stall_speed(spec: &AircraftSpec, density: f64, n: f64, flaps: f64) -> f64 {
+    spec.stall_speed_1g(density, flaps) * n.max(1.0).sqrt()
+}
+
+/// Flugbahnwinkel γ (rad, positiv = steigen).
+pub fn flight_path_angle(s: &AircraftState) -> f64 {
+    let v = s.velocity.length();
+    if v < MIN_AERO_SPEED { 0.0 } else { detmath::asin(-s.velocity.z / v) }
 }
 
 /// Ziel-Abrissstärke 0..1 aus dem relativen Fahrtdefizit.
@@ -263,8 +301,9 @@ fn stall_departure_rates(spec: &AircraftSpec, s: &AircraftState) -> DVec3 {
     dir * (spec.stall_pitch_break * fade * s.stall)
 }
 
-/// Ein Integrationsschritt. Gibt die Aerodynamik des *Ausgangszustands* zurück.
-pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, dt: f64) -> AeroData {
+/// Ein Integrationsschritt. `gust` sind Störungen der Drehraten (rad/s, z. B.
+/// Turbulenz). Gibt die Aerodynamik des *Ausgangszustands* zurück.
+pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: DVec3, dt: f64) -> AeroData {
     let aero = aero_data(spec, s);
 
     // Triebwerk und Luftbremse
@@ -273,9 +312,25 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, dt: f6
     let brake_target = if c.has(flags::AIRBRAKE) { 1.0 } else { 0.0 };
     let max_move = AIRBRAKE_RATE * dt;
     s.airbrake += (brake_target - s.airbrake).clamp(-max_move, max_move);
+    // Klappen; oberhalb der Höchstfahrt fahren sie selbsttätig ein.
+    let flap_target = if c.has(flags::FLAPS) && aero.tas < spec.flap_max_speed_mps { 1.0 } else { 0.0 };
+    let flap_move = spec.flap_rate * dt;
+    s.flaps += (flap_target - s.flaps).clamp(-flap_move, flap_move);
+
+    // Bahnhaltung ein-/ausschalten (beim Einschalten den aktuellen Bahnwinkel merken).
+    let (_, _, roll) = s.attitude.to_euler();
+    let hold = c.pitch_f().abs() < PATH_HOLD_STICK_DEADBAND
+        && roll.abs() < PATH_HOLD_MAX_BANK
+        && s.stall < STALL_NOTICEABLE
+        && aero.tas > MIN_FBW_SPEED;
+    if hold && !s.path_hold_active {
+        let gamma = flight_path_angle(s);
+        s.path_hold = if gamma.abs() < PATH_HOLD_LEVEL_SNAP { 0.0 } else { gamma };
+    }
+    s.path_hold_active = hold;
 
     // Flugsteuerung: Raten folgen dem Kommando mit Verzögerung erster Ordnung.
-    let cmd = fbw_rate_command(spec, s, &aero, c);
+    let cmd = fbw_rate_command(spec, s, &aero, c) + gust;
     let k = (dt / spec.rate_time_constant_s).min(1.0);
     s.body_rates += (cmd - s.body_rates) * k;
 
@@ -311,7 +366,7 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, dt: f6
     // knapp über der Abrissgeschwindigkeit kein absurder Anstellwinkel entsteht.
     let target = if aero.tas >= MIN_AERO_SPEED {
         let n = demanded_load_factor(spec, c);
-        let by_speed = stall_target(spec, stall_speed(spec, aero.density, n), aero.tas);
+        let by_speed = stall_target(spec, stall_speed(spec, aero.density, n, s.flaps), aero.tas);
         let by_alpha = ((aero.alpha.abs() - spec.alpha_stall_rad) / STALL_ALPHA_FULL).clamp(0.0, 1.0);
         by_speed.max(by_alpha)
     } else {
@@ -349,7 +404,7 @@ mod tests {
     /// Simuliert `seconds` mit fester Eingabe und liefert den Zustand.
     fn run(st: &mut AircraftState, c: ControlFrame, seconds: f64) {
         for _ in 0..(seconds * 120.0) as usize {
-            step(&F29_SPEC, st, &c, 1.0 / 120.0);
+            step(&F29_SPEC, st, &c, DVec3::ZERO, 1.0 / 120.0);
         }
     }
 
@@ -357,7 +412,7 @@ mod tests {
     fn stall_is_continuous_and_follows_speed_deficit() {
         let spec = &F29_SPEC;
         let rho = atmosphere::isa(3000.0).density;
-        let vs = spec.stall_speed_1g(rho);
+        let vs = spec.stall_speed_1g(rho, 0.0);
         // Deutlich über der Abrissgeschwindigkeit: kein Abriss
         let mut fast = AircraftState::level(0.0, 0.0, 3000.0, 0.0, vs * 1.6);
         run(&mut fast, ControlFrame::default(), 0.5);
@@ -366,7 +421,7 @@ mod tests {
         let mut slow = AircraftState::level(0.0, 0.0, 3000.0, 0.0, vs * 0.8);
         let mut last = slow.stall;
         for _ in 0..60 {
-            step(spec, &mut slow, &ControlFrame::default(), 1.0 / 120.0);
+            step(spec, &mut slow, &ControlFrame::default(), DVec3::ZERO, 1.0 / 120.0);
             assert!((slow.stall - last).abs() < 0.05, "Sprung in der Abrissstärke");
             last = slow.stall;
         }
@@ -377,7 +432,7 @@ mod tests {
     fn pulling_raises_stall_speed() {
         let spec = &F29_SPEC;
         let rho = atmosphere::isa(3000.0).density;
-        let v = spec.stall_speed_1g(rho) * 1.4;
+        let v = spec.stall_speed_1g(rho, 0.0) * 1.4;
         // Ohne Ziehen kein Abriss, mit vollem Ziehen schon (beschleunigter Abriss)
         let mut neutral = AircraftState::level(0.0, 0.0, 3000.0, 0.0, v);
         run(&mut neutral, ControlFrame::default(), 0.5);

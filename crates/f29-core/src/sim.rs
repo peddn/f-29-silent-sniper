@@ -5,11 +5,22 @@ use crate::detmath;
 use crate::flight::{self, AeroData, AircraftState};
 use crate::math::DVec3;
 use crate::nav::{self, Steerpoint};
+use crate::rng::Pcg32;
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_terrain::Terrain;
 
 /// Abrisswarnung unterhalb dieses Vielfachen der Abrissgeschwindigkeit.
 const STALL_WARNING_MARGIN: f64 = 1.1;
+
+/// RNG-Strom der Turbulenz.
+pub const STREAM_TURBULENCE: u64 = 0x5455_5242;
+/// Unterhalb dieser Höhe über Grund setzt Turbulenz ein (500 ft).
+pub const TURBULENCE_CEILING_M: f64 = 152.4;
+/// Störrate (rad/s) um die Längsachse bei 200 m/s direkt über dem Boden,
+/// vor der Glättung. Um die Querachse halb so viel.
+const TURBULENCE_ROLL: f64 = 0.9;
+/// Glättung der Turbulenz (s) – verhindert hochfrequentes Zittern.
+const TURBULENCE_TIME_CONSTANT_S: f64 = 0.15;
 
 /// Simulationsfrequenz.
 pub const TICK_HZ: u32 = 120;
@@ -112,6 +123,10 @@ pub struct FlightData {
     pub throttle: f64,
     pub engine: f64,
     pub airbrake: f64,
+    /// Landeklappen 0..1.
+    pub flaps: f64,
+    /// Stärke der Turbulenz (Betrag der Störraten, rad/s).
+    pub turbulence: f64,
     pub steerpoint: Option<SteerpointInfo>,
     pub warnings: Warnings,
 }
@@ -129,11 +144,15 @@ pub struct Sim {
     route: Vec<Steerpoint>,
     active_steerpoint: usize,
     last_controls: ControlFrame,
+    turbulence_rng: Pcg32,
+    /// Geglättete Turbulenz-Störraten (p, q, r) in rad/s.
+    gust: DVec3,
 }
 
 impl Sim {
     pub fn new(config: SimConfig) -> Self {
-        let terrain = Terrain::new(config.seed);
+        let seed = config.seed;
+        let terrain = Terrain::new(seed);
         let spec = F29_SPEC;
         let sp = &config.spawn;
         let ground = terrain.elevation(sp.north, sp.east);
@@ -163,6 +182,8 @@ impl Sim {
             route,
             active_steerpoint: 0,
             last_controls,
+            turbulence_rng: Pcg32::new(seed, STREAM_TURBULENCE),
+            gust: DVec3::ZERO,
         }
     }
 
@@ -176,7 +197,8 @@ impl Sim {
         if self.status != Status::Flying {
             return;
         }
-        flight::step(&self.spec, &mut self.aircraft, &controls, DT);
+        self.update_turbulence();
+        flight::step(&self.spec, &mut self.aircraft, &controls, self.gust, DT);
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
 
         let p = self.aircraft.position;
@@ -187,6 +209,29 @@ impl Sim {
             self.aircraft.velocity = DVec3::ZERO;
             self.aircraft.body_rates = DVec3::ZERO;
         }
+    }
+
+    /// Turbulenz in Bodennähe: unter 500 ft über Grund, stärker je tiefer und
+    /// je schneller; Landeklappen halbieren sie. Zufall aus eigenem RNG-Strom,
+    /// geglättet, damit es rüttelt statt zittert.
+    fn update_turbulence(&mut self) {
+        let a = &self.aircraft;
+        let ground = self.terrain.elevation(a.position.x, a.position.y);
+        let agl = a.altitude() - ground;
+        let depth = (1.0 - agl / TURBULENCE_CEILING_M).clamp(0.0, 1.0);
+        let speed = a.velocity.length() / 200.0;
+        let amplitude = TURBULENCE_ROLL * depth * speed * (1.0 - 0.5 * a.flaps);
+        // Zufallszahlen immer ziehen, damit der Strom nicht von der Höhe abhängt.
+        let wp = self.turbulence_rng.range_f64(-1.0, 1.0);
+        let wq = self.turbulence_rng.range_f64(-1.0, 1.0);
+        let target = DVec3::new(wp * amplitude, wq * amplitude * 0.5, 0.0);
+        let k = (DT / TURBULENCE_TIME_CONSTANT_S).min(1.0);
+        self.gust += (target - self.gust) * k;
+    }
+
+    /// Aktuelle Turbulenz-Störraten (rad/s).
+    pub fn turbulence(&self) -> DVec3 {
+        self.gust
     }
 
     pub fn config(&self) -> &SimConfig {
@@ -258,7 +303,7 @@ impl Sim {
         // Abrisswarnung: knapp über der (g-abhängigen) Abrissgeschwindigkeit,
         // bei hohem Anstellwinkel oder wenn der Abriss schon einsetzt.
         let n_demand = flight::demanded_load_factor(&self.spec, &self.last_controls);
-        let v_stall = flight::stall_speed(&self.spec, aero.density, n_demand);
+        let v_stall = flight::stall_speed(&self.spec, aero.density, n_demand, a.flaps);
         let warnings = Warnings {
             stall: !crashed
                 && (a.stall > 0.02
@@ -291,6 +336,8 @@ impl Sim {
             throttle: self.last_controls.throttle_f(),
             engine: a.engine,
             airbrake: a.airbrake,
+            flaps: a.flaps,
+            turbulence: self.gust.length(),
             steerpoint,
             warnings,
         }
@@ -323,6 +370,14 @@ impl Sim {
         h.f64(a.engine);
         h.f64(a.airbrake);
         h.f64(a.stall);
+        h.f64(a.flaps);
+        h.u64(u64::from(a.path_hold_active));
+        h.f64(a.path_hold);
+        h.f64(self.gust.x);
+        h.f64(self.gust.y);
+        let (rs, ri) = self.turbulence_rng.raw_state();
+        h.u64(rs);
+        h.u64(ri);
         h.u64(self.active_steerpoint as u64);
         h.finish()
     }

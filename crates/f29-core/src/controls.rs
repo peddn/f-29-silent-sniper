@@ -11,6 +11,8 @@ pub mod flags {
     pub const AIRBRAKE: u8 = 1 << 0;
     /// Nächster Navigationspunkt (Flanke: nur im Tick des Tastendrucks setzen).
     pub const NEXT_STEERPOINT: u8 = 1 << 1;
+    /// Landeklappen ausgefahren (gehalten).
+    pub const FLAPS: u8 = 1 << 2;
 }
 
 /// Ein Tick Steuereingabe, quantisiert.
