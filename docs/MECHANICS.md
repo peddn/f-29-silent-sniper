@@ -449,10 +449,21 @@ Format jedes Eintrags:
     kursbezogen und pixelig ausgeschnitten). In beiden Modi: Flugplätze, Route
     mit aktivem Wegpunkt, Nordpfeil, Kurs, Bereich. Zoom in fünf Stufen mit
     Y/X (2–40 NM von der Mitte bis zum Rand).
-  - **Rechts: Seiten** (F4 blättert, bisher eine): *Ressourcen* mit Statuszeile
-    (Schub, Klappen, Fahrwerk, Bremse), vier leeren Waffenstationen als
-    Platzhalter und dem Treibstoffbalken unten (Pfund, Restflugzeit,
-    BINGO-Marke „B“ für den Bedarf bis nach Hause plus Reserve).
+  - **Rechts: Seiten** (F4 blättert, bisher eine): *Ressourcen* mit vier leeren
+    Waffenstationen als Platzhalter und dem Treibstoffbalken unten (Pfund,
+    Restflugzeit, BINGO-Marke „B“ für den Bedarf bis nach Hause plus Reserve).
+  - *v0.1.11:* **Schubhebel** ganz links im Brett. Inspiration: Im Original
+    (f19re `src/egflight.c`, `drawAirspeedTape`) zeichnet die Schubanzeige
+    unten links einen Hebel, dessen Schaft von einem Drehpunkt in der Ecke
+    schräg nach oben läuft und dessen Griff mit dem Schub diagonal nach oben
+    wandert. Unser Hebel schwenkt in einer Bogenkulisse von IDLE (flach) bis
+    MIL (steil), mit dreifachem Schaft, T-Griff, Skala alle 10 % und einer
+    grünen Marke für die tatsächliche Triebwerksstellung, die dem Hebel
+    verzögert folgt.
+  - *v0.1.11:* Fahrwerk, Klappen und Bremse stehen wieder im HUD, unten links
+    unter den Flugdaten, und nur solange sie ausgefahren sind. Das Fahrwerk
+    blinkt, während es fährt, und bei Überfahrt; am Boden heißt die Bremse
+    „BRAKES“.
   - Die bisherigen Rundinstrumente (Drehzahl, HSI, Horizont) entfallen und kommen
     später als eigene MFD-Seiten zurück.
   - Ansichtstasten liegen auf Shift + F-Taste (Cockpit, Verfolger, Retro-Look,

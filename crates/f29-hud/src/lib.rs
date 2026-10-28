@@ -12,6 +12,7 @@ mod hud;
 pub mod map;
 pub mod mfd;
 pub mod svg;
+mod throttle;
 
 pub use canvas::{Align, DisplayList, Ink, Line, Rect};
 use f29_core::FlightData;

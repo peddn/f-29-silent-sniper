@@ -124,7 +124,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Aufsetzbewertung, PAPI und Landehilfen im HUD, Start auf der Bahn (v0.1.6)
 - [x] Instrumentenbrett mit zwei MFDs: Karte (Gitter/Satellit, Flugrichtung oben,
       zoombar) und Ressourcen (Treibstoff, Waffenstationen); Platz für die
-      Stealth-/Radarimpuls-Anzeige (v0.1.10)
+      Stealth-/Radarimpuls-Anzeige (v0.1.10); Schubhebel, Konfiguration im HUD (v0.1.11)
 - [ ] Weitere MFD-Seiten: Triebwerk, künstlicher Horizont, Systeme
 - [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
 

@@ -53,7 +53,7 @@ fn pitch_ladder(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, gl
     // Die Leiter bleibt im inneren Bereich, damit sie die Datenspalten links
     // und rechts sowie das Kursband nicht überdeckt.
     let half = [(glass.max[0] - glass.min[0]) * 0.5, (glass.max[1] - glass.min[1]) * 0.5];
-    dl.set_clip(Some(Rect::from_center(c, [half[0] * 0.56, half[1] * 0.70])));
+    dl.set_clip(Some(Rect::from_center(c, [half[0] * 0.66, half[1] * 0.70])));
     for deg in (-90_i32..=90).step_by(5) {
         let rung = (deg as f32).to_radians();
         let delta = rung - pitch;
@@ -261,6 +261,36 @@ fn left_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
         &format!("A {:.1}", fd.alpha.to_degrees()),
         Ink::HudDim,
     );
+    configuration(dl, fd, [x, cy - 0.12]);
+}
+
+/// Konfiguration unten links: Fahrwerk, Klappen, Bremse – nur, wenn
+/// ausgefahren; das Fahrwerk blinkt, solange es fährt oder zu schnell ist.
+fn configuration(dl: &mut DisplayList, fd: &FlightData, top_left: [f32; 2]) {
+    let blink = (fd.time_s * 2.0).fract() < 0.5;
+    let mut y = top_left[1];
+    let mut row = |dl: &mut DisplayList, txt: &str, ink: Ink| {
+        dl.text_mid([top_left[0], y], TXT_SMALL, Align::Left, txt, ink);
+        y -= TXT_SMALL * 1.7;
+    };
+    if fd.gear >= 0.999 {
+        let ink = if fd.warnings.gear_overspeed { Ink::Warning } else { Ink::Hud };
+        if !fd.warnings.gear_overspeed || blink {
+            row(dl, "GEAR", ink);
+        }
+    } else if fd.gear > 0.001 {
+        if blink {
+            row(dl, "GEAR", Ink::Hud);
+        } else {
+            row(dl, "", Ink::Hud);
+        }
+    }
+    if fd.flaps > 0.05 {
+        row(dl, if fd.flaps < 0.999 { "FLAPS ." } else { "FLAPS" }, Ink::Hud);
+    }
+    if fd.airbrake > 0.05 {
+        row(dl, if fd.on_ground { "BRAKES" } else { "AIRBRAKE" }, Ink::Hud);
+    }
 }
 
 /// Rechts: Höhe, Radarhöhe, Steigrate, Steerpoint.

@@ -91,6 +91,8 @@ pub struct MfdLayout {
     pub right_screen: Rect,
     /// Platz für die Stealth-/Radarimpuls-Anzeige zwischen den MFDs.
     pub center: Rect,
+    /// Schubhebel ganz links im Brett.
+    pub throttle: Rect,
 }
 
 impl ScreenLayout {
@@ -125,7 +127,23 @@ impl ScreenLayout {
             max: [r.max[0] - bezel, r.max[1] - bezel],
         };
         let center = Rect::from_center([0.0, cy], [strip * 0.5, half - bezel * 0.5]);
-        Some(MfdLayout { left, left_screen: inset(left), right, right_screen: inset(right), center })
+        // Schubhebel: ganz links, so breit wie der Platz es zulässt (höchstens
+        // 0,8 × so breit wie hoch).
+        let margin = ph * 0.04;
+        let free = (left.min[0] - margin) - (panel.min[0] + margin);
+        let tw = free.min((half - bezel) * 1.6).max(0.0);
+        let throttle = Rect {
+            min: [panel.min[0] + margin, cy - half + bezel * 0.5],
+            max: [panel.min[0] + margin + tw, cy + half - bezel * 0.5],
+        };
+        Some(MfdLayout {
+            left,
+            left_screen: inset(left),
+            right,
+            right_screen: inset(right),
+            center,
+            throttle,
+        })
     }
 }
 
@@ -154,6 +172,9 @@ pub(crate) fn draw(
     }
     dl.set_clip(None);
     signature_placeholder(dl, m.center);
+    if m.throttle.max[0] - m.throttle.min[0] > 0.03 {
+        crate::throttle::draw(dl, fd, m.throttle);
+    }
 }
 
 /// Gehäuse mit Bildschirmrahmen und je fünf Tasten oben und unten.
@@ -291,7 +312,7 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
     dl.text_mid([c[0], top], txt, Align::Center, &format!("{:03}", heading_deg(fd.heading)), Ink::Mfd);
 }
 
-/// Ressourcen: Statuszeile, Waffenstationen (Platzhalter), Treibstoffbalken.
+/// Ressourcen: Waffenstationen (Platzhalter), Treibstoffbalken.
 fn draw_resources(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     let w = screen.max[0] - screen.min[0];
     let h = screen.max[1] - screen.min[1];
@@ -302,29 +323,8 @@ fn draw_resources(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     let x1 = screen.max[0] - w * 0.05;
     dl.text_mid([x0, screen.max[1] - txt * 1.2], txt, Align::Left, "RESOURCES", Ink::Mfd);
 
-    // Statuszeile: Schub, Klappen, Fahrwerk, Bremse
-    let y = screen.max[1] - h * 0.17;
-    let blink = (fd.time_s * 2.0).fract() < 0.5;
-    let gear = if fd.gear >= 0.999 {
-        ("GEAR", if fd.warnings.gear_overspeed && blink { Ink::Warning } else { Ink::Needle })
-    } else if fd.gear > 0.001 {
-        ("GEAR", if blink { Ink::Warning } else { Ink::MfdDim })
-    } else {
-        ("GEAR", Ink::MfdDim)
-    };
-    let items = [
-        (format!("THR{:>3}", (fd.throttle * 100.0).round() as i64), Ink::Mfd),
-        ("FLAP".to_string(), if fd.flaps > 0.05 { Ink::Needle } else { Ink::MfdDim }),
-        (gear.0.to_string(), gear.1),
-        ("BRK".to_string(), if fd.airbrake > 0.05 { Ink::Warning } else { Ink::MfdDim }),
-    ];
-    for (k, (label, ink)) in items.iter().enumerate() {
-        let x = x0 + (x1 - x0) * (k as f32 + 0.5) / items.len() as f32;
-        dl.text_mid([x, y], small, Align::Center, label, *ink);
-    }
-
     // Waffenstationen: leere Rahmen als Platzhalter
-    let slot_top = screen.max[1] - h * 0.29;
+    let slot_top = screen.max[1] - h * 0.17;
     let slot_bottom = screen.min[1] + h * 0.33;
     let slot_w = (x1 - x0) / WEAPON_STATIONS as f32;
     for k in 0..WEAPON_STATIONS {
