@@ -104,7 +104,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Navigationsroute mit Steerpoint-Anzeige in HUD und HSI
 - [x] Retro-Look: 16-Farben-Palette, Dithering, auflösungsunabhängig
 - [x] Cockpit- und Verfolgeransicht, Tastatur und Gamepad
-- [ ] Erster Spieltest auf echter Hardware, Feinschliff Flugverhalten
+- [x] Erster Spieltest auf echter Hardware (Linux, AMD Radeon, Vulkan)
+- [ ] Feinschliff Flugverhalten nach Spielerfeedback
 
 ### v0.2: Angriff und Tarnung
 - [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD
