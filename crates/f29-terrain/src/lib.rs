@@ -65,6 +65,37 @@ impl Default for TerrainParams {
     }
 }
 
+/// Bodenhöhen auf einem regelmäßigen Raster, Zeile `i` entlang Nord,
+/// Spalte `j` entlang Ost: Index `i * n + j`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeightGrid {
+    /// Südwest-Ecke (Nord, Ost).
+    pub origin: [f64; 2],
+    pub spacing: f64,
+    pub n: usize,
+    pub heights: Vec<f64>,
+}
+
+impl HeightGrid {
+    pub fn at(&self, i: usize, j: usize) -> f64 {
+        self.heights[i * self.n + j]
+    }
+
+    /// Weltposition (Nord, Ost) eines Rasterpunkts.
+    pub fn position(&self, i: usize, j: usize) -> [f64; 2] {
+        [self.origin[0] + i as f64 * self.spacing, self.origin[1] + j as f64 * self.spacing]
+    }
+
+    /// Steilheit (1 − Normale nach oben) aus zentralen Differenzen.
+    pub fn steepness(&self, i: usize, j: usize) -> f64 {
+        let n = self.n;
+        let h = |a: usize, b: usize| self.at(a.min(n - 1), b.min(n - 1)).max(SEA_LEVEL_M);
+        let dn = (h(i + 1, j) - h(i.saturating_sub(1), j)) / (2.0 * self.spacing);
+        let de = (h(i, j + 1) - h(i, j.saturating_sub(1))) / (2.0 * self.spacing);
+        1.0 - 1.0 / (dn * dn + de * de + 1.0).sqrt()
+    }
+}
+
 /// Ein Terrain, vollständig bestimmt durch Seed und Parameter.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Terrain {
@@ -165,13 +196,21 @@ impl Terrain {
         if h < SEA_LEVEL_M {
             return Surface::Water;
         }
+        self.classify(x, y, h, 1.0 - self.normal(x, y)[2])
+    }
+
+    /// Oberflächenklasse aus bereits bekannter Bodenhöhe `h` und Steilheit
+    /// (1 − Normale nach oben) – für Raster, die Höhen schon vorliegen haben.
+    pub fn classify(&self, x: f64, y: f64, h: f64, steepness: f64) -> Surface {
+        if h < SEA_LEVEL_M {
+            return Surface::Water;
+        }
         if h < 6.0 {
             return Surface::Beach;
         }
         if self.runways.iter().any(|r| r.in_flat_area(x, y)) {
             return Surface::Grass;
         }
-        let steepness = 1.0 - self.normal(x, y)[2];
         if steepness > 0.30 {
             return Surface::Rock;
         }
@@ -183,6 +222,21 @@ impl Terrain {
         }
         let forest = fbm(self.s_forest, x / 7_000.0, y / 7_000.0, 4);
         if forest > 0.18 && h < 1_100.0 { Surface::Forest } else { Surface::Grass }
+    }
+
+    /// Bodenhöhen (inkl. Meeresgrund) auf einem quadratischen Raster mit
+    /// `n × n` Punkten um `center` (Nord, Ost), Kantenlänge `2 · half_extent`.
+    pub fn height_grid(&self, center: [f64; 2], half_extent: f64, n: usize) -> HeightGrid {
+        let spacing = 2.0 * half_extent / (n.max(2) - 1) as f64;
+        let origin = [center[0] - half_extent, center[1] - half_extent];
+        let mut heights = Vec::with_capacity(n * n);
+        for i in 0..n {
+            for j in 0..n {
+                heights
+                    .push(self.ground_height(origin[0] + i as f64 * spacing, origin[1] + j as f64 * spacing));
+            }
+        }
+        HeightGrid { origin, spacing, n, heights }
     }
 
     /// Tastet ein Gitter aus `(n+1)²` Punkten ab, beginnend bei Gitterindex
@@ -337,6 +391,20 @@ mod tests {
             let (a, b) = rw.numbers();
             assert!((1..=36).contains(&a) && (1..=36).contains(&b));
             assert_eq!((a + 18 - 1) % 36 + 1, b);
+        }
+    }
+
+    #[test]
+    fn height_grid_matches_point_queries() {
+        let t = Terrain::new(4);
+        let g = t.height_grid([1_000.0, -2_000.0], 10_000.0, 21);
+        assert_eq!(g.heights.len(), 21 * 21);
+        assert!((g.spacing - 1_000.0).abs() < 1e-9);
+        for (i, j) in [(0, 0), (20, 20), (7, 13)] {
+            let p = g.position(i, j);
+            assert_eq!(g.at(i, j).to_bits(), t.ground_height(p[0], p[1]).to_bits());
+            let class = t.classify(p[0], p[1], g.at(i, j), 1.0 - t.normal(p[0], p[1])[2]);
+            assert_eq!(class, t.surface(p[0], p[1]));
         }
     }
 

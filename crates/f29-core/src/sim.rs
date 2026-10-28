@@ -251,6 +251,8 @@ pub struct FlightData {
     pub runway_name: Option<&'static str>,
     /// Entfernung zur Heimatbasis, m.
     pub home_range_m: f64,
+    /// Treibstoff, der bis zur Heimatbasis plus Reserve gebraucht wird (BINGO-Grenze), kg.
+    pub bingo_fuel_kg: f64,
     /// Aktuelle Masse, kg.
     pub mass_kg: f64,
     /// Staudruck, Pa.
@@ -619,6 +621,7 @@ impl Sim {
             touchdown: if a.on_ground { self.touchdown } else { None },
             runway_name: if a.on_ground { runway_here.map(|i| self.terrain.runways()[i].name) } else { None },
             home_range_m,
+            bingo_fuel_kg: fuel_needed,
             mass_kg: mass,
             qbar_pa: aero.qbar,
             stall_speed_mps: self.spec.stall_speed_1g(mass, aero.density, a.flaps),

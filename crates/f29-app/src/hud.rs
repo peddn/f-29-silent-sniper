@@ -1,6 +1,7 @@
 //! HUD und Instrumentenbrett: Display-Liste aus `f29-hud` als 2D-Gizmo-Linien.
 
 use crate::HUD_LAYER;
+use crate::mfd::{MapAssets, MfdView};
 use crate::sim::{SimState, SimSystems};
 use crate::view::{ViewMode, ViewSettings, layout_for};
 use bevy::camera::visibility::RenderLayers;
@@ -48,6 +49,9 @@ fn ink_color(ink: Ink) -> Color {
         Ink::Panel => Color::srgb(0.82, 0.84, 0.86),
         Ink::PanelDim => Color::srgb(0.42, 0.44, 0.48),
         Ink::Needle => Color::srgb(1.0, 0.86, 0.3),
+        Ink::Mfd => Color::srgb(0.4, 0.87, 0.93),
+        Ink::MfdDim => Color::srgb(0.2, 0.47, 0.53),
+        Ink::MfdGrid => Color::srgb(0.13, 0.27, 0.33),
     }
 }
 
@@ -67,6 +71,8 @@ fn draw_hud(
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
     view: Res<ViewSettings>,
+    mfd: Res<MfdView>,
+    maps: Res<MapAssets>,
     mut gizmos: Gizmos<HudGizmos>,
     mut panel: Single<(&mut Transform, &mut Sprite), With<PanelBackground>>,
 ) {
@@ -83,8 +89,9 @@ fn draw_hud(
     transform.translation = Vec3::new(0.0, -h * 0.5 + panel_h * 0.5, -10.0);
 
     let fd = state.sim.flight_data();
-    let opts = HudOptions { show_hud: view.hud && view.mode == ViewMode::Cockpit, show_panel: true };
-    let list = f29_hud::build(&fd, &layout, &opts);
+    let opts =
+        HudOptions { show_hud: view.hud && view.mode == ViewMode::Cockpit, show_panel: true, mfd: mfd.0 };
+    let list = f29_hud::build(&fd, &layout, &opts, maps.map.as_deref());
     for line in &list.lines {
         gizmos.line_2d(
             Vec2::new(line.a[0], line.a[1]) * h,

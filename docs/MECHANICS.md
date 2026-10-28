@@ -430,6 +430,35 @@ Format jedes Eintrags:
   Radarhöhe über Grund („R …“), rot unter 500 ft.
 - **Status:** umgesetzt (v0.1.1)
 
+### M-050 Instrumentenbrett mit MFDs
+
+- **Verhalten:** Das Instrumentenbrett nimmt einen großen Teil des Bildschirms ein
+  (gut ein Drittel). Eine Kartenanzeige zeigt die Umgebung mit Gitter und lässt
+  sich in Stufen zoomen. Eine Weitwinkelsicht blendet das Brett für den
+  Luftkampf aus.
+- **Referenzstelle:** keine Code-Lektüre für dieses Layout; Anordnung und Inhalt
+  nach Spielerwunsch.
+- **Unser Design:**
+  - Brett 40 % der Fensterhöhe; zwei quadratische MFDs, dazwischen ein schmaler
+    senkrechter Balken, reserviert für die Stealth-/Radarimpuls-Anzeige (M-020).
+    Ohne Brett (`panel_fraction` 0, spätere Weitwinkelsicht) entfallen die MFDs.
+  - **Links: Karte**, Flugrichtung oben, Flugzeug in der Mitte. Zwei Modi (F3):
+    *Gitter* mit Kartengitter, Küstenlinie und Höhenlinien (400/900/1500 m,
+    Marching Squares über ein 500-m-Raster) und *Satellit* (Farbraster
+    2048², ≈ 98 m/px, mit Hangschattierung, im Hintergrund berechnet, pro Bild
+    kursbezogen und pixelig ausgeschnitten). In beiden Modi: Flugplätze, Route
+    mit aktivem Wegpunkt, Nordpfeil, Kurs, Bereich. Zoom in fünf Stufen mit
+    Y/X (2–40 NM von der Mitte bis zum Rand).
+  - **Rechts: Seiten** (F4 blättert, bisher eine): *Ressourcen* mit Statuszeile
+    (Schub, Klappen, Fahrwerk, Bremse), vier leeren Waffenstationen als
+    Platzhalter und dem Treibstoffbalken unten (Pfund, Restflugzeit,
+    BINGO-Marke „B“ für den Bedarf bis nach Hause plus Reserve).
+  - Die bisherigen Rundinstrumente (Drehzahl, HSI, Horizont) entfallen und kommen
+    später als eigene MFD-Seiten zurück.
+  - Ansichtstasten liegen auf Shift + F-Taste (Cockpit, Verfolger, Retro-Look,
+    HUD).
+- **Status:** umgesetzt (v0.1.10)
+
 ### M-002 Prozedurales Gelände
 
 - **Verhalten:** Das Original verwendet handgebaute Einsatzgebiete.

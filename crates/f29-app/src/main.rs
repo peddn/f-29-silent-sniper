@@ -16,6 +16,7 @@ mod airfield;
 mod capture;
 mod hud;
 mod input;
+mod mfd;
 mod retro;
 mod sim;
 mod terrain;
@@ -64,6 +65,7 @@ fn main() {
             view::ViewPlugin,
             terrain::TerrainPlugin,
             hud::HudPlugin,
+            mfd::MfdPlugin,
             retro::RetroPlugin,
             capture::CapturePlugin { auto: auto_capture },
         ))

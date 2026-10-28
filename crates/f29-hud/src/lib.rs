@@ -9,11 +9,14 @@
 pub mod canvas;
 pub mod font;
 mod hud;
-mod panel;
+pub mod map;
+pub mod mfd;
 pub mod svg;
 
 pub use canvas::{Align, DisplayList, Ink, Line, Rect};
 use f29_core::FlightData;
+pub use map::MapData;
+pub use mfd::{MapMode, MfdLayout, MfdState, RightPage};
 
 /// Aufteilung des Fensters in 3D-Ansicht (oben) und Instrumentenbrett (unten).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29,8 +32,8 @@ pub struct ScreenLayout {
 impl ScreenLayout {
     /// Standard-Sichtwinkel der Cockpitansicht.
     pub const DEFAULT_FOV: f32 = 0.87; // ≈ 50°
-    /// Standard-Höhe des Instrumentenbretts.
-    pub const DEFAULT_PANEL: f32 = 0.27;
+    /// Standard-Höhe des Instrumentenbretts (mit den beiden MFDs).
+    pub const DEFAULT_PANEL: f32 = 0.40;
 
     pub fn cockpit(aspect: f32) -> Self {
         Self { aspect, panel_fraction: Self::DEFAULT_PANEL, vertical_fov: Self::DEFAULT_FOV }
@@ -75,25 +78,33 @@ impl ScreenLayout {
 pub struct HudOptions {
     /// HUD-Symbolik in der 3D-Ansicht zeichnen.
     pub show_hud: bool,
-    /// Instrumentenbrett zeichnen.
+    /// Instrumentenbrett (MFDs) zeichnen.
     pub show_panel: bool,
+    /// Bedienzustand der MFDs.
+    pub mfd: MfdState,
 }
 
 impl Default for HudOptions {
     fn default() -> Self {
-        Self { show_hud: true, show_panel: true }
+        Self { show_hud: true, show_panel: true, mfd: MfdState::default() }
     }
 }
 
-/// Erzeugt die komplette Display-Liste für einen Frame.
-pub fn build(fd: &FlightData, layout: &ScreenLayout, opts: &HudOptions) -> DisplayList {
+/// Erzeugt die komplette Display-Liste für einen Frame. `map` sind die
+/// Kartendaten für das linke MFD (`None`, solange sie noch berechnet werden).
+pub fn build(
+    fd: &FlightData,
+    layout: &ScreenLayout,
+    opts: &HudOptions,
+    map: Option<&MapData>,
+) -> DisplayList {
     let mut dl = DisplayList::new();
     if opts.show_hud {
         hud::draw(&mut dl, fd, layout);
     }
     if opts.show_panel && layout.panel_fraction > 0.0 {
         dl.set_clip(None);
-        panel::draw(&mut dl, fd, layout);
+        mfd::draw(&mut dl, fd, layout, &opts.mfd, map);
     }
     dl.set_clip(None);
     dl

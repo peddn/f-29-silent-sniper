@@ -237,8 +237,9 @@ fn hud_svg(args: &Args) -> Result<(), String> {
     let aspect = args.get("aspect", 16.0_f32 / 9.0)?;
     let out = args.opt("out").unwrap_or("hud.svg");
     let sim = run_demo(seed, seconds, |_, _| {});
+    let map = f29_hud::MapData::for_terrain(sim.terrain(), sim.route());
     let layout = ScreenLayout::cockpit(aspect);
-    let dl = f29_hud::build(&sim.flight_data(), &layout, &HudOptions::default());
+    let dl = f29_hud::build(&sim.flight_data(), &layout, &HudOptions::default(), Some(&map));
     let svg = f29_hud::svg::to_svg(&dl, &layout, 720);
     std::fs::write(out, svg).map_err(|e| format!("{out}: {e}"))?;
     println!("{} Linien → {out}", dl.lines.len());

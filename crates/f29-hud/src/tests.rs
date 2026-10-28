@@ -28,7 +28,7 @@ fn everything_stays_on_screen_for_common_aspects() {
     let fd = sample();
     for aspect in [4.0 / 3.0, 16.0 / 10.0, 16.0 / 9.0, 21.0 / 9.0] {
         let layout = ScreenLayout::cockpit(aspect);
-        let dl = build(&fd, &layout, &HudOptions::default());
+        let dl = build(&fd, &layout, &HudOptions::default(), None);
         assert!(dl.lines.len() > 200, "zu wenig Symbolik: {}", dl.lines.len());
         let (min, max) = bounds(&dl);
         assert!(min[0] >= -aspect / 2.0 - 1e-4 && max[0] <= aspect / 2.0 + 1e-4, "x außerhalb bei {aspect}");
@@ -40,8 +40,8 @@ fn everything_stays_on_screen_for_common_aspects() {
 fn output_is_deterministic() {
     let fd = sample();
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
-    let a = build(&fd, &layout, &HudOptions::default());
-    let b = build(&fd, &layout, &HudOptions::default());
+    let a = build(&fd, &layout, &HudOptions::default(), None);
+    let b = build(&fd, &layout, &HudOptions::default(), None);
     assert_eq!(a.lines, b.lines);
 }
 
@@ -88,7 +88,7 @@ fn crash_screen_replaces_hud() {
     let mut fd = sample();
     fd.warnings.crashed = true;
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
-    let dl = build(&fd, &layout, &HudOptions { show_hud: true, show_panel: false });
+    let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
     assert!(dl.lines.iter().all(|l| l.ink == Ink::Warning));
 }
 
@@ -129,10 +129,10 @@ fn landing_aids_and_ground_messages_stay_on_screen() {
     let fd = sim.flight_data();
     assert!(fd.gear > 0.99);
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
-    let with = build(&fd, &layout, &HudOptions::default());
+    let with = build(&fd, &layout, &HudOptions::default(), None);
     let mut clean = fd.clone();
     clean.gear = 0.0;
-    let without = build(&clean, &layout, &HudOptions::default());
+    let without = build(&clean, &layout, &HudOptions::default(), None);
     assert!(with.lines.len() > without.lines.len() + 8, "keine Landehilfen");
 
     let mut ground = Sim::new(SimConfig::runway(0x0F29));
@@ -140,10 +140,110 @@ fn landing_aids_and_ground_messages_stay_on_screen() {
     for aspect in [4.0 / 3.0, 16.0 / 9.0, 21.0 / 9.0] {
         let layout = ScreenLayout::cockpit(aspect);
         for fd in [fd.clone(), ground.flight_data()] {
-            let dl = build(&fd, &layout, &HudOptions::default());
+            let dl = build(&fd, &layout, &HudOptions::default(), None);
             let (min, max) = bounds(&dl);
             assert!(min[0] >= -aspect / 2.0 - 1e-4 && max[0] <= aspect / 2.0 + 1e-4);
             assert!(min[1] >= -0.5 - 1e-4 && max[1] <= 0.5 + 1e-4);
         }
     }
+}
+
+#[test]
+fn mfds_fit_in_panel_and_do_not_overlap() {
+    for aspect in [4.0 / 3.0, 16.0 / 10.0, 16.0 / 9.0, 21.0 / 9.0] {
+        let layout = ScreenLayout::cockpit(aspect);
+        let m = layout.mfd_layout().expect("MFDs");
+        let panel = layout.panel_rect();
+        for r in [m.left, m.right, m.center] {
+            assert!(
+                r.min[0] >= panel.min[0] && r.max[0] <= panel.max[0],
+                "breiter als das Brett bei {aspect}"
+            );
+            assert!(r.min[1] >= panel.min[1] && r.max[1] <= panel.max[1], "höher als das Brett bei {aspect}");
+        }
+        assert!(m.left.max[0] < m.center.min[0] && m.center.max[0] < m.right.min[0]);
+        // quadratische Bildschirme, innerhalb der Gehäuse
+        let w = m.left_screen.max[0] - m.left_screen.min[0];
+        let h = m.left_screen.max[1] - m.left_screen.min[1];
+        assert!((w - h).abs() < 1e-5);
+        assert!(m.left.min[0] < m.left_screen.min[0] && m.left_screen.max[1] < m.left.max[1]);
+    }
+    // Ohne Brett (spätere Weitwinkelsicht) gibt es keine MFDs
+    let wide = ScreenLayout { panel_fraction: 0.0, ..ScreenLayout::cockpit(16.0 / 9.0) };
+    assert!(wide.mfd_layout().is_none());
+    let dl = build(&sample(), &wide, &HudOptions::default(), None);
+    assert!(dl.lines.iter().all(|l| l.a[1] > wide.view_rect().min[1] - 1e-4));
+}
+
+#[test]
+fn map_draws_inside_left_screen_in_all_modes_and_zooms() {
+    let mut sim = Sim::new(SimConfig::new(0x0F29));
+    for _ in 0..120 {
+        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.55, 0));
+    }
+    let fd = sim.flight_data();
+    let map = MapData::for_terrain(sim.terrain(), sim.route());
+    assert!(!map.contours.is_empty() && map.runways.len() >= 2 && map.route.len() >= 3);
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let m = layout.mfd_layout().unwrap();
+    let panel_only = |opts: &HudOptions| {
+        let dl = build(&fd, &layout, &HudOptions { show_hud: false, ..*opts }, Some(&map));
+        dl.lines
+    };
+    let mut state = MfdState::default();
+    let mut counts = Vec::new();
+    for mode in [MapMode::Grid, MapMode::Satellite] {
+        state.map_mode = mode;
+        for zoom in 0..mfd::MAP_RANGES_NM.len() {
+            state.map_zoom = zoom;
+            let lines = panel_only(&HudOptions { mfd: state, ..HudOptions::default() });
+            for l in &lines {
+                for p in [l.a, l.b] {
+                    let inside_left = p[0] >= m.left.min[0] - 1e-4 && p[0] <= m.left.max[0] + 1e-4;
+                    if inside_left {
+                        assert!(p[1] >= m.left.min[1] - 1e-4 && p[1] <= m.left.max[1] + 1e-4);
+                    }
+                }
+            }
+            counts.push((mode, zoom, lines.len()));
+        }
+    }
+    // Gitterkarte zeichnet mehr Linien als die Satellitenansicht (Gitter, Höhenlinien)
+    let grid: usize = counts.iter().filter(|c| c.0 == MapMode::Grid).map(|c| c.2).sum();
+    let sat: usize = counts.iter().filter(|c| c.0 == MapMode::Satellite).map(|c| c.2).sum();
+    assert!(grid > sat, "Gitter {grid} vs Satellit {sat}");
+    // Zoomstufen sind begrenzt
+    let mut s = MfdState::default();
+    for _ in 0..10 {
+        s.zoom_in();
+    }
+    assert_eq!(s.map_zoom, 0);
+    for _ in 0..10 {
+        s.zoom_out();
+    }
+    assert_eq!(s.map_zoom, mfd::MAP_RANGES_NM.len() - 1);
+}
+
+#[test]
+fn fuel_bar_shrinks_with_fuel() {
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let m = layout.mfd_layout().unwrap();
+    let fill_len = |fraction: f64| {
+        let mut fd = sample();
+        fd.fuel_kg *= fraction / fd.fuel_fraction;
+        fd.fuel_fraction = fraction;
+        let dl = build(&fd, &layout, &HudOptions { show_hud: false, ..HudOptions::default() }, None);
+        dl.lines
+            .iter()
+            .filter(|l| {
+                (l.ink == Ink::Needle || l.ink == Ink::Warning)
+                    && l.a[0] > m.right_screen.min[0]
+                    && (l.a[1] - l.b[1]).abs() < 1e-6
+            })
+            .map(|l| (l.b[0] - l.a[0]).abs())
+            .fold(0.0_f32, f32::max)
+    };
+    let full = fill_len(1.0);
+    let half = fill_len(0.5);
+    assert!(full > 0.1 && (half / full - 0.5).abs() < 0.02, "voll {full}, halb {half}");
 }

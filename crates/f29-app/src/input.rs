@@ -1,8 +1,10 @@
 //! Tastatur und Gamepad → quantisierte Steuereingaben.
 
+use crate::mfd::MfdView;
 use crate::sim::{SimState, SimSystems};
 use crate::view::{ViewMode, ViewSettings};
 use bevy::app::AppExit;
+use bevy::input::keyboard::Key;
 use bevy::prelude::*;
 use f29_core::ControlFrame;
 use f29_core::controls::flags;
@@ -169,11 +171,14 @@ fn flight_input(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn hotkeys(
     keys: Res<ButtonInput<KeyCode>>,
+    logical: Res<ButtonInput<Key>>,
     gamepads: Query<&Gamepad>,
     mut state: ResMut<SimState>,
     mut view: ResMut<ViewSettings>,
+    mut mfd: ResMut<MfdView>,
     mut pilot: ResMut<PilotInput>,
     mut exit: MessageWriter<AppExit>,
 ) {
@@ -189,22 +194,39 @@ fn hotkeys(
         state.restart();
         *pilot = PilotInput::matching(&state.sim);
     }
-    if keys.just_pressed(KeyCode::F1) {
+    // Ansichten: Shift + F-Taste
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+    if shift && keys.just_pressed(KeyCode::F1) {
         view.mode = ViewMode::Cockpit;
     }
-    if keys.just_pressed(KeyCode::F2) {
+    if shift && keys.just_pressed(KeyCode::F2) {
         view.mode = ViewMode::Chase;
     }
-    if keys.just_pressed(KeyCode::KeyV) || pad(GamepadButton::Select) {
+    if pad(GamepadButton::Select) {
         view.mode = match view.mode {
             ViewMode::Cockpit => ViewMode::Chase,
             ViewMode::Chase => ViewMode::Cockpit,
         };
     }
-    if keys.just_pressed(KeyCode::KeyH) {
+    if shift && keys.just_pressed(KeyCode::F3) {
+        view.retro = view.retro.next();
+    }
+    if shift && keys.just_pressed(KeyCode::F4) {
         view.hud = !view.hud;
     }
-    if keys.just_pressed(KeyCode::F3) {
-        view.retro = view.retro.next();
+    // MFDs: F3 Karte Gitter/Satellit, F4 nächste Seite rechts,
+    // Y/X zoomen nach Tastenbeschriftung (deutsche und US-Tastatur).
+    if !shift && keys.just_pressed(KeyCode::F3) {
+        mfd.0.toggle_map_mode();
+    }
+    if !shift && keys.just_pressed(KeyCode::F4) {
+        mfd.0.next_page();
+    }
+    let typed = |c: &str| logical.just_pressed(Key::Character(c.into()));
+    if typed("y") || typed("Y") {
+        mfd.0.zoom_in();
+    }
+    if typed("x") || typed("X") {
+        mfd.0.zoom_out();
     }
 }

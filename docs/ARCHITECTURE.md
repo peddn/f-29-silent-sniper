@@ -31,8 +31,8 @@ kompiliert und testet ohne Grafikkarte, ohne Fenster und ohne externe Crates.
 | `f29-data` | Spieldaten als Typen + Plausibilitätsprüfung |
 | `f29-terrain` | Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung, Flugplätze (Platzwahl, Einebnung) |
 | `f29-core` | Flugmodell, Atmosphäre, Sim-Schleife, Navigation, Replays, Autopilot, deterministische Mathematik |
-| `f29-hud` | HUD und Instrumente als Liniensegmente, Vektorfont, SVG-Export |
-| `f29-render` | Terrain-Kachel-Meshes, Bahnen mit Markierungen und PAPI, Flugzeugmodell mit Fahrwerk, Palette, NED → Y-up |
+| `f29-hud` | HUD und MFDs (Karte mit Höhenlinien, Ressourcen) als Liniensegmente, Vektorfont, SVG-Export |
+| `f29-render` | Terrain-Kachel-Meshes, Bahnen mit Markierungen und PAPI, Flugzeugmodell mit Fahrwerk, Satellitenkarte (Raster + kursbezogener Ausschnitt), Palette, NED → Y-up |
 | `f29-headless` | Simulation ohne Grafik: Demo, Replays, HUD als SVG, Höhenkarte, Benchmark |
 | `f29-app` | Fenster, Eingabe, Kameras, Terrain-Streaming, Post-Processing |
 
@@ -92,7 +92,7 @@ Terrain-Streaming in Threads), solange es den Simulationszustand nur liest.
 | Determinismus | identische Eingaben ⇒ identischer Hash; eine Quantisierungsstufe Unterschied ⇒ anderer Hash; Replay-Textformat verlustfrei | `f29-core/tests/determinism.rs` |
 | Golden Replay | 90-s-Flug sowie Anflug, Landung, Ausrollen und erneuter Start mit festem Hash, läuft in CI auf Linux, Windows und macOS | `f29-core/tests/golden/*.replay` |
 | Terrain | Seed-Stabilität, Kachelränder bitgleich, Stetigkeit, Normalen, Flugplätze eben und deterministisch, Bahnnummern | `f29-terrain`, `f29-render` |
-| HUD | alles bleibt bei 4:3 bis 21:9 im Bild, Projektion des Boresight, Leiter bewegt sich richtig, deterministisch | `f29-hud/src/tests.rs` |
+| HUD/MFD | alles bleibt bei 4:3 bis 21:9 im Bild, Projektion des Boresight, Leiter bewegt sich richtig, deterministisch; MFDs passen ins Brett, Karte bleibt im linken MFD (alle Modi und Zoomstufen), Treibstoffbalken, Höhenlinien, kursbezogene Projektion | `f29-hud` |
 | Daten | Flugzeugparameter plausibel; Shader-Palette = Rust-Palette | `f29-data`, `f29-render` |
 
 **Golden-Hash aktualisieren** (nur nach *beabsichtigter* Verhaltensänderung):

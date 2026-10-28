@@ -15,7 +15,7 @@ Landung auf der Heimatbasis und geheimen Pisten, Treibstoff.
 
 [![CI](https://github.com/peddn/f-29-silent-sniper/actions/workflows/ci.yml/badge.svg)](https://github.com/peddn/f-29-silent-sniper/actions/workflows/ci.yml)
 
-| HUD und Instrumente (`f29-headless hud-svg`) | Prozedurales Gelände, 120 × 120 km (`f29-headless terrain`) |
+| HUD und MFDs (`f29-headless hud-svg`) | Prozedurales Gelände, 120 × 120 km (`f29-headless terrain`) |
 |---|---|
 | ![HUD](docs/images/hud.svg) | ![Gelände](docs/images/terrain.png) |
 
@@ -59,9 +59,12 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev pkg-config
 | F | X / Quadrat | Klappen ein/aus – bei jeder Fahrt: langsam gut steuerbar, schnell weniger Fahrtverlust in Kurven |
 | G | Y / Dreieck | Fahrwerk aus/ein (am Boden gesperrt) |
 | N | A / Kreuz | nächster Navigationspunkt |
-| F1 / F2 / V | Select | Cockpit / Verfolger / umschalten |
-| H | | HUD ein/aus |
-| F3 | | Retro-Look: voll → nur Palette → aus |
+| Shift+F1 / Shift+F2 | Select | Cockpit / Verfolger |
+| Shift+F3 | | Retro-Look: voll → nur Palette → aus |
+| Shift+F4 | | HUD ein/aus |
+| F3 | | Karte (linkes MFD): Gitter ↔ Satellitenbild |
+| F4 | | Rechtes MFD: nächste Seite (bisher: Ressourcen) |
+| Y / X | | Karte näher / weiter (2, 5, 10, 20, 40 NM) |
 | P | Start | Pause |
 | F12 | | Screenshot nach `screenshots/` |
 | R | | Neustart (Flug wird als Replay gesichert) |
@@ -119,6 +122,11 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Treibstoff als Masse, quadratischer Verbrauch, Flameout, FUEL LOW / BINGO (v0.1.6)
 - [x] Heimatbasis und geheime Pisten, Fahrwerk, Rollen und Wenden am Boden,
       Aufsetzbewertung, PAPI und Landehilfen im HUD, Start auf der Bahn (v0.1.6)
+- [x] Instrumentenbrett mit zwei MFDs: Karte (Gitter/Satellit, Flugrichtung oben,
+      zoombar) und Ressourcen (Treibstoff, Waffenstationen); Platz für die
+      Stealth-/Radarimpuls-Anzeige (v0.1.10)
+- [ ] Weitere MFD-Seiten: Triebwerk, künstlicher Horizont, Systeme
+- [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
 
 ### v0.2: Angriff und Tarnung
 - [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD

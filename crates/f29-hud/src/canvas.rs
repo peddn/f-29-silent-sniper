@@ -17,6 +17,12 @@ pub enum Ink {
     PanelDim,
     /// Zeiger.
     Needle,
+    /// MFD-Schrift und Kartenlinien (Küste).
+    Mfd,
+    /// Abgeschwächte MFD-Linien (Höhenlinien, Platzhalter).
+    MfdDim,
+    /// Kartengitter.
+    MfdGrid,
 }
 
 /// Ein Liniensegment in Bildschirmeinheiten.
