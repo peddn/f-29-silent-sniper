@@ -53,7 +53,7 @@ pub struct WorldOrigin(pub DVec3);
 
 /// Geglätteter Kameraversatz der Verfolgeransicht (Y-up, relativ zum Flugzeug).
 #[derive(Resource, Debug, Clone, Copy)]
-struct ChaseCamera {
+pub struct ChaseCamera {
     offset: Vec3,
 }
 
@@ -70,7 +70,7 @@ pub struct MainCamera;
 pub struct HudCamera;
 
 #[derive(Component)]
-struct PlayerAircraft;
+pub struct PlayerAircraft;
 
 /// Augpunkt des Piloten relativ zum Modellzentrum (Y-up, Nase −z).
 const EYE_OFFSET: Vec3 = Vec3::new(0.0, 0.9, -4.5);
