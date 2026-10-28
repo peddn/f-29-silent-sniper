@@ -106,6 +106,45 @@ Format jedes Eintrags:
   Nase-runter-Drücken unterhalb der Abrissgeschwindigkeit).
   Spielerbeobachtung (erster Spieltest): „Im Original sackt das Flugzeug aggressiv
   senkrecht nach unten ab, wenn man aggressiv fliegt.“
+- **Detailanalyse der Referenz** (Lesephase zu v0.1.3, eigene Worte, keine Werte):
+  Die Flugroutine `stepFlightModel` (`src/egflight.c`) ist kein Kräftemodell,
+  sondern ein Fahrt-und-Lage-Modell.
+  1. *Fahrt* ist eine einzelne Zahl. Sie läuft mit Verzögerung einer Zielfahrt
+     hinterher. Die Zielfahrt steigt mit dem Schub und sinkt mit der Nicklage:
+     Nase hoch kostet Fahrt, Nase runter bringt Fahrt. Mit der Höhe wird sie etwas
+     größer, mit dem Treibstoffgewicht kleiner, ausgefahrenes Fahrwerk und
+     Landeklappen bremsen. Vor allem sinkt sie **linear mit der g-Last** und
+     erreicht bei maximaler g-Last null. Harte Kurven fressen deshalb rasch Fahrt.
+  2. *g-Last* ergibt sich aus der **Querlage** (Tabelle: Lastvielfaches einer
+     horizontalen Kurve bei dieser Querlage) plus Ziehen. Wer nur in die Kurve
+     rollt, zieht also automatisch die passende g-Last und verliert Fahrt. Ziehen
+     wird an einer Obergrenze gekappt, Drücken wirkt nur halb so stark.
+  3. *Abrissgeschwindigkeit* ist eine Grundgröße, die mit der Höhe und mit der
+     **Wurzel der g-Last** wächst (beschleunigter Abriss). Landeklappen senken sie.
+  4. *Durchsacken:* Die Flugbahn liegt um einen „Durchhängewinkel“ unter der
+     Nase. Er wächst mit dem Verhältnis Abriss- zu aktueller Fahrt (begrenzt) und
+     mit dem Kosinus der Querlage. Steigrate = Fahrt × sin(Nicklage −
+     Durchhängewinkel). Je langsamer, desto mehr sinkt das Flugzeug bei gleicher
+     Nase; nahe und unter der Abrissgeschwindigkeit sackt es mit erhobener Nase
+     durch.
+  5. *Abriss:* Liegt die Fahrt unter der Abrissgeschwindigkeit (in der Luft),
+     wird die Nicklage **in jedem Frame um einen Betrag proportional zum
+     Fahrtdefizit** nach unten gedrückt. Auf dem höchsten Schwierigkeitsgrad und
+     bei Beschädigung geschieht das doppelt so stark. Dazu kommt ein Warnton.
+     Es gibt **keinen Abrisszustand und keine Hysterese**: Sobald die Fahrt
+     wieder über der Schwelle liegt, endet das Drücken sofort und stetig.
+  6. *Nicken* ist ein reines Ratenkommando, unabhängig von der Fahrt. Dass es
+     sich bei wenig Fahrt schwach anfühlt, liegt am entgegenwirkenden Nickabfall
+     (Punkt 5) und am Durchhängen (Punkt 4).
+  7. Mit Fahrwerk unten gibt es auf leichten Schwierigkeitsgraden in Bodennähe
+     eine automatische Abfanghilfe (Landehilfe). Turbulenz hängt von
+     Schwierigkeitsgrad, Höhe, Fahrwerk und Schäden ab.
+
+  Folgerung für uns: Das als „senkrecht absacken“ erlebte Verhalten entsteht aus
+  dem Zusammenspiel von Punkt 4 (Bahn fällt unter die Nase) und Punkt 5 (Nase
+  wird stetig nach unten gedrückt, solange Fahrt fehlt). Es ist **stetig** und
+  ohne Schaltzustand. Unsere Hysterese-Lösung (v0.1.1/v0.1.2) erzeugt dagegen
+  Sprünge.
 - **Unser Design:** Das Original rechnet mit einer Geschwindigkeitsschwelle. Wir
   lösen den Abriss physikalisch über den **Anstellwinkel** aus; die Abhängigkeit
   von Höhe (Luftdichte) und g-Last ergibt sich dabei von selbst (v_Abriss ∝ √(n/ρ)).
