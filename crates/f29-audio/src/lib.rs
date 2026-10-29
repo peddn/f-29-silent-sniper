@@ -6,10 +6,10 @@
 //! und lassen sich als WAV-Hörproben rendern (`f29-headless sound`).
 //!
 //! Klänge:
-//! - **Triebwerk:** gefiltertes Rauschen (Strahl), zwei leicht verstimmte,
-//!   weich gefilterte Rechtecktöne (Turbine) und ein leises Pfeifen. Tonhöhe
-//!   folgt der Drehzahl, Pegel und Helligkeit dem Schub.
-//! - **Wind:** wächst mit der Fahrt, Luftbremse verstärkt ihn.
+//! - **Triebwerk:** zwei leicht verstimmte, weich gefilterte Rechtecktöne
+//!   (Brummen, Tonhöhe nach Drehzahl), dazu dunkles, im Takt des Brummens
+//!   pulsierendes Rauschen (Strahl, Pegel und Helligkeit nach Schub) und ein
+//!   leises Pfeifen. Am Boden ein tiefes Rollgeräusch.
 //! - **Fahrwerk / Klappen:** Motorbrummen bzw. -surren, solange sie fahren;
 //!   das Fahrwerk verriegelt mit einem dumpfen Schlag, die Klappen mit einem
 //!   Klicken.
@@ -82,6 +82,30 @@ impl AudioInput {
     }
 }
 
+/// Pegel der Klanggruppen 0..1 – für Hörproben einzelner Klänge.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Mix {
+    /// Triebwerk und Rollgeräusch.
+    pub engine: f32,
+    /// Fahrwerks- und Klappenmotoren.
+    pub systems: f32,
+    /// Einmal-Klänge (Verriegeln, Zischen, Aufsetzen, Absturz).
+    pub events: f32,
+    /// Ansagen.
+    pub voice: f32,
+}
+
+impl Default for Mix {
+    fn default() -> Self {
+        Self { engine: 1.0, systems: 1.0, events: 1.0, voice: 1.0 }
+    }
+}
+
+impl Mix {
+    /// Alles außer dem Triebwerk.
+    pub const WITHOUT_ENGINE: Mix = Mix { engine: 0.0, systems: 1.0, events: 1.0, voice: 1.0 };
+}
+
 /// Ein einmaliger Klang.
 #[derive(Debug, Clone)]
 enum OneShot {
@@ -109,7 +133,6 @@ pub struct Synth {
     // geglättete Parameter
     rpm: OnePole,
     thrust: OnePole,
-    wind: OnePole,
     master: OnePole,
     gear_motor: OnePole,
     flap_motor: OnePole,
@@ -123,8 +146,7 @@ pub struct Synth {
     lfo: Phase,
     rumble_lp: OnePole,
     tone_lp: OnePole,
-    wind_lp: OnePole,
-    wind_hp: OnePole,
+    rumble_lp2: OnePole,
     motor_lp: OnePole,
     roll_lp: OnePole,
     // Ereigniserkennung
@@ -136,6 +158,7 @@ pub struct Synth {
     stall_timer: f32,
     shots: Vec<OneShot>,
     volume: f32,
+    mix: Mix,
 }
 
 impl Synth {
@@ -148,7 +171,6 @@ impl Synth {
             stall_voice,
             rpm: OnePole::default(),
             thrust: OnePole::default(),
-            wind: OnePole::default(),
             master: OnePole::default(),
             gear_motor: OnePole::default(),
             flap_motor: OnePole::default(),
@@ -161,8 +183,7 @@ impl Synth {
             lfo: Phase::default(),
             rumble_lp: OnePole::default(),
             tone_lp: OnePole::default(),
-            wind_lp: OnePole::default(),
-            wind_hp: OnePole::default(),
+            rumble_lp2: OnePole::default(),
             motor_lp: OnePole::default(),
             roll_lp: OnePole::default(),
             prev_gear: f32::NAN,
@@ -173,6 +194,7 @@ impl Synth {
             stall_timer: 0.0,
             shots: Vec::new(),
             volume: 1.0,
+            mix: Mix::default(),
         }
     }
 
@@ -184,6 +206,11 @@ impl Synth {
     /// Gesamtlautstärke 0..1.
     pub fn set_volume(&mut self, volume: f32) {
         self.volume = volume.clamp(0.0, 1.0);
+    }
+
+    /// Pegel der Klanggruppen (Standard: alle voll).
+    pub fn set_mix(&mut self, mix: Mix) {
+        self.mix = mix;
     }
 
     /// Neue Momentaufnahme; löst Einmal-Klänge aus (Verriegeln, Aufsetzen …).
@@ -244,8 +271,6 @@ impl Synth {
 
         let rpm_target = if inp.running { 0.55 + 0.45 * inp.engine } else { 0.08 };
         let thrust_target = if inp.running { inp.engine } else { 0.0 };
-        let speed = (inp.tas / 260.0).clamp(0.0, 1.5);
-        let wind_target = 0.22 * speed * speed + 0.18 * inp.airbrake * speed;
         let gear_moving = if inp.gear > 0.001 && inp.gear < 0.999 { 1.0 } else { 0.0 };
         let flaps_moving = if inp.flaps > 0.001 && inp.flaps < 0.999 { 1.0 } else { 0.0 };
         let roll_target = if inp.on_ground { (inp.tas / 60.0).clamp(0.0, 1.0) } else { 0.0 };
@@ -265,26 +290,22 @@ impl Synth {
         for o in out.iter_mut() {
             let rpm = self.rpm.process(rpm_target, a_rpm);
             let thrust = self.thrust.process(thrust_target, a_param);
-            let wind = self.wind.process(wind_target, a_param);
             let master = self.master.process(master_target, a_master);
             let gm = self.gear_motor.process(gear_moving, a_fast);
             let fm = self.flap_motor.process(flaps_moving, a_fast);
             let roll = self.roll.process(roll_target, a_param);
             let n = self.noise.sample();
 
-            // Triebwerk: Strahlrauschen, Turbinenton, Pfeifen
-            let rumble_fc = 180.0 + 1_600.0 * thrust;
-            let rumble =
-                self.rumble_lp.process(n, OnePole::coeff(rumble_fc, sr)) * (0.10 + 0.42 * thrust) * rpm;
+            // Triebwerk: Brummen (Turbinenton), dunkles Strahlrauschen im Takt
+            // des Brummens, leises Pfeifen
             let f0 = 38.0 + 115.0 * rpm;
-            let tone = 0.5
+            let buzz = 0.5
                 * (pulse(self.tone_a.advance(f0, sr), 0.3) + pulse(self.tone_b.advance(f0 * 1.008, sr), 0.3));
-            let tone = self.tone_lp.process(tone, OnePole::coeff(350.0 + 900.0 * rpm, sr)) * 0.075 * rpm;
+            let tone = self.tone_lp.process(buzz, OnePole::coeff(350.0 + 900.0 * rpm, sr)) * 0.075 * rpm;
+            let rumble_fc = OnePole::coeff(90.0 + 380.0 * thrust, sr);
+            let dark = self.rumble_lp2.process(self.rumble_lp.process(n, rumble_fc), rumble_fc);
+            let rumble = dark * (0.65 + 0.35 * buzz) * (0.10 + 0.28 * thrust) * rpm;
             let whine = sine(self.whine.advance(480.0 + 1_250.0 * rpm, sr)) * (0.003 + 0.009 * rpm * rpm);
-            // Wind: bandbegrenztes Rauschen
-            let w_low = self.wind_lp.process(n, OnePole::coeff(1_400.0, sr));
-            let w_high = self.wind_hp.process(w_low, OnePole::coeff(250.0, sr));
-            let wind_s = (w_low - w_high) * wind;
             // Motoren
             let lfo = sine(self.lfo.advance(7.0, sr));
             let motor_raw = saw(self.motor.advance(92.0 * (1.0 + 0.02 * lfo), sr));
@@ -294,7 +315,9 @@ impl Synth {
             // Rollgeräusch am Boden
             let rollnoise = self.roll_lp.process(n, OnePole::coeff(120.0, sr)) * 0.35 * roll;
 
-            let mut x = (rumble + tone + whine + wind_s + motor + flap + rollnoise) * master;
+            let engine = (rumble + tone + whine + rollnoise) * self.mix.engine;
+            let systems = (motor + flap) * self.mix.systems;
+            let mut x = (engine + systems) * master;
             x += self.render_shots(dt) * shots_master;
             *o = x.tanh();
         }
@@ -304,45 +327,49 @@ impl Synth {
     fn render_shots(&mut self, dt: f32) -> f32 {
         let sr = self.sr;
         let mut sum = 0.0;
+        let mix = self.mix;
         for s in &mut self.shots {
             let n = self.noise.sample();
-            sum += match s {
-                OneShot::Thump { t, freq, gain, decay } => {
-                    let v = (sine(*t * *freq) * (-*t / *decay).exp() + n * (-*t / 0.008).exp() * 0.4) * *gain;
-                    *t += dt;
-                    v
-                }
-                OneShot::Click { t, gain } => {
-                    let v = n * (-*t / 0.004).exp() * *gain;
-                    *t += dt;
-                    v
-                }
-                OneShot::Hiss { t, gain, dur, lp } => {
-                    let env = (*t / 0.03).min(1.0) * (1.0 - *t / *dur).max(0.0);
-                    let hp = n - lp.process(n, OnePole::coeff(2_500.0, sr));
-                    *t += dt;
-                    hp * env * *gain
-                }
-                OneShot::Squeal { t, gain, phase } => {
-                    let dur = 0.32;
-                    let f = 1_350.0 - 450.0 * (*t / dur);
-                    let env = (*t / 0.01).min(1.0) * (1.0 - *t / dur).max(0.0);
-                    let v = (sine(phase.advance(f, sr)) * 0.8 + n * 0.25) * env * *gain;
-                    *t += dt;
-                    v
-                }
-                OneShot::Crash { t, lp } => {
-                    let v = lp.process(n, OnePole::coeff(900.0, sr)) * (-*t / 0.7).exp() * 1.6
-                        + sine(*t * 38.0) * (-*t / 0.25).exp() * 0.6;
-                    *t += dt;
-                    v
-                }
-                OneShot::Sample { pos, gain } => {
-                    let v = self.stall_voice.get(*pos).copied().unwrap_or(0.0) * *gain;
-                    *pos += 1;
-                    v
-                }
-            };
+            let group = if matches!(s, OneShot::Sample { .. }) { 1.0 } else { mix.events };
+            sum += group
+                * match s {
+                    OneShot::Thump { t, freq, gain, decay } => {
+                        let v =
+                            (sine(*t * *freq) * (-*t / *decay).exp() + n * (-*t / 0.008).exp() * 0.4) * *gain;
+                        *t += dt;
+                        v
+                    }
+                    OneShot::Click { t, gain } => {
+                        let v = n * (-*t / 0.004).exp() * *gain;
+                        *t += dt;
+                        v
+                    }
+                    OneShot::Hiss { t, gain, dur, lp } => {
+                        let env = (*t / 0.03).min(1.0) * (1.0 - *t / *dur).max(0.0);
+                        let hp = n - lp.process(n, OnePole::coeff(2_500.0, sr));
+                        *t += dt;
+                        hp * env * *gain
+                    }
+                    OneShot::Squeal { t, gain, phase } => {
+                        let dur = 0.32;
+                        let f = 1_350.0 - 450.0 * (*t / dur);
+                        let env = (*t / 0.01).min(1.0) * (1.0 - *t / dur).max(0.0);
+                        let v = (sine(phase.advance(f, sr)) * 0.8 + n * 0.25) * env * *gain;
+                        *t += dt;
+                        v
+                    }
+                    OneShot::Crash { t, lp } => {
+                        let v = lp.process(n, OnePole::coeff(900.0, sr)) * (-*t / 0.7).exp() * 1.6
+                            + sine(*t * 38.0) * (-*t / 0.25).exp() * 0.6;
+                        *t += dt;
+                        v
+                    }
+                    OneShot::Sample { pos, gain } => {
+                        let v = self.stall_voice.get(*pos).copied().unwrap_or(0.0) * *gain * mix.voice;
+                        *pos += 1;
+                        v
+                    }
+                };
         }
         sum
     }
@@ -459,6 +486,25 @@ mod tests {
         s.set_input(flying(0.6));
         run(&mut s, 2.0);
         assert_eq!(s.active_one_shots(), 0);
+    }
+
+    #[test]
+    fn no_wind_and_engine_noise_is_dark() {
+        // Ohne Triebwerk und ohne bewegte Teile ist es in der Luft still – auch
+        // bei hoher Fahrt und ausgefahrener Luftbremse (kein Wind).
+        let mut s = Synth::with_default_voice();
+        s.set_mix(Mix::WITHOUT_ENGINE);
+        s.set_input(AudioInput { airbrake: 1.0, tas: 300.0, ..flying(1.0) });
+        run(&mut s, 1.0);
+        let out = run(&mut s, 1.0);
+        assert!(rms(&out) < 1e-4, "Restgeräusch {}", rms(&out));
+        // Triebwerk bei Vollgas: wenig Energie oberhalb von 2 kHz (Nulldurchgänge)
+        let mut s = Synth::with_default_voice();
+        s.set_input(flying(1.0));
+        let out = run(&mut s, 2.0);
+        let tail = &out[out.len() / 2..];
+        let zc = tail.windows(2).filter(|p| (p[0] < 0.0) != (p[1] < 0.0)).count() as f32 / 1.0;
+        assert!(zc < 1_500.0, "zu hell: {zc} Nulldurchgänge/s");
     }
 
     #[test]

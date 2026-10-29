@@ -1,6 +1,6 @@
 //! Hörproben: rendert die Klänge als WAV-Dateien, ganz ohne Soundkarte.
 
-use f29_audio::{AudioInput, SAMPLE_RATE, Synth, TouchdownCue, voice, wav};
+use f29_audio::{AudioInput, Mix, SAMPLE_RATE, Synth, TouchdownCue, voice, wav};
 use f29_core::autopilot::{AIM_POINT_M, Approach, GLIDE_SLOPE};
 use f29_core::controls::flags;
 use f29_core::sim::{Spawn, SpawnKind};
@@ -10,9 +10,13 @@ use std::path::Path;
 /// Bildrate, mit der die Hörproben den Synthesizer füttern (wie das Spiel).
 const FPS: f32 = 60.0;
 
+/// Nur das Triebwerk.
+const ENGINE_ONLY: Mix = Mix { engine: 1.0, systems: 0.0, events: 0.0, voice: 0.0 };
+
 /// Rendert eine Zeitleiste: `input(t)` liefert die Momentaufnahme zur Zeit t.
-fn render(seconds: f32, mut input: impl FnMut(f32) -> AudioInput) -> Vec<f32> {
+fn render(seconds: f32, mix: Mix, mut input: impl FnMut(f32) -> AudioInput) -> Vec<f32> {
     let mut synth = Synth::with_default_voice();
+    synth.set_mix(mix);
     let per_frame = (SAMPLE_RATE as f32 / FPS) as usize;
     let frames = (seconds * FPS) as usize;
     let mut out = vec![0.0; frames * per_frame];
@@ -36,7 +40,7 @@ fn cruise(engine: f32, tas: f32) -> AudioInput {
 fn flight_demo() -> Vec<f32> {
     let mut sim = Sim::new(SimConfig::runway(0x0F29));
     let ticks_per_frame = (TICK_HZ as f32 / FPS) as usize;
-    render(85.0, |t| {
+    render(85.0, Mix::default(), |t| {
         let fd = sim.flight_data();
         let mut f = flags::FLAPS;
         if fd.radar_altitude_m < 60.0 || t < 25.0 {
@@ -87,7 +91,7 @@ fn landing_demo() -> Vec<f32> {
     let mut sim = Sim::new(SimConfig { seed: 0x0F29, spawn });
     let mut ap = Approach::new(rw);
     let ticks_per_frame = (TICK_HZ as f32 / FPS) as usize;
-    render(60.0, |_| {
+    render(60.0, Mix::default(), |_| {
         for _ in 0..ticks_per_frame {
             if sim.status() == Status::Flying {
                 let c = ap.control(sim.spec(), &sim.flight_data(), DT);
@@ -104,35 +108,35 @@ pub fn render_all(dir: &Path) -> Result<Vec<String>, String> {
     let clips: Vec<(&str, Vec<f32>)> = vec![
         (
             "01_triebwerk",
-            render(12.0, |t| {
+            render(12.0, ENGINE_ONLY, |t| {
                 let up = ramp(t, 2.0, 5.0) - ramp(t, 8.0, 11.0);
                 cruise(up, 40.0 + 180.0 * ramp(t, 2.0, 9.0))
             }),
         ),
         (
             "02_fahrwerk",
-            render(13.0, |t| AudioInput {
+            render(13.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
                 gear: ramp(t, 1.0, 6.0) - ramp(t, 7.5, 12.5),
                 ..cruise(0.55, 120.0)
             }),
         ),
         (
             "03_klappen",
-            render(6.0, |t| AudioInput {
+            render(6.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
                 flaps: ramp(t, 0.5, 2.5) - ramp(t, 3.5, 5.5),
                 ..cruise(0.55, 120.0)
             }),
         ),
         (
             "04_luftbremse",
-            render(6.0, |t| AudioInput {
+            render(6.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
                 airbrake: ramp(t, 1.0, 1.8) - ramp(t, 4.0, 4.8),
                 ..cruise(0.6, 200.0)
             }),
         ),
         (
             "05_aufsetzen",
-            render(8.0, |t| {
+            render(8.0, Mix::WITHOUT_ENGINE, |t| {
                 let (on_ground, touchdown) = if t >= 4.5 {
                     (true, td(2, true))
                 } else if t >= 1.0 {
@@ -145,9 +149,15 @@ pub fn render_all(dir: &Path) -> Result<Vec<String>, String> {
         ),
         (
             "06_abrisswarnung",
-            render(7.0, |t| AudioInput { stall_warning: (1.0..5.5).contains(&t), ..cruise(0.8, 75.0) }),
+            render(7.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
+                stall_warning: (1.0..5.5).contains(&t),
+                ..cruise(0.8, 75.0)
+            }),
         ),
-        ("07_absturz", render(4.0, |t| AudioInput { crashed: t > 1.0, ..cruise(0.9, 200.0) })),
+        (
+            "07_absturz",
+            render(4.0, Mix::WITHOUT_ENGINE, |t| AudioInput { crashed: t > 1.0, ..cruise(0.9, 200.0) }),
+        ),
         ("08_flug_start_abriss", flight_demo()),
         ("09_flug_landung", landing_demo()),
     ];

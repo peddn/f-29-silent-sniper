@@ -484,11 +484,14 @@ Format jedes Eintrags:
   einer Momentaufnahme der Simulation einen Mono-Datenstrom; Bevy spielt ihn als
   eigene Audioquelle ab, WAV-Hörproben entstehen ohne Soundkarte
   (`f29-headless sound`). Charakter: klassisch-retro, aber zurückhaltend.
-  - **Triebwerk:** tiefpassgefiltertes Rauschen (heller und lauter mit dem
-    Schub), zwei leicht verstimmte, weich gefilterte Rechtecktöne mit der
-    Drehzahl als Tonhöhe, leises Turbinenpfeifen. Bei Flameout läuft es langsam aus.
-  - **Wind** wächst mit dem Quadrat der Fahrt, die Luftbremse verstärkt ihn;
-    **Rollgeräusch** am Boden.
+  - **Triebwerk:** zwei leicht verstimmte, weich gefilterte Rechtecktöne mit
+    der Drehzahl als Tonhöhe (das tragende Brummen), dazu dunkles Rauschen
+    (zweifacher Tiefpass, 90–470 Hz je nach Schub), das im Takt des Brummens
+    pulsiert und so mit ihm verschmilzt, und ein leises Turbinenpfeifen. Bei
+    Flameout läuft es langsam aus. **Rollgeräusch** am Boden.
+  - *v0.1.13 (Spielertest):* Das Rauschen war zu laut und zu schrill – jetzt
+    deutlich leiser und dunkler. Das Windgeräusch ist entfernt; die Simulation
+    hat keinen Wind.
   - **Fahrwerk:** Motorbrummen beim Fahren, dumpfer Schlag beim Verriegeln.
     **Klappen:** Surren, Klick am Ende. **Luftbremse:** Zischen beim Aus- und
     Einfahren.
@@ -500,6 +503,8 @@ Format jedes Eintrags:
     Rauschen) mit grober Abtastung und Quantisierung wie bei frühen
     Sprachchips. Sie lässt sich durch eine eigene Aufnahme
     (`assets/sounds/stall.wav`) ersetzen.
+  - Hörproben rendern Einzelklänge ohne Triebwerk (Klanggruppen Triebwerk,
+    Systeme, Ereignisse, Ansagen lassen sich getrennt pegeln).
   - Pause schaltet weich stumm. Startparameter `--volume 0..100` und
     `--no-sound` (dann wird kein Audiogerät geöffnet).
   - Musik (z. B. im Startbildschirm) kommt später als eigener Kanal über Bevys
