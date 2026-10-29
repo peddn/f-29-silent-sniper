@@ -421,9 +421,9 @@ fn bank_scale(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
 fn left_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let x = glass.min[0] + 0.01;
     let cy = glass.center()[1];
-    let kts = units::mps_to_kt(fd.tas_mps).round() as i64;
+    let kmh = units::mps_to_kmh(fd.tas_mps).round() as i64;
     dl.text_mid([x, cy + 0.045], TXT_SMALL, Align::Left, &format!("G {:.1}", fd.load_factor), Ink::Hud);
-    dl.boxed_text([x + 0.006, cy], TXT, Align::Left, &format!("{kts:>4}"), Ink::Hud);
+    dl.boxed_text([x + 0.006, cy], TXT, Align::Left, &format!("{kmh:>4}"), Ink::Hud);
     dl.text_mid([x, cy - 0.045], TXT_SMALL, Align::Left, &format!("M {:.2}", fd.mach), Ink::Hud);
     dl.text_mid(
         [x, cy - 0.075],
@@ -487,24 +487,23 @@ const CONFIG_GEAR: usize = 0;
 const CONFIG_FLAPS: usize = 1;
 const CONFIG_BRAKE: usize = 2;
 
-/// Rechts: Höhe, Radarhöhe, Steigrate, Steerpoint.
+/// Rechts: Höhe (m), Radarhöhe (m), Steigrate (m/s), Steerpoint (km).
 fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let x = glass.max[0] - 0.01;
     let cy = glass.center()[1];
-    let ft = units::m_to_ft(fd.altitude_m).round() as i64;
-    let vs = (units::mps_to_fpm(fd.vertical_speed_mps) / 100.0).round() as i64 * 100;
+    let alt = fd.altitude_m.round() as i64;
+    let vs = fd.vertical_speed_mps.round() as i64;
     dl.text_mid([x, cy + 0.045], TXT_SMALL, Align::Right, &format!("{vs:+}"), Ink::Hud);
-    dl.boxed_text([x - 0.006, cy], TXT, Align::Right, &format!("{ft:>5}"), Ink::Hud);
+    dl.boxed_text([x - 0.006, cy], TXT, Align::Right, &format!("{alt:>5}"), Ink::Hud);
     // Höhe über Grund (Radarhöhe) immer anzeigen: Das Gelände hat echte Berge,
     // die Höhe über dem Meer allein reicht für den Tiefflug nicht.
-    let rft = units::m_to_ft(fd.radar_altitude_m).max(0.0);
-    let step = if rft < 1_000.0 { 10.0 } else { 50.0 };
-    let r = (rft / step).round() as i64 * step as i64;
-    let ink = if rft < 500.0 { Ink::HudWarning } else { Ink::Hud };
+    let ragl = fd.radar_altitude_m.max(0.0);
+    let step = if ragl < 300.0 { 5.0 } else { 10.0 };
+    let r = (ragl / step).round() as i64 * step as i64;
+    let ink = if ragl < 150.0 { Ink::HudWarning } else { Ink::Hud };
     dl.text_mid([x, cy - 0.045], TXT_SMALL, Align::Right, &format!("R {r:>5}"), ink);
     if let Some(sp) = &fd.steerpoint {
-        let nm = units::m_to_nm(sp.range);
-        let txt = format!("{} {:.1}", sp.name, nm);
+        let txt = format!("{} {:.1}", sp.name, units::m_to_km(sp.range));
         dl.text_mid([x, glass.min[1] + 0.03], TXT_SMALL, Align::Right, &txt, Ink::Hud);
     }
     // Zielerfassung: Radar an, Blickrichtung, aufgeschaltetes Ziel
@@ -514,7 +513,7 @@ fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     }
     sensor.push_str(fd.look.label());
     if let Some(t) = &fd.target {
-        sensor = format!("{sensor} {:.1}", units::m_to_nm(t.range));
+        sensor = format!("{sensor} {:.1}", units::m_to_km(t.range));
     }
     dl.text_mid([x, glass.min[1] + 0.055], TXT_SMALL, Align::Right, &sensor, Ink::Hud);
 }
@@ -599,10 +598,10 @@ fn glide_line(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glas
 
 /// Gleitwinkel des Anflugs in Grad.
 const GLIDE_DEG: f32 = 3.0;
-/// Sinkrate, ab der eine Landung hart wird bzw. das Fahrwerk bricht (ft/min).
-/// Muss zu den Flugzeugdaten passen; ein Test prüft das.
-pub(crate) const HARD_SINK_FPM: f32 = 787.0;
-pub(crate) const MAX_SINK_FPM: f32 = 1_378.0;
+/// Sinkrate, ab der eine Landung hart wird bzw. das Fahrwerk bricht (m/s),
+/// direkt aus den Flugzeugdaten.
+pub(crate) const HARD_SINK_MPS: f32 = f29_core::data::F29_SPEC.hard_landing_sink_mps as f32;
+pub(crate) const MAX_SINK_MPS: f32 = f29_core::data::F29_SPEC.max_landing_sink_mps as f32;
 
 /// Sinkratenskala rechts im Glas (Landemodus): Balken für die Steig-/Sinkrate,
 /// Marken für „hart“ und „Bruch“ – wie die Landehilfe im Original, eigene Form.
@@ -610,17 +609,17 @@ fn sink_scale(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     // rechts neben dem Glas, damit Höhe und Pitch-Leiter frei bleiben
     let x = glass.max[0] + 0.03;
     let top = glass.center()[1] + 0.03;
-    let full = 2_000.0_f32; // fpm über die ganze Skala
+    let full = 10.0_f32; // m/s über die ganze Skala
     let len = 0.17_f32;
-    let y_of = |fpm: f32| top - (fpm.clamp(0.0, full) / full) * len;
+    let y_of = |mps: f32| top - (mps.clamp(0.0, full) / full) * len;
     dl.line([x, top], [x, top - len], Ink::HudDim);
-    for (fpm, ink) in [(HARD_SINK_FPM, Ink::Hud), (MAX_SINK_FPM, Ink::HudWarning)] {
-        let y = y_of(fpm);
+    for (mps, ink) in [(HARD_SINK_MPS, Ink::Hud), (MAX_SINK_MPS, Ink::HudWarning)] {
+        let y = y_of(mps);
         dl.line([x - 0.010, y], [x + 0.010, y], ink);
     }
-    let sink = (-units::mps_to_fpm(fd.vertical_speed_mps)) as f32;
+    let sink = (-fd.vertical_speed_mps) as f32;
     let y = y_of(sink);
-    let ink = if sink > MAX_SINK_FPM { Ink::HudWarning } else { Ink::Hud };
+    let ink = if sink > MAX_SINK_MPS { Ink::HudWarning } else { Ink::Hud };
     dl.line([x - 0.004, top], [x - 0.004, y], ink);
     dl.line([x + 0.004, top], [x + 0.004, y], ink);
     dl.line([x - 0.006, y], [x + 0.006, y], ink);
@@ -635,11 +634,11 @@ fn ground_messages(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let c = glass.center();
     let y = c[1] + (glass.max[1] - glass.min[1]) * 0.18;
     if let Some(td) = &fd.touchdown {
-        let fpm = units::mps_to_fpm(td.sink_mps).round() as i64;
+        let sink = td.sink_mps;
         let (word, ink) =
             if td.hard { ("HARD LANDING", Ink::HudWarning) } else { ("GOOD LANDING", Ink::Hud) };
         dl.text_mid([c[0], y], TXT, Align::Center, word, ink);
-        dl.text_mid([c[0], y - TXT * 1.6], TXT_SMALL, Align::Center, &format!("{fpm} FPM"), Ink::Hud);
+        dl.text_mid([c[0], y - TXT * 1.6], TXT_SMALL, Align::Center, &format!("{sink:.1} M/S"), Ink::Hud);
     }
     if fd.stopped_on_runway
         && let Some(name) = fd.runway_name

@@ -100,12 +100,12 @@ fn heading_formatting() {
 }
 
 #[test]
-fn sink_marks_match_aircraft_limits() {
-    let spec = &f29_core::data::F29_SPEC;
-    let hard = f29_core::units::mps_to_fpm(spec.hard_landing_sink_mps) as f32;
-    let max = f29_core::units::mps_to_fpm(spec.max_landing_sink_mps) as f32;
-    assert!((crate::hud::HARD_SINK_FPM - hard).abs() < 2.0, "{hard}");
-    assert!((crate::hud::MAX_SINK_FPM - max).abs() < 2.0, "{max}");
+fn sink_marks_fit_the_scale() {
+    // Beide Marken liegen auf der 10-m/s-Skala, hart unter Bruch.
+    const {
+        assert!(crate::hud::HARD_SINK_MPS < crate::hud::MAX_SINK_MPS);
+        assert!(crate::hud::MAX_SINK_MPS < 10.0);
+    };
 }
 
 /// Endanflug mit ausgefahrenem Fahrwerk: Landehilfen erscheinen, alles bleibt im Bild.
@@ -194,7 +194,7 @@ fn map_draws_inside_left_screen_in_all_modes_and_zooms() {
     let mut counts = Vec::new();
     for mode in [MapMode::Grid, MapMode::Satellite] {
         state.map_mode = mode;
-        for zoom in 0..mfd::MAP_RANGES_NM.len() {
+        for zoom in 0..mfd::MAP_RANGES_KM.len() {
             state.map_zoom = zoom;
             let lines = panel_only(&HudOptions { mfd: state, ..HudOptions::default() });
             for l in &lines {
@@ -221,7 +221,7 @@ fn map_draws_inside_left_screen_in_all_modes_and_zooms() {
     for _ in 0..10 {
         s.zoom_out();
     }
-    assert_eq!(s.map_zoom, mfd::MAP_RANGES_NM.len() - 1);
+    assert_eq!(s.map_zoom, mfd::MAP_RANGES_KM.len() - 1);
 }
 
 #[test]

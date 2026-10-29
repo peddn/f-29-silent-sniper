@@ -34,7 +34,7 @@ Befehle:
                                                        --drop 1 öffnet den Schacht und löst eine Waffe aus,
                                                        --damage 1 beschädigt Beispielsysteme,
                                                        --bay N wählt Waffenschacht N,
-                                                       --zoom Kartenstufe 0..4 = 2..40 NM)
+                                                       --zoom Kartenstufe 0..4 = 5..80 km)
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N]                                 Flugplätze und Route auflisten
@@ -161,25 +161,22 @@ fn print_summary(sim: &Sim) {
     println!("Zeit         {:.1} s ({} Ticks)", fd.time_s, fd.tick);
     println!("Status       {:?}", fd.status);
     println!(
-        "Position     N {:.0} m  E {:.0} m  Höhe {:.0} ft (Radar {:.0} ft)",
-        fd.position.x,
-        fd.position.y,
-        units::m_to_ft(fd.altitude_m),
-        units::m_to_ft(fd.radar_altitude_m)
+        "Position     N {:.0} m  E {:.0} m  Höhe {:.0} m (Radar {:.0} m)",
+        fd.position.x, fd.position.y, fd.altitude_m, fd.radar_altitude_m
     );
     println!(
-        "Flug         {:.0} kt  Mach {:.2}  Kurs {:03.0}°  {:.1} g",
-        units::mps_to_kt(fd.tas_mps),
+        "Flug         {:.0} km/h  Mach {:.2}  Kurs {:03.0}°  {:.1} g",
+        units::mps_to_kmh(fd.tas_mps),
         fd.mach,
         fd.heading.to_degrees(),
         fd.load_factor
     );
     if let Some(sp) = &fd.steerpoint {
-        println!("Steerpoint   {} in {:.1} NM", sp.name, units::m_to_nm(sp.range));
+        println!("Steerpoint   {} in {:.1} km", sp.name, units::m_to_km(sp.range));
     }
     println!(
-        "Treibstoff   {:.0} lb ({:.0} %), Restflugzeit {:.0} min",
-        units::kg_to_lb(fd.fuel_kg),
+        "Treibstoff   {:.0} kg ({:.0} %), Restflugzeit {:.0} min",
+        fd.fuel_kg,
         fd.fuel_fraction * 100.0,
         fd.endurance_s / 60.0
     );
@@ -197,15 +194,15 @@ fn demo(args: &Args) -> Result<(), String> {
             last_report = sim.tick();
             let fd = sim.flight_data();
             println!(
-                "t={:5.0}s  {:>6.0} ft  {:>4.0} kt  Kurs {:03.0}  {}",
+                "t={:5.0}s  {:>6.0} m  {:>5.0} km/h  Kurs {:03.0}  {}",
                 fd.time_s,
-                units::m_to_ft(fd.altitude_m),
-                units::mps_to_kt(fd.tas_mps),
+                fd.altitude_m,
+                units::mps_to_kmh(fd.tas_mps),
                 fd.heading.to_degrees(),
                 fd.steerpoint.as_ref().map_or(String::new(), |s| format!(
-                    "{} {:.1} NM",
+                    "{} {:.1} km",
                     s.name,
-                    units::m_to_nm(s.range)
+                    units::m_to_km(s.range)
                 ))
             );
         }
@@ -369,12 +366,12 @@ fn airfields(args: &Args) -> Result<(), String> {
     for rw in sim.terrain().runways() {
         let (a, b) = rw.numbers();
         println!(
-            "{:<8} {:?}  Bahn {a:02}/{b:02}  {:.0} × {:.0} m  Höhe {:.0} ft  bei N {:.1} km  E {:.1} km",
+            "{:<8} {:?}  Bahn {a:02}/{b:02}  {:.0} × {:.0} m  Höhe {:.0} m  bei N {:.1} km  E {:.1} km",
             rw.name,
             rw.kind,
             rw.length_m,
             rw.width_m,
-            units::m_to_ft(rw.elevation_m),
+            rw.elevation_m,
             rw.center[0] / 1_000.0,
             rw.center[1] / 1_000.0
         );

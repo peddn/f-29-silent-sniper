@@ -12,10 +12,10 @@ use crate::{ScreenLayout, heading_deg};
 use f29_core::FlightData;
 use f29_core::targets::{TargetClass, TargetRole};
 use f29_core::terrain::AirfieldKind;
-use f29_core::units;
 
 /// Kartenbereiche: Entfernung von der Mitte bis zum Rand in Seemeilen.
-pub const MAP_RANGES_NM: [f64; 5] = [2.0, 5.0, 10.0, 20.0, 40.0];
+/// Kartenbereiche (Mitte bis Rand) in km.
+pub const MAP_RANGES_KM: [f64; 5] = [5.0, 10.0, 20.0, 40.0, 80.0];
 /// Anzahl Waffenschächte.
 pub const WEAPON_STATIONS: usize = 4;
 
@@ -75,7 +75,7 @@ impl RightPage {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MfdState {
     pub map_mode: MapMode,
-    /// Index in [`MAP_RANGES_NM`].
+    /// Index in [`MAP_RANGES_KM`].
     pub map_zoom: usize,
     pub right_page: RightPage,
 }
@@ -92,7 +92,7 @@ impl MfdState {
     }
 
     pub fn zoom_out(&mut self) {
-        self.map_zoom = (self.map_zoom + 1).min(MAP_RANGES_NM.len() - 1);
+        self.map_zoom = (self.map_zoom + 1).min(MAP_RANGES_KM.len() - 1);
     }
 
     pub fn toggle_map_mode(&mut self) {
@@ -111,7 +111,7 @@ impl MfdState {
 
     /// Kartenbereich (Mitte bis Rand) in Metern.
     pub fn map_range_m(&self) -> f64 {
-        units::M_PER_NM * MAP_RANGES_NM[self.map_zoom.min(MAP_RANGES_NM.len() - 1)]
+        1_000.0 * MAP_RANGES_KM[self.map_zoom.min(MAP_RANGES_KM.len() - 1)]
     }
 }
 
@@ -399,7 +399,7 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
     };
     let top = screen.max[1] - txt * 2.6;
     dl.text_mid([screen.min[0] + txt * 0.6, top], txt, Align::Left, mode, Ink::Mfd);
-    let rng = format!("{}NM", MAP_RANGES_NM[state.map_zoom.min(MAP_RANGES_NM.len() - 1)]);
+    let rng = format!("{}KM", MAP_RANGES_KM[state.map_zoom.min(MAP_RANGES_KM.len() - 1)]);
     dl.text_mid([screen.max[0] - txt * 0.6, top], txt, Align::Right, &rng, Ink::Mfd);
     dl.text_mid([c[0], top], txt, Align::Center, &format!("{:03}", heading_deg(fd.heading)), Ink::Mfd);
 }
@@ -430,10 +430,10 @@ pub(crate) fn fuel_bar(dl: &mut DisplayList, fd: &FlightData, bar: Rect, txt: f3
         dl.line([x, bar.min[1] - txt * 0.4], [x, bar.max[1] + txt * 0.4], Ink::Warning);
         dl.text_mid([x, bar.min[1] - txt * 1.0], txt * 0.7, Align::Center, "B", Ink::Warning);
     }
-    let lb = (units::kg_to_lb(fd.fuel_kg) / 10.0).round() as i64 * 10;
+    let kg = (fd.fuel_kg / 10.0).round() as i64 * 10;
     let label_y = bar.max[1] + txt * 1.1;
     let label_ink = if low { Ink::Warning } else { Ink::Mfd };
-    dl.text_mid([bar.min[0], label_y], txt, Align::Left, &format!("FUEL {lb} LB"), label_ink);
+    dl.text_mid([bar.min[0], label_y], txt, Align::Left, &format!("FUEL {kg} KG"), label_ink);
     let min = (fd.endurance_s / 60.0).floor() as i64;
     dl.text_mid([bar.max[0], label_y], txt, Align::Right, &format!("{min} MIN"), label_ink);
 }

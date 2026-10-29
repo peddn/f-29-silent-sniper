@@ -152,10 +152,10 @@ pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
                 Seeker::Radiation => "ANTI-RADAR",
                 Seeker::Naval => "RADAR",
             };
-            let lb = units::kg_to_lb(s.mass_kg * f64::from(bay.count));
-            (s.name.to_string(), bay.count.to_string(), format!("{lb:.0} LB"), guidance)
+            let kg = s.mass_kg * f64::from(bay.count);
+            (s.name.to_string(), bay.count.to_string(), format!("{kg:.0} KG"), guidance)
         }
-        None => ("---".to_string(), "0".to_string(), "0 LB".to_string(), "---"),
+        None => ("---".to_string(), "0".to_string(), "0 KG".to_string(), "---"),
     };
     let rows: [(&str, &str, Ink); 5] = [
         ("STORE", &store, Ink::Mfd),
@@ -211,11 +211,11 @@ pub(crate) fn engine(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     // Werte
     let y0 = c[1] - r * 1.3;
     let step = f.txt * 1.45;
-    let lb_min = units::kg_to_lb(fd.fuel_flow_kgps) * 60.0;
+    let kg_min = fd.fuel_flow_kgps * 60.0;
     let rows = [
         ("THROTTLE", format!("{:.0}%", fd.throttle * 100.0)),
         ("THRUST", format!("{:.0} KN", fd.thrust_n.max(0.0) / 1000.0)),
-        ("FUEL FLOW", format!("{lb_min:.0} LB/MIN")),
+        ("FUEL FLOW", format!("{kg_min:.0} KG/MIN")),
     ];
     for (i, (name, value)) in rows.iter().enumerate() {
         row(dl, &f, y0 - step * i as f32, name, value, ink);
@@ -240,7 +240,7 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
         let (name, dist) = match t {
             Some(t) => {
                 let (dn, de) = (t.pos[0] - fd.position.x, t.pos[1] - fd.position.y);
-                (t.name, format!("{:.1} NM", (dn * dn + de * de).sqrt() / units::M_PER_NM))
+                (t.name, format!("{:.1} KM", units::m_to_km((dn * dn + de * de).sqrt())))
             }
             None => ("---", String::new()),
         };
@@ -252,7 +252,7 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
     dl.line([f.x0, y], [f.x1, y], Ink::MfdDim);
     y -= step * 0.8;
 
-    // Route: Punkt, Teilstrecke in NM; aktiver Punkt hell mit Raute
+    // Route: Punkt, Teilstrecke in km; aktiver Punkt hell mit Raute
     let active = fd.steerpoint.as_ref().map(|s| s.index);
     if let Some(map) = map {
         let mut prev: Option<[f64; 2]> = None;
@@ -272,7 +272,7 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
             }
             let name = format!("{} {}", k + 1, p.name);
             dl.text_mid([f.x0 + f.txt * 1.2, y], f.txt * 0.85, Align::Left, &name, ink);
-            let leg = leg.map_or("---".to_string(), |m| format!("{:.1} NM", m / units::M_PER_NM));
+            let leg = leg.map_or("---".to_string(), |m| format!("{:.1} KM", units::m_to_km(m)));
             dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &leg, ink);
             y -= step;
         }
@@ -282,21 +282,21 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
 
     // Zum aktiven Punkt
     if let Some(sp) = fd.steerpoint.as_ref() {
-        let nm = sp.range / units::M_PER_NM;
+        let km = units::m_to_km(sp.range);
         let ete = if fd.tas_mps > 1.0 { (sp.range / fd.tas_mps) as i64 } else { 0 };
-        row(dl, &f, y, &format!("TO {}", sp.name), &format!("{nm:.1} NM"), Ink::Mfd);
+        row(dl, &f, y, &format!("TO {}", sp.name), &format!("{km:.1} KM"), Ink::Mfd);
         y -= step;
         let brg = format!("BRG {:03}  ETE {}:{:02}", heading_deg(sp.bearing), ete / 60, ete % 60);
         dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &brg, Ink::Mfd);
         y -= step;
     }
     // Heimweg
-    let home_nm = fd.home_range_m / units::M_PER_NM;
-    let bingo_lb = (units::kg_to_lb(fd.bingo_fuel_kg) / 10.0).round() as i64 * 10;
+    let home_km = units::m_to_km(fd.home_range_m);
+    let bingo_kg = (fd.bingo_fuel_kg / 10.0).round() as i64 * 10;
     let bingo_ink = if fd.warnings.bingo { Ink::Warning } else { Ink::Mfd };
-    row(dl, &f, y, "HOME", &format!("{home_nm:.1} NM"), Ink::Mfd);
+    row(dl, &f, y, "HOME", &format!("{home_km:.1} KM"), Ink::Mfd);
     y -= step;
-    row(dl, &f, y, "BINGO FUEL", &format!("{bingo_lb} LB"), bingo_ink);
+    row(dl, &f, y, "BINGO FUEL", &format!("{bingo_kg} KG"), bingo_ink);
 }
 
 /// Künstlicher Horizont als Reserveinstrument mit Fahrt, Höhe, Steigrate,
@@ -386,30 +386,30 @@ pub(crate) fn attitude(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     );
 
     // Fahrt links, Höhe rechts, Steigrate und g unten, Kurs oben
-    let kt = units::mps_to_kt(fd.tas_mps).round() as i64;
-    let ft = (units::m_to_ft(fd.altitude_m) / 10.0).round() as i64 * 10;
+    let kmh = units::mps_to_kmh(fd.tas_mps).round() as i64;
+    let alt = (fd.altitude_m / 10.0).round() as i64 * 10;
     let side_y = c[1];
-    dl.boxed_text([screen.min[0] + f.w * 0.04, side_y], f.txt, Align::Left, &format!("{kt}"), Ink::Mfd);
-    dl.boxed_text([screen.max[0] - f.w * 0.04, side_y], f.txt, Align::Right, &format!("{ft}"), Ink::Mfd);
+    dl.boxed_text([screen.min[0] + f.w * 0.04, side_y], f.txt, Align::Left, &format!("{kmh}"), Ink::Mfd);
+    dl.boxed_text([screen.max[0] - f.w * 0.04, side_y], f.txt, Align::Right, &format!("{alt}"), Ink::Mfd);
     dl.text_mid(
         [screen.min[0] + f.w * 0.04, side_y - f.txt * 1.8],
         f.txt * 0.7,
         Align::Left,
-        "KT",
+        "KM/H",
         Ink::MfdDim,
     );
     dl.text_mid(
         [screen.max[0] - f.w * 0.04, side_y - f.txt * 1.8],
         f.txt * 0.7,
         Align::Right,
-        "FT",
+        "M",
         Ink::MfdDim,
     );
     let hdg = format!("HDG {:03}", heading_deg(fd.heading));
     dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, &hdg, Ink::Mfd);
-    let fpm = (units::mps_to_fpm(fd.vertical_speed_mps) / 100.0).round() as i64 * 100;
+    let vs = fd.vertical_speed_mps.round() as i64;
     let y = c[1] - r * 1.25;
-    dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, &format!("VS {fpm:+}"), Ink::Mfd);
+    dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, &format!("VS {vs:+} M/S"), Ink::Mfd);
     let g_ink = if fd.warnings.over_g { Ink::Warning } else { Ink::Mfd };
     dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &format!("G {:.1}", fd.load_factor), g_ink);
 }
@@ -432,8 +432,8 @@ pub(crate) fn systems(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
         ("GEAR", gear.to_string(), gear_ink),
         ("FLAPS", format!("{:.0}%", fd.flaps * 100.0), Ink::Mfd),
         ("AIRBRAKE", format!("{:.0}%", fd.airbrake * 100.0), Ink::Mfd),
-        ("GROSS WT", format!("{} LB", (units::kg_to_lb(fd.mass_kg) / 100.0).round() as i64 * 100), Ink::Mfd),
-        ("STALL SPD", format!("{} KT", units::mps_to_kt(fd.stall_speed_mps).round() as i64), Ink::Mfd),
+        ("GROSS WT", format!("{} KG", (fd.mass_kg / 10.0).round() as i64 * 10), Ink::Mfd),
+        ("STALL SPD", format!("{} KM/H", units::mps_to_kmh(fd.stall_speed_mps).round() as i64), Ink::Mfd),
     ];
     for (name, value, ink) in &rows {
         row(dl, &f, y, name, value, *ink);
@@ -554,7 +554,7 @@ pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, camera
             row(dl, &f, y, "CLASS", t.class.label(), Ink::Mfd);
         }
         y -= step;
-        row(dl, &f, y, "RANGE", &format!("{:.1} NM", units::m_to_nm(t.range)), Ink::Mfd);
+        row(dl, &f, y, "RANGE", &format!("{:.1} KM", units::m_to_km(t.range)), Ink::Mfd);
         y -= step;
         row(dl, &f, y, "BEARING", &format!("{:03}", heading_deg(t.bearing)), Ink::Mfd);
         y -= step;

@@ -84,7 +84,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | Shift+F4 | | HUD ein/aus |
 | F3 | | Karte (linkes MFD): Gitter ↔ Satellitenbild |
 | F4 | | Rechtes MFD: nächste Seite (Mission → Ziel → Waffen → Triebwerk → Horizont → Systeme) |
-| Y / X | | Karte näher / weiter (2, 5, 10, 20, 40 NM) |
+| Y / X | | Karte näher / weiter (5, 10, 20, 40, 80 km) |
 | P | Start | Pause |
 | F12 | | Screenshot nach `screenshots/` |
 | R | | Neustart (Flug wird als Replay gesichert) |

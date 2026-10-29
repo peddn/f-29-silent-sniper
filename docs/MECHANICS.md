@@ -55,6 +55,11 @@ Verhaltensbeschreibung bekannt gewesen wäre.
   Flugzeug.
 - **Spielbalance:** Werte werden über Headless-Flugtests und Testspiele abgestimmt.
   Die Tests in `crates/f29-core/tests/` dokumentieren das gewünschte Verhalten.
+- **Einheiten:** Der Kern rechnet in SI. Alle Anzeigen (HUD, MFDs, Karte,
+  Headless-Ausgaben) sind seit v0.2.7 metrisch: Fahrt in km/h, Höhe und Radarhöhe
+  in m, Steig-/Sinkrate in m/s, Entfernungen in km, Masse und Verbrauch in kg bzw.
+  kg/min (Spielerentscheidung). Ältere Einträge unten nennen teils noch kt/ft;
+  das sind historische Angaben.
 
 ## 5. Mechanik-Protokoll
 
