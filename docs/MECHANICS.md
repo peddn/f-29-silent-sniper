@@ -652,7 +652,20 @@ Format jedes Eintrags:
 
 - **Verhalten:** Die Wirkung eines Treffers hängt von der Kombination aus Waffentyp und
   Zielklasse ab, d. h. eine Tabelle `[Waffe][Zielklasse]`.
-- **Referenzstelle:** *offen, wird in der Lesephase zu v0.2 ermittelt.*
+- **Referenzstelle:** f19re `src_en/egtacmap.c` (Nachschlagen der Waffenwerte je
+  Zielklasse), `src_en/egtarget.c` (Klassenbezug der Ziele, Wasserziele, Hinweis auf
+  zivile/befreundete Ziele), `src_en/egcombat.c` (Wirkung beim Einschlag).
+- **Lesephase v0.2 (eigene Worte, keine Werte):** Jedes Bodenobjekt gehört über sein
+  Modell zu einer von gut einem Dutzend Zielklassen. Ein paar Klassen sind Wasserziele
+  (Schiffe), dazu kommen Kennzeichen für „zivil oder befreundet“, die das Cockpit beim
+  Aufschalten als Hinweis zeigt (auf leichten Stufen immer, sonst nur für bestimmte
+  Ziele). Zu jeder Waffe gibt es eine Zeile mit einem kleinen Wirkungswert je
+  Zielklasse; null heißt „wirkungslos“, dann lässt sich das Ziel mit dieser Waffe gar
+  nicht aufschalten. Derselbe Wert bestimmt die Größe des Zielrahmens im HUD, bei
+  Flugkörpern die Zerstörungswahrscheinlichkeit beim Treffer (sonst Meldung
+  „wirkungslos“) und bei Bomben den Wirkradius. Auch die Bordkanone hat eine Zeile.
+  Die Namen der Klassen stehen in Datendateien, die f19re nicht enthält – unsere
+  Klassen sind ohnehin eigene.
 - **Unser Design (Entwurf):** Eigene Zielklassen (z. B. weich, gepanzert, gehärtet,
   Schiff, Radar/Elektronik, Flugzeug am Boden) und eine eigene Wirkungsmatrix als
   Datendatei (`data/weapons.ron`). Ein Validierungstest stellt sicher, dass die Matrix
@@ -664,7 +677,13 @@ Format jedes Eintrags:
 
 - **Verhalten:** Ob ein Ziel zerstört wird, hängt von der Entfernung zwischen
   Einschlagpunkt und Ziel ab. Der zulässige Abstand skaliert mit dem Schwierigkeitsgrad.
-- **Referenzstelle:** *offen (v0.2).*
+- **Referenzstelle:** f19re `src_en/egcombat.c` (Einschlag von Bomben und Flugkörpern),
+  `src_en/egtarget.c` (Bordkanone gegen Bodenziele).
+- **Lesephase v0.2:** Bomben zerstören ein Ziel, wenn der Einschlag näher am Ziel liegt
+  als ein Abstand aus Wirkungswert (M-010) und Schwierigkeitsgrad – auf schweren Stufen
+  muss man genauer treffen. Flugkörper, die ihr Ziel erreichen, zerstören es mit einer
+  Wahrscheinlichkeit, die mit dem Wirkungswert steigt. Wer zu tief auslöst, wird von
+  den eigenen Splittern getroffen.
 - **Unser Design (Entwurf):** Wirkradius je Waffe aus der Sprengladung; die
   Trefferwahrscheinlichkeit fällt mit dem Abstand stetig ab, statt an einer harten
   Schwelle umzuschlagen. Der Schwierigkeitsgrad skaliert den Wirkradius.
@@ -675,7 +694,12 @@ Format jedes Eintrags:
 - **Verhalten:** Gehärtete Ziele lassen sich nur mit spezieller Munition zerstören. Die
   Bombe muss im Toss-Bombing-Verfahren (Hochwurf aus dem Steigflug) und aus einer
   vorgegebenen Anflugrichtung (Norden) ins Ziel gebracht werden.
-- **Referenzstelle:** *offen (v0.2).*
+- **Referenzstelle:** f19re `src_en/egcombat.c` (Flugbahn der abgeworfenen Waffen).
+- **Lesephase v0.2:** Es gibt drei Bombenarten mit eigener Flugbahn: frei fallend
+  (die Bahn neigt sich stetig nach unten), gelenkt (gleitet flach, sucht ihr Ziel
+  selbst) und eine dritte mit eigenem Sinkprofil. Dazu Lastabwurf (Fracht) als
+  Missionsart. Eine echte Eintreffwinkel-Prüfung für gehärtete Ziele war im gelesenen
+  Code nicht zu finden – das bleibt unser eigener Entwurf.
 - **Unser Design (Entwurf):** Eintreffwinkel und Eintreffgeschwindigkeit der Bombe sind
   Teil der Wirkungsberechnung. Ein gehärtetes Ziel verlangt einen steilen Eintreffwinkel,
   der sich praktisch nur durch Toss-Bombing erreichen lässt. Die erlaubte
@@ -684,13 +708,66 @@ Format jedes Eintrags:
   Simulation im Kern, kein Würfelwurf.
 - **Status:** geplant (v0.2)
 
+### M-013 Zielerfassung und Lenkung
+
+- **Verhalten:** Bodenziele (und Flugzeuge) werden mit einem Zielsystem aufgeschaltet
+  und im Cockpit mit Name, Entfernung und Bild gezeigt. Gelenkte Waffen fliegen das
+  aufgeschaltete Ziel an.
+- **Referenzstelle:** f19re `src_en/egtacmap.c` (Zielauswahl pro Bild),
+  `src_en/egtarget.c` (Aufschalten, Zielrahmen, Zielbild), `src_en/egcombat.c`
+  (Suchkopf der Flugkörper, Abschuss), `src/egkeys.c` (Tasten).
+- **Lesephase v0.2 (eigene Worte, keine Werte):**
+  - Aufschalten: Der Spieler wählt eine Blickrichtung (voraus, links, rechts, hinten).
+    Das System nimmt das nächstgelegene noch intakte Ziel in einem breiten Kegel um
+    diese Richtung und innerhalb einer Höchstreichweite; erneutes Drücken springt zum
+    nächstweiteren. Nachts ist die Reichweite deutlich kürzer.
+  - **Es gibt keine Sichtlinienprüfung**: Ziele hinter Bergen lassen sich genauso
+    aufschalten (Vermutung des Spielers bestätigt). Auch der Suchkopf eines Flugkörpers
+    prüft nur Kegel und Entfernung, kein Gelände; der Flugkörper selbst kann aber am
+    Gelände zerschellen.
+  - Ein eigenes Bordradar, das man ein- und ausschaltet, gibt es im Original nicht;
+    das Zielsystem ist ein Kamera-/Sensorsystem. Emittierend ist nur der Störsender.
+  - Feuerbereitschaft für eine gelenkte Waffe: Die Waffe muss gegen die Zielklasse
+    wirken (M-010), noch vorhanden sein, das Ziel muss nahe der HUD-Mitte liegen und
+    innerhalb der Aufschaltreichweite dieser Waffe. Die gelenkte Bombe verlangt statt
+    der HUD-Mitte, dass das Ziel steil genug unter dem Flugzeug liegt.
+  - Nach dem Abschuss lenkt der **eigene Suchkopf** des Flugkörpers: Er hält das Ziel,
+    solange es in seinem Kegel und in Reichweite liegt; ohne Aufschaltung sucht er
+    selbst das beste Ziel seiner Art (Radarjäger nur aktive Radare, Seezielflugkörper
+    nur Schiffe). Eine Verbindung zum Flugzeug ist nicht nötig. Verliert er das Ziel,
+    fliegt er geradeaus weiter.
+  - Waffenarten wechselt eine Taste (Luft-Boden, Luft-Luft, Kanone), die Station eine
+    andere; der Schacht muss offen sein, sonst Meldung „Schacht zu“.
+- **Unser Design (v0.2, Spielerwunsch):** Die F-29 hat zwei Erfassungssysteme,
+  **optisch** und **Radar**. Beide arbeiten so einfach wie im Original: Innerhalb
+  ihrer Reichweite lässt sich jedes Ziel aufschalten, auch durch Berge. Das Radar
+  reicht weiter und ist abschaltbar (eingeschaltet erhöht es später die eigene
+  Sichtbarkeit, M-020). Die optische Reichweite ist kürzer. **Abweichung vom
+  Original:** Gelenkte Waffen werden über das Flugzeug geführt. Reißt die Verbindung
+  ab – Ziel außerhalb der Reichweite oder des Sichtfelds des führenden Systems, Radar
+  ausgeschaltet, anderes Ziel aufgeschaltet –, fliegt die Waffe ungelenkt weiter.
+- **Unsere Werte:** werden mit Etappe 1/2 festgelegt.
+- **Status:** geplant (v0.2)
+
 ### M-020 Radar-/Detektionsmodell (Stealth)
 
 - **Verhalten:** Wie leicht der Gegner das Flugzeug entdeckt, hängt von der eigenen
   elektromagnetischen Sichtbarkeit (Lage, Waffenschacht, Radar an/aus), der Entfernung
   und der Höhe bzw. Geländemaskierung ab. Das Cockpit zeigt die eigene Sichtbarkeit und
   die Reichweite gegnerischer Radare an.
-- **Referenzstelle:** *offen (v0.2).*
+- **Referenzstelle:** f19re `src_en/egcombat.c` (Bewertung je Bedrohung, Alarmstufen),
+  `src_en/egframe.c` (eigene Sichtbarkeit pro Bild).
+- **Lesephase v0.2:** Die eigene Sichtbarkeit ist eine Zahl, die pro Bild aus Flughöhe
+  (höher = sichtbarer), Querlage, offenem Waffenschacht und eingeschaltetem
+  Störsender wächst. Jede Radarstellung bewertet das Flugzeug mit einem Wert, der mit
+  der Entfernung linear fällt, von der Geländeart unter dem Flugzeug abhängt (grobe
+  Maskierung über Kartenzellen, keine echte Sichtlinie) und bei Doppler-Radaren vom
+  Aspekt. Übersteigt Bewertung plus Sichtbarkeit eine Schwelle, steigt die Alarmstufe
+  der Stellung; ab einer zweiten Schwelle meldet sie das Flugzeug, später schießt sie.
+  Der Störsender erhöht die eigene Sichtbarkeit, halbiert aber das Anwachsen der
+  Alarmstufe und lenkt radargelenkte Flugkörper ab; ein zweiter Störer wirkt gegen
+  infrarotgelenkte. Die Bedrohungsanzeige im Cockpit zeigt Bewertung gegen
+  Sichtbarkeit als zwei Balken.
 - **Unser Design (Entwurf):** Radarquerschnitt abhängig vom Aspektwinkel (Bug, Flanke,
   Unterseite) plus Zuschläge für offenen Schacht und eigene Emissionen. Die Detektion
   folgt der Radargleichung (Reichweite ∝ RCS^¼) mit Sichtlinienprüfung gegen das Gelände.
@@ -703,7 +780,11 @@ Format jedes Eintrags:
 
 - **Verhalten:** Radargeführte Flugabwehrraketen und Flak bedrohen das Flugzeug abhängig
   von Detektion und Reichweite.
-- **Referenzstelle:** *offen (v0.2).*
+- **Referenzstelle:** f19re `src_en/egcombat.c` (Flugkörper der Bedrohungen),
+  `src_en/egframe.c` (Täuschkörper).
+- **Lesephase v0.2:** Täuschkörper (Fackeln, Düppel) und ein Störsender sind begrenzt
+  vorrätig; ein Täuschkörper lockt Flugkörper der passenden Lenkart an, solange er in
+  ihrem Suchkegel liegt.
 - **Unser Design (Entwurf):** Eigene, fiktive Systemklassen mit Reichweiten aus
   öffentlichen Größenordnungen. Lenkflugkörper werden mit Proportionalnavigation
   simuliert; Täuschkörper wirken über eigene Wahrscheinlichkeitsmodelle.
