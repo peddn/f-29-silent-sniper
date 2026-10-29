@@ -329,8 +329,10 @@ fn open_bay_blinks_as_warning() {
     let closed = warn_lines(0.0, 10.0);
     assert!(warn_lines(1.0, 10.0) > closed, "keine Warnung bei offenem Schacht");
     assert!(warn_lines(0.4, 10.0) > closed, "keine Warnung bei sich öffnendem Schacht");
-    // Blinkphase aus: nichts zusätzlich
-    assert_eq!(warn_lines(1.0, 10.4), closed);
+    // „BAY OPEN“ blinkt: in der Aus-Phase weniger rote Linien (die
+    // Waffenanzeige unten links bleibt dauerhaft rot).
+    assert!(warn_lines(1.0, 10.4) < warn_lines(1.0, 10.0), "blinkt nicht");
+    assert_eq!(warn_lines(0.0, 10.4), closed);
 }
 
 /// Ausgefallene Anzeigen: HUD und MFD-Inhalte dunkel, Schubhebel bleibt;

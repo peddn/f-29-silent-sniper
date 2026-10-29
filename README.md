@@ -180,7 +180,13 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Luft-Boden-Rakete, Radarjäger, Seezielrakete; gewürfelter Endanflug nach
       Startgüte (Miss, Near Miss, Hit, 1 % kritisch), Schaden pro Treffer sammelt
       sich am Ziel, Zielrahmen zeigt Reichweite und Sweet Spot (v0.2.5)
+- [x] Waffen mit realen Bezeichnungen (Mk 82, Mk 82 Snakeye, AGM-62 Walleye,
+      AGM-65 Maverick, AGM-88 HARM, AGM-84 Harpoon); Aufschaltung bleibt auf dem
+      Wrack, zerstörte Ziele verschwinden von der Karte; gewählte Waffe unten
+      links im HUD; Maverick nur mit optischer Aufschaltung, ohne Aufschaltung
+      geradeaus in Abschusslage (v0.2.5)
 - [ ] Zielhilfe im HUD: Aufschlagpunkt, Auslöseklammer, Warnung „zu tief“ (v0.2.6)
+- [ ] Bordkanone als eigenes Waffensystem (v0.2.7)
 - [ ] Bodenziele und Boden-Luft-Bedrohungen (Radar-SAM, Flak)
 - [ ] Radar-/Detektionsmodell: aspektabhängiger Radarquerschnitt, Geländemaskierung,
       Emissionen; Signaturanzeige im Cockpit

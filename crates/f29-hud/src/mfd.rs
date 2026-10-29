@@ -309,7 +309,8 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
             // Ziele
             let locked = fd.target.as_ref().map(|t| t.index);
             for (k, t) in map.targets.iter().enumerate() {
-                if !near(t.pos) {
+                // Zerstörte Ziele verschwinden von der Karte.
+                if !near(t.pos) || fd.destroyed_targets.binary_search(&k).is_ok() {
                     continue;
                 }
                 let p = proj.to_screen(t.pos);

@@ -60,8 +60,6 @@ const EVENT_LOG: usize = 16;
 const GUIDANCE_DELAY_S: f64 = 0.4;
 /// Sichtlinie des optischen Suchkopfs alle so viele Ticks prüfen.
 const SEEKER_LOS_TICKS: u64 = 12;
-/// Ohne Ziel senkt eine Lenkwaffe die Nase so schnell (rad/s, 2°/s).
-const BLIND_NOSE_DROP: f64 = 0.035;
 /// Sweet Spot: volle Startgüte zwischen diesen Anteilen der Reichweite. Von
 /// der Reichweitengrenze steigt die Güte bis dorthin an und fällt bei weiterer
 /// Annäherung wieder ab (Spielerentscheidung v0.2.5).
@@ -82,7 +80,7 @@ const ODDS_IDEAL: (f64, f64) = (0.05, 0.15);
 /// Near Miss richtet diesen Anteil des Treffer-Schadens an.
 const NEAR_MISS_DAMAGE: f64 = 0.5;
 
-/// Waffenarten (M-014). Namen sind eigene, fiktive Bezeichnungen.
+/// Waffenarten (M-014), benannt nach den realen Vorbildern.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WeaponKind {
     /// Freifallbombe.
@@ -171,9 +169,9 @@ const fn deg(d: f64) -> f64 {
 /// Gemeinsame Grundwerte einer 250-kg-Bombe.
 const BOMB: WeaponSpec = WeaponSpec {
     kind: WeaponKind::FreeFall,
-    label: "B-25",
-    name: "B-25 BOMB",
-    mass_kg: 250.0,
+    label: "MK-82",
+    name: "MK-82 BOMB",
+    mass_kg: 241.0,
     drag_area_m2: 0.020,
     deployed_drag_area_m2: 0.020,
     deploy_s: 0.0,
@@ -193,8 +191,8 @@ const BOMB: WeaponSpec = WeaponSpec {
 /// Gemeinsame Grundwerte der Lenkwaffen.
 const MISSILE: WeaponSpec = WeaponSpec {
     kind: WeaponKind::AirToGround,
-    label: "AGR-7",
-    name: "AGR-7 TV MISSILE",
+    label: "AGM-65",
+    name: "AGM-65 MAVERICK",
     mass_kg: 210.0,
     drag_area_m2: 0.035,
     deployed_drag_area_m2: 0.035,
@@ -216,17 +214,17 @@ const SPECS: [WeaponSpec; 6] = [
     BOMB,
     WeaponSpec {
         kind: WeaponKind::Retarded,
-        label: "B-25R",
-        name: "B-25R RETARDED BOMB",
+        label: "MK-82R",
+        name: "MK-82 SNAKEYE",
         deployed_drag_area_m2: 0.9,
         deploy_s: 0.3,
         ..BOMB
     },
     WeaponSpec {
         kind: WeaponKind::GuidedBomb,
-        label: "GB-25",
-        name: "GB-25 GLIDE BOMB",
-        mass_kg: 270.0,
+        label: "AGM-62",
+        name: "AGM-62 WALLEYE",
+        mass_kg: 510.0,
         drag_area_m2: 0.025,
         deployed_drag_area_m2: 0.025,
         seeker: Seeker::Optical,
@@ -244,8 +242,8 @@ const SPECS: [WeaponSpec; 6] = [
     MISSILE,
     WeaponSpec {
         kind: WeaponKind::AntiRadar,
-        label: "ARM-9",
-        name: "ARM-9 ANTI-RADAR MISSILE",
+        label: "AGM-88",
+        name: "AGM-88 HARM",
         mass_kg: 360.0,
         seeker: Seeker::Radiation,
         cruise_mps: 650.0,
@@ -260,8 +258,8 @@ const SPECS: [WeaponSpec; 6] = [
     },
     WeaponSpec {
         kind: WeaponKind::AntiShip,
-        label: "ASR-4",
-        name: "ASR-4 ANTI-SHIP MISSILE",
+        label: "AGM-84",
+        name: "AGM-84 HARPOON",
         mass_kg: 520.0,
         per_bay: 1,
         seeker: Seeker::Naval,
@@ -514,6 +512,9 @@ pub struct Weapon {
     pub aim_offset: DVec3,
     /// Ohne Aufschaltung abgefeuert: sucht selbst.
     pub searching: bool,
+    /// Richtung, in der die Lenkwaffe ohne Ziel weiterfliegt: die
+    /// Abschusslage (Flugzeugnase), nach Zielverlust die letzte Flugrichtung.
+    pub boresight: DVec3,
 }
 
 impl Weapon {
@@ -529,6 +530,7 @@ impl Weapon {
             critical: false,
             aim_offset: DVec3::ZERO,
             searching: false,
+            boresight: velocity.normalize_or_zero(),
         }
     }
 
@@ -661,6 +663,9 @@ pub struct Launch<'a> {
     pub lock: Option<usize>,
     pub targets: &'a [Target],
     pub terrain: &'a Terrain,
+    /// Die Aufschaltung des Flugzeugs ist optisch (optische Suchköpfe
+    /// übernehmen nur optische Aufschaltungen).
+    pub lock_optical: bool,
     /// Waffenschacht funktioniert (Schadensmodell).
     pub bay_ok: bool,
     /// Leistung der Bordoptik 0..1 (Schadensmodell).
@@ -813,11 +818,17 @@ impl Stores {
             Weapon::new(id, kind, l.position + down * EJECT_OFFSET_M, l.velocity + down * EJECT_SPEED_MPS);
         self.log(l.tick, WeaponEvent::Released { kind, bay: self.selected, id });
         if kind.is_guided() {
+            // Ohne Ziel fliegt die Waffe in ihrer Abschusslage weiter.
+            let nose = l.attitude.rotate(DVec3::new(1.0, 0.0, 0.0));
+            w.boresight = nose;
             // Übergabe: Der Suchkopf muss das Ziel selbst sehen (Kegel um die
-            // Flugrichtung, Reichweite, optisch mit Sichtlinie).
-            let seen = l.lock.and_then(|i| {
+            // Nase, Reichweite, optisch mit Sichtlinie); ein optischer Suchkopf
+            // übernimmt nur eine optische Aufschaltung, keine reine Radar-
+            // Aufschaltung.
+            let optical_ok = kind.spec().seeker != Seeker::Optical || l.lock_optical;
+            let seen = l.lock.filter(|_| optical_ok).and_then(|i| {
                 let t = l.targets.get(i)?;
-                seeker_sees(kind, l.position, l.velocity, t, l.terrain).map(|(r, off)| (i, r, off, t))
+                seeker_sees(kind, l.position, nose, t, l.terrain).map(|(r, off)| (i, r, off, t))
             });
             match seen {
                 Some((i, range, off, t)) => {
@@ -900,6 +911,7 @@ impl Stores {
                 w.target = None;
                 w.outcome = None;
                 w.critical = false;
+                w.boresight = w.velocity.normalize_or_zero();
                 self.log(world.tick, WeaponEvent::LockLost { kind: w.kind, id: w.id });
             }
             return;
@@ -1070,7 +1082,7 @@ fn turn_towards(from: DVec3, to: DVec3, max_angle: f64) -> DVec3 {
 
 /// Ein Zeitschritt Lenkwaffe: erst frei aus dem Schacht fallen, dann mit
 /// begrenzter Drehrate auf den Zielpunkt drehen und auf Marschfahrt gehen.
-/// Ohne Ziel fliegt sie geradeaus und senkt langsam die Nase.
+/// Ohne Ziel fliegt sie geradeaus in ihrer Abschusslage (`boresight`).
 fn guide(w: &mut Weapon, world: &World<'_>) {
     if w.age_s < GUIDANCE_DELAY_S {
         fly(w, world);
@@ -1082,13 +1094,7 @@ fn guide(w: &mut Weapon, world: &World<'_>) {
     let dir = w.velocity / speed;
     let wanted = match w.aim_point(world.targets) {
         Some(aim) => (aim - w.position).normalize_or_zero(),
-        None => {
-            let horiz = DVec3::new(dir.x, dir.y, 0.0).normalize_or_zero();
-            // Nase sinkt: Zielrichtung leicht unter der aktuellen.
-            let p = detmath::asin((-dir.z).clamp(-1.0, 1.0)) - BLIND_NOSE_DROP * dt;
-            let (sp, cp) = detmath::sin_cos(p);
-            DVec3::new(horiz.x * cp, horiz.y * cp, -sp)
-        }
+        None => w.boresight,
     };
     let mut new_dir = turn_towards(dir, wanted, s.turn_rate_rad * dt);
     if s.min_glide_rad > 0.0 {
@@ -1202,6 +1208,62 @@ mod tests {
             Stores::apply(&mut t, 7, 1.0 / 3.0, false);
         }
         assert_eq!(t.state, TargetState::Destroyed);
+    }
+
+    /// Abschuss auf ein Ziel 5 km voraus, 3 km darunter, Nase genau aufs Ziel.
+    fn launch_at_target(lock_optical: bool) -> (Weapon, Vec<Target>, Terrain) {
+        let terrain = Terrain::new(1);
+        let elevation = terrain.elevation(5_000.0, 0.0);
+        let mut t = bridge();
+        t.class = TargetClass::Soft;
+        t.north = 5_000.0;
+        t.elevation = elevation;
+        let targets = vec![t];
+        let alt = elevation + 3_000.0;
+        let pitch = -detmath::atan2(3_000.0, 5_000.0);
+        let attitude = DQuat::from_euler(0.0, pitch, 0.0);
+        let mut stores = Stores::new(&Loadout([Some(WeaponKind::AirToGround), None, None, None]), 1);
+        stores.door = 1.0;
+        let launch = Launch {
+            tick: 1,
+            position: DVec3::new(0.0, 0.0, -alt),
+            velocity: attitude.rotate(DVec3::new(200.0, 0.0, 0.0)),
+            attitude,
+            lock: Some(0),
+            lock_optical,
+            targets: &targets,
+            terrain: &terrain,
+            bay_ok: true,
+            optics: 1.0,
+        };
+        assert!(stores.release(&launch) > 0.0);
+        (stores.in_flight[0], targets, terrain)
+    }
+
+    #[test]
+    fn optical_seeker_takes_only_an_optical_lock() {
+        let (w, _, _) = launch_at_target(true);
+        assert_eq!(w.target, Some(0));
+        assert!(!w.searching);
+        let (w, _, _) = launch_at_target(false);
+        assert_eq!(w.target, None, "reine Radaraufschaltung wird nicht übernommen");
+        assert!(w.searching);
+    }
+
+    #[test]
+    fn unlocked_missile_flies_on_in_launch_attitude() {
+        let (mut w, _, terrain) = launch_at_target(false);
+        // Ohne Ziele in der Welt: nichts zu finden, nur geradeaus.
+        let mut none: Vec<Target> = Vec::new();
+        let world =
+            World { terrain: &terrain, targets: &mut none, tick: 0, dt: 1.0 / 120.0, aircraft: DVec3::ZERO };
+        let nose = w.boresight;
+        for _ in 0..(120 * 4) {
+            guide(&mut w, &world);
+        }
+        let dir = w.velocity.normalize_or_zero();
+        assert!(angle_between(dir, nose) < 0.01, "weicht {:.3} rad ab", angle_between(dir, nose));
+        assert!((w.velocity.length() - w.kind.spec().cruise_mps).abs() < 1.0);
     }
 
     #[test]

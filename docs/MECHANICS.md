@@ -16,7 +16,7 @@ Code, Daten, Grafiken, Texte, Klänge und Namen des Originals sind Ausdruck und 
 | Beobachtbares Verhalten („harte Ziele brauchen Spezialmunition“) | Quellcode, auch nicht abgewandelt, transliteriert oder „nur die Struktur“ |
 | Allgemeine Regelstruktur („Wirkung hängt von Waffe und Zielklasse ab“) | Konkrete Zahlenwerte, Tabellen, Schwellwerte, Formeln mit Original-Konstanten |
 | Genre-Konventionen (HUD-Symbolik, Karriere mit Orden) | Grafiken, Modelle, Schriften, Paletten, Sounds, Musik, Texte, Kartendaten |
-| | Namen: Spiel, Flugzeug, Szenarien, Figuren, Orden des Originals |
+| Öffentliche Bezeichnungen realer Systeme (z. B. AGM-65 Maverick, Mk 82) | Namen: Spiel, Flugzeug, Szenarien, Figuren, Orden des Originals |
 
 ## 2. Referenz
 
@@ -848,10 +848,15 @@ Format jedes Eintrags:
     Flugzeug zu tief für einen sicheren Abwurf ist. Für die gelenkte Bombe zeigt
     die Klammer die Entfernung zum Ziel.
 - **Unser Design (Etappe 2, Spielerentscheidungen):** `f29_core::weapons`.
-  - Sechs eigene Waffenarten: Freifallbombe, Fallschirmbombe (Bremsschirm öffnet
-    kurz nach dem Abwurf), Gleitbombe mit optischem Suchkopf, optisch gelenkte
-    Luft-Boden-Rakete, Radarjäger (nur Flugabwehrstellungen), Seezielrakete (nur
-    Schiffe). Alle gelenkten Waffen sind Fire and Forget (M-013).
+  - Sechs Waffenarten mit den Bezeichnungen der realen Vorbilder
+    (Spielerentscheidung; öffentliche Typbezeichnungen, nicht aus dem Original
+    übernommen): Mk 82 (Freifallbombe), Mk 82 Snakeye (Fallschirmbombe,
+    Bremsschirm öffnet kurz nach dem Abwurf), AGM-62 Walleye (Gleitbombe mit
+    optischem Suchkopf), AGM-65 Maverick (optisch gelenkte Luft-Boden-Rakete),
+    AGM-88 HARM (Radarjäger, nur Flugabwehrstellungen), AGM-84 Harpoon
+    (Seezielrakete, nur Schiffe). Alle gelenkten Waffen sind Fire and Forget
+    (M-013). Masse und Größenordnungen folgen den Vorbildern, Lenk- und
+    Wirkungswerte sind Spielwerte.
   - Beladung: vier Schächte mit je einer Waffenart, **feste Standardbeladung**
     (Freifall, Fallschirm, Gleitbombe, Luft-Boden-Rakete), änderbar mit
     `--loadout`; ein Beladungsbildschirm kommt mit dem Missionsbriefing. Die
@@ -876,10 +881,14 @@ Format jedes Eintrags:
     Gleitzahl 6 sinken: Aus zu großer Entfernung oder zu geringer Höhe fällt sie zu
     kurz (ihre Reichweite hängt von der Höhe über dem Ziel ab).
   - **Übergabe beim Abschuss:** Sieht der Suchkopf das aufgeschaltete Ziel (Klasse
-    passt, im Kegel um die Flugrichtung, in Reichweite, optisch mit Sichtlinie),
-    übernimmt er es. Sonst sucht die Waffe selbst und schaltet auf, was ihr vor den
-    Suchkopf kommt – **auch zivile Ziele** (Spielerentscheidung); Radarjäger nur
-    Flugabwehr, Seezielrakete nur Schiffe.
+    passt, im Kegel um die Flugzeugnase, in Reichweite, optisch mit Sichtlinie),
+    übernimmt er es. Optische Suchköpfe (Maverick, Walleye) übernehmen nur eine
+    **optische** Aufschaltung, keine reine Radaraufschaltung (Spielerentscheidung).
+    Ohne (passende) Aufschaltung fliegt die Waffe nach dem Herausfallen **in ihrer
+    Abschusslage geradeaus** weiter; erkennt ihr Suchkopf dabei ein Ziel, schaltet
+    sie es auf und versucht es zu treffen – **auch zivile Ziele**
+    (Spielerentscheidung); HARM nur Flugabwehr, Harpoon nur Schiffe. Verliert sie
+    ein Ziel, fliegt sie in der letzten Richtung geradeaus weiter.
   - **Gewürfelter Endanflug (Spielerentscheidung):** Beim Erfassen wird aus der
     **Startgüte** gewürfelt: Miss (30–80 m daneben, keine Wirkung), Near Miss
     (knapp daneben, halber Treffer-Schaden), Hit (voller Schaden nach Matrix, 1 %
@@ -897,19 +906,25 @@ Format jedes Eintrags:
     Ecken),
     gestrichelt „NO EFF“, wenn die Waffe nicht wirkt oder ihr Suchkopf die Klasse
     nicht sieht. Beschädigte Ziele tragen „DMG“.
+  - **Wrack:** Nach der Zerstörung bleibt die Aufschaltung auf dem Wrack (Rahmen
+    gedämpft, „DESTROYED“, Zielbild zeigt das Wrack), bis der Spieler mit einer
+    Richtungstaste ein neues Ziel wählt; Wracks sind dann nicht mehr anwählbar.
+    Auf der Karte verschwinden zerstörte Ziele.
+  - **HUD unten links:** gewählte Waffe mit Anzahl (z. B. „MK-82 X2“) und
+    Schacht mit Klappenzustand („BAY 1 SAFE/DOORS/OPEN“, offen rot).
   - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,
     gibt es vorerst nur die Warnung „FRAG WARNING“ (Schaden kommt mit Etappe 4).
     Die Fallschirmbombe ist genau dafür da: Sie bleibt im Tiefflug weit genug
     zurück.
-  - Meldungen unter dem HUD-Glas (z. B. „B-25 AWAY“, „BAY CLOSED“, „AGR-7 LOCK …“,
-    „AGR-7 LOST LOCK“, „… DAMAGED“, „… DESTROYED“, „CRITICAL HIT … DESTROYED“,
+  - Meldungen unter dem HUD-Glas (z. B. „MK-82 AWAY“, „BAY CLOSED“, „AGM-65 LOCK …“,
+    „AGM-65 LOST LOCK“, „… DAMAGED“, „… DESTROYED“, „CRITICAL HIT … DESTROYED“,
     „INEFFECTIVE ON …“, „CIVILIAN … DESTROYED“); die WPN-Seite zeigt Bestand je
     Schacht, Klappenzustand (SAFE/DOORS/ARMED) und Bereitschaft.
-- **Unsere Werte:** Bomben 250 kg (Gleitbombe 270 kg), Cw·A 0,020 m²,
+- **Unsere Werte:** Mk 82 241 kg (Walleye 510 kg), Cw·A 0,020 m²,
   Fallschirm 0,9 m² nach 0,3 s, zwei je Schacht, Wirkradius 30 m, Splitterbereich
-  180 m. Gleitbombe 220 m/s, 12°/s, bis 10 km (Gleitzahl 6), Kegel ±30°.
-  Luft-Boden-Rakete 210 kg, 320 m/s, 25°/s, 12 km, ±25°, Wirkradius 8 m;
-  Radarjäger 360 kg, 650 m/s, 20°/s, 30 km, ±35°; Seezielrakete 520 kg, 270 m/s,
+  180 m. Walleye 220 m/s, 12°/s, bis 10 km (Gleitzahl 6), Kegel ±30°.
+  Maverick 210 kg, 320 m/s, 25°/s, 12 km, ±25°, Wirkradius 8 m;
+  HARM 360 kg, 650 m/s, 20°/s, 30 km, ±35°; Harpoon 520 kg, 270 m/s,
   10°/s, 30 km, ±40°. Startgüte an der Reichweitengrenze 0,25, im Sweet Spot
   (30–50 % der Reichweite) 1, direkt am Ziel 0,3; am Kegelrand × 0,6.
   Ausgang bei Güte 1: 5 % Miss, 15 % Near Miss, 80 % Hit; bei Güte 0: 55 %, 30 %,

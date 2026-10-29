@@ -213,6 +213,13 @@ impl Sensors {
     /// Ziel der Blickrichtung. `pos` ist die eigene Position (NED), `heading`
     /// der Kurs.
     pub fn update(&mut self, targets: &[Target], terrain: &Terrain, pos: DVec3, heading: f64) {
+        // Auf einem zerstörten Ziel bleibt die Aufschaltung stehen, bis der
+        // Spieler mit einer Richtungstaste ein neues wählt (M-013).
+        if let Some(cur) = self.lock
+            && targets.get(cur.target).is_some_and(|t| !t.is_intact())
+        {
+            return;
+        }
         if let Some(cur) = self.lock
             && targets.get(cur.target).is_some_and(Target::is_intact)
         {

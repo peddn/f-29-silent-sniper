@@ -200,3 +200,33 @@ fn glide_bomb_falls_short_from_too_far() {
     assert!(sim.targets()[target].is_intact());
     assert!(!matches!(impact(&events), Some(ImpactResult::Destroyed { target: t, .. }) if t == target));
 }
+
+/// Nach der Zerstörung bleibt die Aufschaltung auf dem Wrack; das Wrack
+/// verschwindet von der Karte (Liste der zerstörten Ziele) und ist nach einem
+/// Zielwechsel nicht mehr anwählbar.
+#[test]
+fn lock_stays_on_the_wreck_until_a_new_target_is_chosen() {
+    let max = WeaponKind::AirToGround.spec().max_range_m;
+    let (mut sim, target) = (1..=40_u64)
+        .find_map(|seed| {
+            let (mut sim, target) = lined_up_at(seed, TargetClass::Soft, max * 0.4, 500.0, agm())?;
+            let events = shoot(&mut sim);
+            matches!(impact(&events), Some(ImpactResult::Destroyed { target: t, .. }) if t == target)
+                .then_some((sim, target))
+        })
+        .expect("ein Treffer");
+    for _ in 0..ticks(2.0) {
+        step(&mut sim, 0, 0);
+    }
+    let fd = sim.flight_data();
+    let t = fd.target.expect("Aufschaltung bleibt");
+    assert_eq!(t.index, target);
+    assert!(t.destroyed);
+    assert_eq!(t.zone, None);
+    assert!(fd.destroyed_targets.contains(&target));
+    // Neues Ziel wählen: das Wrack ist nicht mehr dabei.
+    for look in [LookDir::Forward, LookDir::Right, LookDir::Aft, LookDir::Left, LookDir::Forward] {
+        step(&mut sim, ControlFrame::look_flags(look.code()), 0);
+        assert_ne!(sim.sensors().lock.map(|l| l.target), Some(target), "Wrack wieder gewählt");
+    }
+}

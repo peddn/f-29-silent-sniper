@@ -225,6 +225,9 @@ pub struct TargetInfo {
     pub zone: Option<LaunchZone>,
     /// Angesammelter Schaden 0..1.
     pub damage: f64,
+    /// Zerstört: Die Aufschaltung bleibt auf dem Wrack, bis ein neues Ziel
+    /// gewählt wird.
+    pub destroyed: bool,
 }
 
 /// Waffenbestand für die Anzeigen (M-014).
@@ -241,7 +244,7 @@ pub struct StoresInfo {
     pub mass_kg: f64,
 }
 
-/// Meldung zu einem Waffenereignis, z. B. „B-25 AWAY“.
+/// Meldung zu einem Waffenereignis, z. B. „MK-82 AWAY“.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WeaponMessage {
     pub text: String,
@@ -341,6 +344,8 @@ pub struct FlightData {
     pub weapon_messages: Vec<WeaponMessage>,
     /// Zustand der Bordsysteme (Schadensmodell).
     pub systems: Systems,
+    /// Indizes der zerstörten Ziele, aufsteigend (die Karte blendet sie aus).
+    pub destroyed_targets: Vec<usize>,
     pub warnings: Warnings,
 }
 
@@ -505,6 +510,7 @@ impl Sim {
                 velocity: a.velocity,
                 attitude: a.attitude,
                 lock: self.sensors.lock.map(|l| l.target),
+                lock_optical: self.sensors.lock.is_some_and(|l| l.optical),
                 targets: &self.targets,
                 terrain: &self.terrain,
                 bay_ok,
@@ -526,13 +532,9 @@ impl Sim {
             dt: DT,
             aircraft: self.aircraft.position,
         };
+        // Die Aufschaltung bleibt auch auf einem zerstörten Ziel, bis der
+        // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
         self.stores.step(&mut world);
-        // Ein zerstörtes Ziel verliert die Aufschaltung.
-        if let Some(l) = self.sensors.lock
-            && !self.targets[l.target].is_intact()
-        {
-            self.sensors.lock = None;
-        }
     }
 
     /// Bedienung der Zielerfassung und Aufschalten (M-013): Radar umschalten,
@@ -789,9 +791,10 @@ impl Sim {
                 zone: self
                     .stores
                     .selected_weapon()
-                    .filter(|k| k.is_guided())
+                    .filter(|k| k.is_guided() && t.is_intact())
                     .map(|k| weapons::launch_zone(k, a.position, t, lock.optical)),
                 damage: t.damage,
+                destroyed: !t.is_intact(),
             })
         });
 
@@ -906,6 +909,7 @@ impl Sim {
             },
             weapon_messages: self.weapon_messages(),
             systems: self.systems,
+            destroyed_targets: (0..self.targets.len()).filter(|&i| !self.targets[i].is_intact()).collect(),
             warnings,
         }
     }

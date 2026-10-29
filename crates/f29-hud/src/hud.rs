@@ -200,6 +200,7 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
             let ink = match t.zone {
                 Some(LaunchZone::Good) => Ink::Warning,
                 Some(LaunchZone::NoEffect) => Ink::HudDim,
+                _ if t.destroyed => Ink::HudDim,
                 _ => ink,
             };
             if t.zone == Some(LaunchZone::NoEffect) {
@@ -225,12 +226,13 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
                 dl.line([r.min[0], r.max[1]], [r.max[0], r.min[1]], ink);
             }
             let sys = match t.zone {
+                _ if t.destroyed => "DESTROYED",
                 Some(LaunchZone::NoEffect) => "NO EFF",
                 _ if t.optical => "OPT",
                 _ => "RDR",
             };
             dl.text_mid([p[0], p[1] - s * 2.2], TXT_SMALL * 0.8, Align::Center, sys, ink);
-            if t.damage > 0.0 {
+            if t.damage > 0.0 && !t.destroyed {
                 dl.text_mid([p[0], p[1] + s * 2.2], TXT_SMALL * 0.8, Align::Center, "DMG", ink);
             }
         }
@@ -344,6 +346,30 @@ fn left_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
         Ink::HudDim,
     );
     configuration(dl, fd, [x, cy - 0.12]);
+    selected_weapon(dl, fd, glass);
+}
+
+/// Gewählte Waffe unten links: Name, Anzahl, Schacht und Klappenzustand.
+fn selected_weapon(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
+    let st = &fd.stores;
+    let bay = st.bays[st.selected];
+    let x = glass.min[0] + 0.01;
+    let y = glass.min[1] + TXT_SMALL * 1.2;
+    let (text, ink) = match bay.kind {
+        Some(kind) if bay.count > 0 => (format!("{} x{}", kind.label(), bay.count), Ink::Hud),
+        Some(kind) => (format!("{} EMPTY", kind.label()), Ink::HudDim),
+        None => ("NO STORE".to_string(), Ink::HudDim),
+    };
+    dl.text_mid([x, y + TXT_SMALL * 1.7], TXT_SMALL, Align::Left, &text, ink);
+    let door = if st.door >= 1.0 {
+        "OPEN"
+    } else if st.door > 0.0 {
+        "DOORS"
+    } else {
+        "SAFE"
+    };
+    let ink = if st.door > 0.0 { Ink::Warning } else { Ink::HudDim };
+    dl.text_mid([x, y], TXT_SMALL, Align::Left, &format!("BAY {} {door}", st.selected + 1), ink);
 }
 
 /// Konfiguration unten links: Fahrwerk, Klappen, Bremse – nur, wenn

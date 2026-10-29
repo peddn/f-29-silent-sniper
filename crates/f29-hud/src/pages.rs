@@ -499,6 +499,7 @@ pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, camera
     let f = frame(screen);
     title(dl, screen, &f, "TARGET");
     let status = match &fd.target {
+        Some(t) if t.destroyed => "DESTROYED",
         Some(t) if t.optical && t.radar => "OPT RDR",
         Some(t) if t.optical => "OPT",
         Some(_) => "RDR",
