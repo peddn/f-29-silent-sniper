@@ -1010,6 +1010,11 @@ impl Stores {
         }
     }
 
+    /// Schaden ohne kritischen Treffer (Bordkanone).
+    pub(crate) fn apply_damage(target: &mut Target, i: usize, amount: f64) -> ImpactResult {
+        Self::apply(target, i, amount, false)
+    }
+
     /// Schaden an einem Ziel anrichten; liefert das Ergebnis für dieses Ziel.
     fn apply(target: &mut Target, i: usize, amount: f64, critical: bool) -> ImpactResult {
         if critical {

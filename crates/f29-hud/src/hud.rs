@@ -37,6 +37,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout)
     steerpoint_marker(dl, fd, layout, &glass, vh);
     target_marker(dl, fd, layout, &glass, vh);
     bomb_aim(dl, fd, layout, &glass, vh);
+    gun_cross(dl, fd, layout, &glass, vh);
     launch_circle(dl, fd, layout, c);
     shoot_cue(dl, fd, &glass);
     heading_tape(dl, fd, &glass);
@@ -168,6 +169,28 @@ fn bomb_aim(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass:
         dl.circle(p, r, 12, ink);
         dl.line([p[0] - r * 0.2, p[1]], [p[0] + r * 0.2, p[1]], ink);
         dl.set_clip(None);
+    }
+}
+
+/// Kanonenkreuz (M-016): wo eine jetzt abgefeuerte Patrone auf dem Gelände
+/// einschlüge – nur innerhalb ihrer Flugzeit. Ein offenes Kreuz, damit es
+/// sich vom Bombenkreis unterscheidet.
+fn gun_cross(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
+    let Some(aim) = &fd.gun.aim else {
+        return;
+    };
+    if fd.gun.rounds == 0 {
+        return;
+    }
+    let Some(p) = layout.project_body(aim.direction_body.to_array()) else {
+        return;
+    };
+    if !glass.contains(p) {
+        return;
+    }
+    let (gap, arm) = (vh * 0.004, vh * 0.014);
+    for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+        dl.line([p[0] + dx * gap, p[1] + dy * gap], [p[0] + dx * arm, p[1] + dy * arm], Ink::Hud);
     }
 }
 
@@ -456,6 +479,10 @@ fn selected_weapon(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     };
     let ink = if st.door > 0.0 { Ink::HudWarning } else { Ink::HudDim };
     dl.text_mid([x, y], TXT_SMALL, Align::Left, &format!("BAY {} {door}", st.selected + 1), ink);
+    // Bordkanone: eigenes System, immer mit Munitionsstand.
+    let g = &fd.gun;
+    let ink = if g.rounds == 0 { Ink::HudDim } else { Ink::Hud };
+    dl.text_mid([x, y + TXT_SMALL * 3.4], TXT_SMALL, Align::Left, &format!("GUN {}", g.rounds), ink);
 }
 
 /// Konfiguration unten links: Fahrwerk, Klappen, Bremse – nur, wenn

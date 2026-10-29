@@ -1,5 +1,6 @@
 //! Waffen in der 3D-Ansicht (M-014): Bomben und Flugkörper im Flug, der
-//! Bremsschirm der Fallschirmbombe und ein kurzer Blitz beim Einschlag.
+//! Bremsschirm der Fallschirmbombe und ein kurzer Blitz beim Einschlag;
+//! dazu die Leuchtspur der Bordkanone und kleine Einschlagwölkchen (M-016).
 
 use crate::sim::{SimState, SimSystems};
 use crate::view::WorldOrigin;
@@ -15,13 +16,21 @@ impl Plugin for WeaponsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WeaponVisuals>().add_systems(Startup, setup).add_systems(
             Update,
-            (sync_weapons, spawn_blasts, animate_blasts)
+            (sync_weapons, spawn_blasts, animate_blasts, sync_tracers, spawn_puffs, animate_puffs)
                 .chain()
                 .in_set(SimSystems::Present)
                 .after(crate::view::update_camera_and_aircraft),
         );
     }
 }
+
+/// Leuchtspur: Länge (m) und Dicke (m) einer Patrone.
+const TRACER_LENGTH_M: f32 = 14.0;
+const TRACER_WIDTH_M: f32 = 0.35;
+/// Einschlagwölkchen der Kanone: Dauer (s) und Radius (m) am Boden bzw. am Ziel.
+const PUFF_S: f32 = 0.45;
+const PUFF_GROUND_M: f32 = 2.0;
+const PUFF_HIT_M: f32 = 3.0;
 
 /// Dauer des Einschlagblitzes (s) und größter Radius (m).
 const BLAST_S: f32 = 1.2;
@@ -40,6 +49,25 @@ struct WeaponVisuals {
     sphere: Handle<Mesh>,
     material: Handle<StandardMaterial>,
     chute_material: Handle<StandardMaterial>,
+    tracer: Handle<Mesh>,
+    tracer_material: Handle<StandardMaterial>,
+    puff_ground: Handle<StandardMaterial>,
+    puff_hit: Handle<StandardMaterial>,
+    /// Entitäten der Leuchtspur, nach Index der Patrone wiederverwendet.
+    tracers: Vec<Entity>,
+    /// Zuletzt ausgewerteter Kanoneneinschlag (Tick).
+    last_gun_tick: u64,
+}
+
+#[derive(Component)]
+struct Tracer;
+
+/// Einschlagwölkchen der Kanone an festem Weltpunkt (NED).
+#[derive(Component)]
+struct Puff {
+    at: DVec3,
+    age: f32,
+    radius: f32,
 }
 
 #[derive(Component)]
@@ -73,6 +101,95 @@ fn setup(
         materials.add(StandardMaterial { base_color: color(13), perceptual_roughness: 0.9, ..default() });
     visuals.chute_material =
         materials.add(StandardMaterial { base_color: color(10), unlit: true, cull_mode: None, ..default() });
+    visuals.tracer = meshes.add(Cuboid::new(TRACER_WIDTH_M, TRACER_WIDTH_M, TRACER_LENGTH_M));
+    visuals.tracer_material =
+        materials.add(StandardMaterial { base_color: color(10), unlit: true, ..default() });
+    visuals.puff_ground = materials.add(StandardMaterial { base_color: color(11), unlit: true, ..default() });
+    visuals.puff_hit = materials.add(StandardMaterial { base_color: color(15), unlit: true, ..default() });
+}
+
+/// Leuchtspur: eine Entität je Patrone im Flug, in Flugrichtung gestreckt.
+fn sync_tracers(
+    mut commands: Commands,
+    state: Res<SimState>,
+    origin: Res<WorldOrigin>,
+    mut visuals: ResMut<WeaponVisuals>,
+    mut tracers: Query<(&mut Transform, &mut Visibility), With<Tracer>>,
+) {
+    let rounds = &state.sim.gun().in_flight;
+    while visuals.tracers.len() < rounds.len() {
+        let e = commands
+            .spawn((
+                Mesh3d(visuals.tracer.clone()),
+                MeshMaterial3d(visuals.tracer_material.clone()),
+                Transform::default(),
+                Visibility::Hidden,
+                Tracer,
+            ))
+            .id();
+        visuals.tracers.push(e);
+    }
+    for (k, &e) in visuals.tracers.iter().enumerate() {
+        let Ok((mut t, mut vis)) = tracers.get_mut(e) else {
+            continue;
+        };
+        match rounds.get(k) {
+            Some(r) => {
+                let dir = Vec3::from_array(coords::relative_yup(r.position + r.velocity, r.position));
+                // Die Spur liegt hinter der Patrone.
+                let at = place(r.position, origin.0) - dir.normalize_or_zero() * (TRACER_LENGTH_M * 0.5);
+                *t = Transform::from_translation(at).looking_to(dir, Vec3::Y);
+                *vis = Visibility::Inherited;
+            }
+            None => *vis = Visibility::Hidden,
+        }
+    }
+}
+
+/// Für jeden neuen Kanoneneinschlag ein kleines Wölkchen.
+fn spawn_puffs(mut commands: Commands, state: Res<SimState>, mut visuals: ResMut<WeaponVisuals>) {
+    let impacts = &state.sim.gun().impacts;
+    let newest = impacts.last().map_or(0, |i| i.tick);
+    if newest < visuals.last_gun_tick {
+        // Neustart
+        visuals.last_gun_tick = 0;
+    }
+    for i in impacts.iter().filter(|i| i.tick > visuals.last_gun_tick) {
+        let (material, radius) = if i.hit {
+            (visuals.puff_hit.clone(), PUFF_HIT_M)
+        } else {
+            (visuals.puff_ground.clone(), PUFF_GROUND_M)
+        };
+        commands.spawn((
+            Mesh3d(visuals.sphere.clone()),
+            MeshMaterial3d(material),
+            Transform::from_scale(Vec3::splat(0.1)),
+            Puff { at: i.position, age: 0.0, radius },
+        ));
+    }
+    visuals.last_gun_tick = visuals.last_gun_tick.max(newest);
+}
+
+fn animate_puffs(
+    mut commands: Commands,
+    time: Res<Time>,
+    state: Res<SimState>,
+    origin: Res<WorldOrigin>,
+    mut puffs: Query<(Entity, &mut Puff, &mut Transform)>,
+) {
+    let dt = if state.paused { 0.0 } else { time.delta_secs() };
+    for (e, mut puff, mut t) in &mut puffs {
+        puff.age += dt;
+        let k = puff.age / PUFF_S;
+        if k >= 1.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        // Aufpuffen, dann wieder schrumpfen.
+        let size = (k * std::f32::consts::PI).sin();
+        t.translation = place(puff.at, origin.0);
+        t.scale = Vec3::splat(puff.radius * size.max(0.05));
+    }
 }
 
 fn place(at: DVec3, origin: DVec3) -> Vec3 {

@@ -23,7 +23,7 @@ pub mod flags {
     pub const LOOK_MASK: u8 = 0b111 << LOOK_SHIFT;
 }
 
-/// Bitflags der Waffenbedienung (eigenes Byte, alle als Flanke).
+/// Bitflags der Waffenbedienung (eigenes Byte; Flanken bis auf `GUN`).
 pub mod weapon_flags {
     /// Waffe des gewählten Schachts auslösen.
     pub const RELEASE: u8 = 1 << 0;
@@ -31,6 +31,8 @@ pub mod weapon_flags {
     pub const BAY_DOORS: u8 = 1 << 1;
     /// Nächsten Schacht wählen.
     pub const NEXT_BAY: u8 = 1 << 2;
+    /// Bordkanone feuern (gehalten, keine Flanke).
+    pub const GUN: u8 = 1 << 3;
 }
 
 /// Ein Tick Steuereingabe, quantisiert.

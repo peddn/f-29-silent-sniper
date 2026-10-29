@@ -1034,6 +1034,31 @@ Format jedes Eintrags:
   folgt mit Etappe 4.
 - **Status:** Gerüst umgesetzt (v0.2.4), Schadensquellen geplant (Etappe 4)
 
+### M-016 Bordkanone
+
+- **Verhalten:** Eine fest eingebaute Kanone für Bodenziele im Tiefflug
+  (Strafing), unabhängig von Waffenschacht und Klappen.
+- **Referenzstelle:** keine (eigener Entwurf nach Spielerwunsch).
+- **Unser Design:** eigenes Waffensystem mit gehaltener Feuertaste (Rücktaste,
+  Joystick-Taste 1 vorgesehen). Jede Patrone fliegt als Massenpunkt
+  (Mündungsgeschwindigkeit plus Flugzeuggeschwindigkeit, Schwerkraft, ohne
+  Luftwiderstand) mit kleiner, deterministisch gewürfelter Streuung aus einem
+  eigenen Zufallsstrom. Trifft ihre Flugbahn innerhalb eines Ticks die Form
+  eines intakten Ziels (senkrechter Zylinder mit Klassenradius und -höhe),
+  richtet sie bei **jedem** Ziel denselben Schaden an, ohne kritische Treffer
+  und ohne Wirksamkeitstabelle (Spielerentscheidung v0.2.8). Am Boden und nach
+  einem Absturz schießt sie nicht. Zerstört die Kanone ein Ziel, meldet das HUD
+  „GUN … DESTROYED“; ein neuer Druck bei leerer Kanone meldet „GUN EMPTY“.
+  HUD: **Kanonenkreuz** (offenes Kreuz) dort, wo eine jetzt abgefeuerte Patrone
+  auf dem Gelände einschlüge – nur innerhalb ihrer Flugzeit; unten links „GUN“
+  mit Munitionsstand. 3D-Ansicht: Leuchtspur je Patrone, kleine Wölkchen bei
+  Einschlägen (am Ziel rot). Zustand (Munition, Patronen, Zufallsstrom) geht in
+  den Zustandshash ein; das Replay-Format bleibt (Bit 3 im Waffenbyte).
+- **Unsere Werte:** 600 Schuss, 50 Schuss/s (12 s Dauerfeuer), 1000 m/s
+  Mündungsgeschwindigkeit, 3 s Flugzeit (≈ 3 km), Streuung 3 mrad, 2 % Schaden
+  je Treffer (50 Treffer zerstören jedes Ziel).
+- **Status:** umgesetzt (v0.2.8)
+
 ### M-020 Radar-/Detektionsmodell (Stealth)
 
 - **Verhalten:** Wie leicht der Gegner das Flugzeug entdeckt, hängt von der eigenen

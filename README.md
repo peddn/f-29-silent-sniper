@@ -78,6 +78,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | O | linker Stick drücken | Schachtklappen auf/zu |
 | Tab | linke Schultertaste | nächster Waffenschacht |
 | Leertaste | rechte Schultertaste | Waffe auslösen (nur bei offenem Schacht) |
+| Rücktaste (gehalten) | | Bordkanone feuern (unabhängig vom Schacht, nicht am Boden) |
 | I / L / K / J | Steuerkreuz | Blickrichtung der Zielerfassung: voraus / rechts / hinten / links (schaltet automatisch auf das nächste Ziel; dieselbe Richtung noch einmal = nächstweiteres Ziel; die Richtung folgt einem aufgeschalteten Ziel) |
 | Shift+F1 / Shift+F2 | Select | Cockpit / Verfolger |
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
@@ -201,8 +202,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Ziele außerhalb der eigenen Erfassung, Feuersignal „IN RANGE“/„SHOOT“,
       HUD-Warnfarbe blau (v0.2.7)
 - [ ] Auslöseklammer für Bomben, neu entworfen (vorgemerkt)
-- [ ] Bordkanone als eigenes Waffensystem: 600 Schuss, Backspace, 2 % Schaden pro
-      Treffer (v0.2.8)
+- [x] Bordkanone als eigenes Waffensystem: 600 Schuss (50/s), Rücktaste, 2 %
+      Schaden pro Treffer bei jedem Ziel, Kanonenkreuz am Aufschlagpunkt,
+      Leuchtspur (v0.2.8)
 - [ ] Bodenziele und Boden-Luft-Bedrohungen (Radar-SAM, Flak)
 - [ ] Radar-/Detektionsmodell: aspektabhängiger Radarquerschnitt, Geländemaskierung,
       Emissionen; Signaturanzeige im Cockpit
@@ -216,7 +218,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### v0.4: Luftkampf
 - [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
-- [ ] Luft-Luft-Raketen und Bordkanone
+- [ ] Luft-Luft-Raketen, Bordkanone gegen Luftziele
 - [ ] Feindliche Jäger und Abfangjäger mit KI (aufbauend auf dem Autopiloten)
 - [ ] Radarwarnempfänger
 

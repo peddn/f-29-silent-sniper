@@ -38,6 +38,8 @@ pub struct PilotInput {
     look: u8,
     /// Waffenbedienung (einmalig, siehe `weapon_flags`).
     weapons: u8,
+    /// Abzug der Bordkanone (gehalten).
+    gun: bool,
 }
 
 impl Default for PilotInput {
@@ -54,6 +56,7 @@ impl Default for PilotInput {
             radar_toggle: false,
             look: 0,
             weapons: 0,
+            gun: false,
         }
     }
 }
@@ -84,7 +87,7 @@ impl PilotInput {
         }
         f |= ControlFrame::look_flags(std::mem::take(&mut self.look));
         ControlFrame::from_analog(self.pitch, self.roll, self.yaw, self.throttle, f)
-            .with_weapons(std::mem::take(&mut self.weapons))
+            .with_weapons(std::mem::take(&mut self.weapons) | if self.gun { weapon_flags::GUN } else { 0 })
     }
 }
 
@@ -168,6 +171,9 @@ fn flight_input(
             pilot.look = dir.code();
         }
     }
+
+    // Bordkanone: Rücktaste (gehalten)
+    pilot.gun = keys.pressed(KeyCode::Backspace);
 
     // Waffen: Leertaste auslösen, O Schacht auf/zu, Tab nächster Schacht
     for (key, flag) in [

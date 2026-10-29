@@ -3,7 +3,8 @@
 use crate::controls::{ControlFrame, flags, weapon_flags};
 use crate::detmath;
 use crate::flight::{self, AeroData, AircraftState};
-use crate::math::DVec3;
+use crate::gun::{self, Gun, GunEvent};
+use crate::math::{DQuat, DVec3};
 use crate::nav::{self, Steerpoint};
 use crate::rng::Pcg32;
 use crate::sensors::{self, LookDir, Sensors};
@@ -389,7 +390,31 @@ pub struct FlightData {
     pub bomb_aim: Option<BombAim>,
     /// Waffen in der Luft für die Karte: eigene und (ab Etappe 3) feindliche.
     pub munitions: Vec<MunitionInfo>,
+    /// Bordkanone: Munition, Abzug und Aufschlagpunkt.
+    pub gun: GunInfo,
     pub warnings: Warnings,
+}
+
+/// Bordkanone für die Anzeigen.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GunInfo {
+    pub rounds: u16,
+    /// Abzug gedrückt.
+    pub firing: bool,
+    /// Wo eine jetzt abgefeuerte Patrone auf dem Gelände einschlüge – nur
+    /// innerhalb ihrer Flugzeit.
+    pub aim: Option<GunAim>,
+}
+
+/// Aufschlagpunkt der Kanone.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GunAim {
+    /// NED (m).
+    pub impact: DVec3,
+    /// Richtung zum Aufschlagpunkt in Körperachsen, normiert.
+    pub direction_body: DVec3,
+    /// Schrägentfernung (m).
+    pub range_m: f64,
 }
 
 /// Eine Waffe in der Luft, wie die Karte sie zeigt.
@@ -426,7 +451,10 @@ pub struct Sim {
     targets: Vec<Target>,
     sensors: Sensors,
     stores: Stores,
+    gun: Gun,
     systems: Systems,
+    /// Aufschlag (Punkt, Flugzeit) einer jetzt abgefeuerten Patrone; abgeleitet.
+    gun_prediction: Option<(DVec3, f64)>,
     /// Vorausberechneter Aufschlag (Punkt, Fallzeit) der gewählten Bombe;
     /// abgeleitet, nicht Teil des Zustandshashes.
     bomb_prediction: Option<(DVec3, f64)>,
@@ -504,7 +532,9 @@ impl Sim {
             targets,
             sensors,
             stores,
+            gun: Gun::new(seed),
             systems: Systems::default(),
+            gun_prediction: None,
             bomb_prediction: None,
             own_contacts: Vec::new(),
             contact_cursor: 0,
@@ -548,7 +578,9 @@ impl Sim {
         }
         // Waffen im Flug fliegen auch nach einem Absturz weiter.
         self.step_weapons();
+        self.gun.step(self.tick, &self.terrain, &mut self.targets, self.aircraft.position, DT);
         if self.status != Status::Flying {
+            self.gun.trigger(self.tick, false, DVec3::ZERO, DVec3::ZERO, DQuat::IDENTITY, DT);
             return;
         }
         self.update_weapon_controls(&controls);
@@ -565,6 +597,12 @@ impl Sim {
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
         if self.tick.is_multiple_of(BOMB_AIM_TICKS) {
             self.update_bomb_prediction();
+            let a = &self.aircraft;
+            self.gun_prediction = if a.on_ground || self.gun.rounds == 0 {
+                None
+            } else {
+                gun::predict_impact(a.position, a.velocity, a.attitude, &self.terrain)
+            };
         }
     }
 
@@ -591,6 +629,10 @@ impl Sim {
             self.update_bomb_prediction();
         }
         self.stores.update_door(DT, self.systems.bay_door_speed());
+        // Bordkanone: eigenes System, unabhängig von Schacht und Klappen.
+        let a = &self.aircraft;
+        let fire = controls.has_weapon(weapon_flags::GUN) && !a.on_ground;
+        self.gun.trigger(self.tick, fire, a.position, a.velocity, a.attitude, DT);
         let bay_ok = !self.systems.get(System::WeaponBay).is_failed();
         if controls.has_weapon(weapon_flags::RELEASE) {
             let a = &self.aircraft;
@@ -855,6 +897,11 @@ impl Sim {
         &self.stores
     }
 
+    /// Bordkanone (Patronen im Flug, Einschläge für die Darstellung).
+    pub fn gun(&self) -> &Gun {
+        &self.gun
+    }
+
     /// Waffen im Flug (für die Darstellung).
     pub fn weapons_in_flight(&self) -> &[Weapon] {
         &self.stores.in_flight
@@ -1037,6 +1084,18 @@ impl Sim {
                 })
                 .collect(),
             bomb_aim: self.bomb_aim(),
+            gun: GunInfo {
+                rounds: self.gun.rounds,
+                firing: self.gun.trigger,
+                aim: self.gun_prediction.map(|(impact, _)| {
+                    let to = impact - self.aircraft.position;
+                    GunAim {
+                        impact,
+                        direction_body: self.aircraft.attitude.inverse_rotate(to).normalize_or_zero(),
+                        range_m: to.length(),
+                    }
+                }),
+            },
             munitions: self
                 .stores
                 .in_flight
@@ -1082,7 +1141,7 @@ impl Sim {
     /// Meldungen der letzten [`WEAPON_MESSAGE_S`] Sekunden, neueste zuletzt.
     fn weapon_messages(&self) -> Vec<WeaponMessage> {
         let name = |i: usize| self.targets[i].name;
-        let mut out: Vec<WeaponMessage> = self
+        let mut all: Vec<(u64, WeaponMessage)> = self
             .stores
             .events
             .iter()
@@ -1119,9 +1178,26 @@ impl Sim {
                         ImpactResult::Ground => (format!("{} MISSED", kind.label()), false),
                     },
                 };
-                Some(WeaponMessage { text, warning, age_s })
+                Some((tick, WeaponMessage { text, warning, age_s }))
             })
+            .chain(self.gun.events.iter().filter_map(|&(tick, e)| {
+                let age_s = self.tick.saturating_sub(tick) as f64 * DT;
+                if age_s > WEAPON_MESSAGE_S {
+                    return None;
+                }
+                let (text, warning) = match e {
+                    GunEvent::Destroyed(i) if self.targets[i].civilian => {
+                        (format!("CIVILIAN {} DESTROYED", name(i)), true)
+                    }
+                    GunEvent::Destroyed(i) => (format!("GUN {} DESTROYED", name(i)), false),
+                    GunEvent::Empty => ("GUN EMPTY".to_string(), true),
+                };
+                Some((tick, WeaponMessage { text, warning, age_s }))
+            }))
             .collect();
+        // Waffen und Kanone zeitlich mischen (stabil: gleiche Ticks in Reihenfolge).
+        all.sort_by_key(|(tick, _)| *tick);
+        let mut out: Vec<WeaponMessage> = all.into_iter().map(|(_, m)| m).collect();
         let skip = out.len().saturating_sub(3);
         out.drain(..skip);
         out
@@ -1199,6 +1275,20 @@ impl Sim {
             h.f64(w.aim_offset.x);
             h.f64(w.aim_offset.y);
             h.f64(w.aim_offset.z);
+        }
+        let g = &self.gun;
+        h.u64(u64::from(g.rounds) | u64::from(g.trigger) << 16);
+        h.f64(g.pending());
+        let (gs, gi) = g.rng_state();
+        h.u64(gs);
+        h.u64(gi);
+        for r in &g.in_flight {
+            for v in [r.position, r.velocity] {
+                h.f64(v.x);
+                h.f64(v.y);
+                h.f64(v.z);
+            }
+            h.f64(r.age_s);
         }
         h.u64(u64::from(self.sensors.radar_on) | u64::from(self.sensors.night) << 1);
         h.u64(u64::from(self.sensors.look.code()));

@@ -546,3 +546,24 @@ fn awacs_shows_targets_beyond_own_sensors() {
     };
     assert!(lines(true) > lines(false) + 20, "AWACS-Daten fehlen auf der Karte");
 }
+
+/// Kanonenkreuz am Aufschlagpunkt (vier Striche), nur mit Munition; der
+/// Munitionsstand steht unten links.
+#[test]
+fn gun_cross_marks_the_impact_point() {
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let base = sample();
+    let count = |aim: Option<f29_core::GunAim>, rounds: u16| {
+        let mut fd = base.clone();
+        fd.gun = f29_core::GunInfo { rounds, firing: false, aim };
+        build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None).lines.len()
+    };
+    let aim = f29_core::GunAim {
+        impact: f29_core::DVec3::ZERO,
+        direction_body: f29_core::DVec3::new(1.0, 0.0, 0.08).normalize_or_zero(),
+        range_m: 1_500.0,
+    };
+    assert_eq!(count(Some(aim), 600), count(None, 600) + 4);
+    // „GUN 0“ hat weniger Striche als „GUN 600“ – aber kein Kreuz mehr.
+    assert!(count(Some(aim), 0) < count(Some(aim), 600) - 4);
+}
