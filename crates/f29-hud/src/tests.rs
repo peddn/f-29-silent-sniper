@@ -232,7 +232,9 @@ fn fuel_bar_shrinks_with_fuel() {
         let mut fd = sample();
         fd.fuel_kg *= fraction / fd.fuel_fraction;
         fd.fuel_fraction = fraction;
-        let dl = build(&fd, &layout, &HudOptions { show_hud: false, ..HudOptions::default() }, None);
+        // Der Treibstoffbalken steht auf der Triebwerksseite.
+        let mfd = MfdState { right_page: RightPage::Engine, ..MfdState::default() };
+        let dl = build(&fd, &layout, &HudOptions { show_hud: false, show_panel: true, mfd }, None);
         dl.lines
             .iter()
             .filter(|l| {
@@ -303,7 +305,7 @@ fn every_mfd_page_draws_inside_its_screen() {
         assert!(inside > 60, "{:?}: kaum Inhalt ({inside} Linien)", state.right_page);
         state.next_page();
     }
-    assert_eq!(state.right_page, RightPage::Resources, "F4 kehrt nach der letzten Seite zurück");
+    assert_eq!(state.right_page, RightPage::Mission, "F4 kehrt nach der letzten Seite zurück");
     seen.dedup();
     assert_eq!(seen.len(), RightPage::ALL.len(), "nicht alle Seiten erreicht");
 }

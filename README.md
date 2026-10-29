@@ -68,7 +68,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
 | Shift+F4 | | HUD ein/aus |
 | F3 | | Karte (linkes MFD): Gitter ↔ Satellitenbild |
-| F4 | | Rechtes MFD: nächste Seite (Ressourcen → Waffen → Triebwerk → Horizont → Systeme) |
+| F4 | | Rechtes MFD: nächste Seite (Mission → Waffen → Triebwerk → Horizont → Systeme) |
 | Y / X | | Karte näher / weiter (2, 5, 10, 20, 40 NM) |
 | P | Start | Pause |
 | F12 | | Screenshot nach `screenshots/` |
@@ -150,8 +150,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Abriss mit großem Höhenverlust (v0.1.16), vereinfachtes Abrissmodell und
       Kennwert-Tests mit `flight_report` (v0.1.17), mehr Schub, späterer
       Kurvenabriss, Klappen nicht mehr immun gegen Abriss (v0.1.18)
-- [x] Weitere MFD-Seiten: Waffen (vier Schächte, Platzhalter), Triebwerk,
-      Reserve-Horizont, Systeme (v0.1.19)
+- [x] MFD-Seiten: Mission (Route, Heimweg, Ziele als Platzhalter), Waffen (vier
+      Schächte, Platzhalter), Triebwerk mit Treibstoff, Reserve-Horizont,
+      Systeme (v0.1.19)
 
 ### v0.2: Angriff und Tarnung
 - [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD

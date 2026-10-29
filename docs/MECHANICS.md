@@ -566,12 +566,16 @@ Format jedes Eintrags:
   - Ansichtstasten liegen auf Shift + F-Taste (Cockpit, Verfolger, Retro-Look,
     HUD).
   - *v0.1.19:* Das rechte MFD hat fünf Seiten, F4 schaltet weiter, eine
-    Seitenleiste unten zeigt die aktive. RES: Treibstoff und Waffenstationen.
-    WPN: vier Waffenschächte als liegende Rechtecke (2 × 2, Platzhalter bis
+    Seitenleiste unten zeigt die aktive. Die Ressourcen-Seite entfällt: Die
+    Waffen stehen auf WPN, der Treibstoffbalken auf ENG. An ihre Stelle tritt
+    MSN: Primär- und Sekundärziel (Platzhalter bis v0.3), die Route mit
+    Teilstrecken und markiertem aktivem Punkt, Entfernung, Peilung und
+    Flugzeit dorthin, Entfernung nach Hause und BINGO-Menge. WPN: vier Waffenschächte als liegende Rechtecke (2 × 2, Platzhalter bis
     v0.2), der gewählte doppelt gerahmt, darunter Angaben zur gewählten Waffe
     (Typ, Anzahl, Gewicht, Lenkung, Auslösung) und der Waffen-Hauptschalter
     (SAFE). ENG: Drehzahl als Rundinstrument (Leerlauf 62 %, Vollgas 100 %)
     mit Schubhebelmarke, Schub, Treibstofffluss, Restflugzeit, FLAMEOUT.
+    ENG zeigt außerdem den Treibstoffbalken mit BINGO-Marke.
     ADI: Reserve-Horizont mit Querlagenskala, Fahrt, Höhe, Kurs, Steigrate und
     g-Last. SYS: Fahrwerk, Klappen, Luftbremse, Gesamtgewicht, Abrissfahrt,
     Mach und ein Warnfeld mit allen Warnungen. Die HSI-Funktion übernimmt die

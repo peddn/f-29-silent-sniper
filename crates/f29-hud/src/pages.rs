@@ -1,5 +1,5 @@
-//! Seiten des rechten MFDs außer „Ressourcen“: Waffen, Triebwerk, künstlicher
-//! Horizont (Reserveinstrument) und Systeme.
+//! Seiten des rechten MFDs: Mission, Waffen, Triebwerk mit Treibstoff,
+//! künstlicher Horizont (Reserveinstrument) und Systeme.
 //!
 //! Alle Seiten zeichnen nur in ihre Bildfläche `screen` (das Clipping setzt
 //! der Aufrufer) und lassen unten Platz für die Seitenleiste
@@ -7,7 +7,8 @@
 
 use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::heading_deg;
-use crate::mfd::{RightPage, WEAPON_STATIONS};
+use crate::map::MapData;
+use crate::mfd::{RightPage, WEAPON_STATIONS, fuel_bar};
 use f29_core::FlightData;
 use f29_core::units;
 
@@ -113,8 +114,8 @@ pub(crate) fn engine(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
 
     // Drehzahl: Leerlauf 62 %, Vollgas 100 %
     let rpm = if flameout { 100.0 * fd.engine } else { 62.0 + 38.0 * fd.engine };
-    let c = [screen.min[0] + f.w * 0.5, screen.max[1] - f.h * 0.36];
-    let r = f.w * 0.24;
+    let c = [screen.min[0] + f.w * 0.5, screen.max[1] - f.h * 0.3];
+    let r = f.w * 0.18;
     let (a0, a1) = (210.0_f32.to_radians(), -30.0_f32.to_radians());
     let ang = |pct: f64| a0 + (a1 - a0) * (pct.clamp(0.0, 110.0) / 110.0) as f32;
     dl.arc(c, r, a1, a0, 32, Ink::Mfd);
@@ -142,18 +143,83 @@ pub(crate) fn engine(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     dl.text_mid([c[0], c[1] - r * 0.75], f.txt * 0.75, Align::Center, "RPM", Ink::MfdDim);
 
     // Werte
-    let y0 = c[1] - r * 1.25;
-    let step = f.txt * 1.6;
+    let y0 = c[1] - r * 1.3;
+    let step = f.txt * 1.45;
     let lb_min = units::kg_to_lb(fd.fuel_flow_kgps) * 60.0;
     let rows = [
         ("THROTTLE", format!("{:.0}%", fd.throttle * 100.0)),
         ("THRUST", format!("{:.0} KN", fd.thrust_n.max(0.0) / 1000.0)),
         ("FUEL FLOW", format!("{lb_min:.0} LB/MIN")),
-        ("ENDURANCE", format!("{} MIN", (fd.endurance_s / 60.0).floor() as i64)),
     ];
     for (i, (name, value)) in rows.iter().enumerate() {
         row(dl, &f, y0 - step * i as f32, name, value, ink);
     }
+
+    // Treibstoff
+    let bar = Rect { min: [f.x0, screen.min[1] + f.h * 0.13], max: [f.x1, screen.min[1] + f.h * 0.19] };
+    fuel_bar(dl, fd, bar, f.txt);
+}
+
+/// Mission: Ziele (Platzhalter bis v0.3), Route mit aktivem Punkt, Entfernung
+/// und Flugzeit zum aktiven Punkt, Heimweg und BINGO.
+pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: Option<&MapData>) {
+    let f = frame(screen);
+    title(dl, screen, &f, "MISSION");
+    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, "FREE FLIGHT", Ink::MfdDim);
+    let step = f.txt * 1.5;
+    let mut y = screen.max[1] - f.h * 0.15;
+    row(dl, &f, y, "PRIMARY", "---", Ink::MfdDim);
+    y -= step;
+    row(dl, &f, y, "SECONDARY", "---", Ink::MfdDim);
+    y -= step * 0.9;
+    dl.line([f.x0, y], [f.x1, y], Ink::MfdDim);
+    y -= step * 0.8;
+
+    // Route: Punkt, Teilstrecke in NM; aktiver Punkt hell mit Raute
+    let active = fd.steerpoint.as_ref().map(|s| s.index);
+    if let Some(map) = map {
+        let mut prev: Option<[f64; 2]> = None;
+        for (k, p) in map.route.iter().enumerate() {
+            let leg = prev.map(|q| ((p.pos[0] - q[0]).powi(2) + (p.pos[1] - q[1]).powi(2)).sqrt());
+            prev = Some(p.pos);
+            let is_active = Some(k) == active;
+            let ink = if is_active { Ink::Mfd } else { Ink::MfdDim };
+            if is_active {
+                let d = f.txt * 0.35;
+                let m = [f.x0 + d, y];
+                dl.polyline(
+                    &[[m[0], m[1] + d], [m[0] + d, m[1]], [m[0], m[1] - d], [m[0] - d, m[1]]],
+                    true,
+                    Ink::Needle,
+                );
+            }
+            let name = format!("{} {}", k + 1, p.name);
+            dl.text_mid([f.x0 + f.txt * 1.2, y], f.txt * 0.85, Align::Left, &name, ink);
+            let leg = leg.map_or("---".to_string(), |m| format!("{:.1} NM", m / units::M_PER_NM));
+            dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &leg, ink);
+            y -= step;
+        }
+    }
+    dl.line([f.x0, y + step * 0.45], [f.x1, y + step * 0.45], Ink::MfdDim);
+    y -= step * 0.35;
+
+    // Zum aktiven Punkt
+    if let Some(sp) = fd.steerpoint.as_ref() {
+        let nm = sp.range / units::M_PER_NM;
+        let ete = if fd.tas_mps > 1.0 { (sp.range / fd.tas_mps) as i64 } else { 0 };
+        row(dl, &f, y, &format!("TO {}", sp.name), &format!("{nm:.1} NM"), Ink::Mfd);
+        y -= step;
+        let brg = format!("BRG {:03}  ETE {}:{:02}", heading_deg(sp.bearing), ete / 60, ete % 60);
+        dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &brg, Ink::Mfd);
+        y -= step;
+    }
+    // Heimweg
+    let home_nm = fd.home_range_m / units::M_PER_NM;
+    let bingo_lb = (units::kg_to_lb(fd.bingo_fuel_kg) / 10.0).round() as i64 * 10;
+    let bingo_ink = if fd.warnings.bingo { Ink::Warning } else { Ink::Mfd };
+    row(dl, &f, y, "HOME", &format!("{home_nm:.1} NM"), Ink::Mfd);
+    y -= step;
+    row(dl, &f, y, "BINGO FUEL", &format!("{bingo_lb} LB"), bingo_ink);
 }
 
 /// Künstlicher Horizont als Reserveinstrument mit Fahrt, Höhe, Steigrate,

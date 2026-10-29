@@ -29,7 +29,7 @@ Befehle:
   replay   DATEI                                       Replay abspielen und Hash prüfen
   hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--out DATEI]
                                                        HUD nach S Sekunden Demo als SVG
-                                                       (SEITE des rechten MFDs: res, wpn, eng, adi, sys)
+                                                       (SEITE des rechten MFDs: msn, wpn, eng, adi, sys)
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N]                                 Flugplätze und Route auflisten
@@ -242,11 +242,11 @@ fn hud_svg(args: &Args) -> Result<(), String> {
     let seconds = args.get("seconds", 20.0_f64)?;
     let aspect = args.get("aspect", 16.0_f32 / 9.0)?;
     let out = args.opt("out").unwrap_or("hud.svg");
-    let page = args.opt("page").unwrap_or("res");
+    let page = args.opt("page").unwrap_or("msn");
     let right_page = f29_hud::RightPage::ALL
         .into_iter()
         .find(|p| p.label().eq_ignore_ascii_case(page))
-        .ok_or_else(|| format!("unbekannte Seite {page} (res, wpn, eng, adi, sys)"))?;
+        .ok_or_else(|| format!("unbekannte Seite {page} (msn, wpn, eng, adi, sys)"))?;
     let sim = run_demo(seed, seconds, |_, _| {});
     let map = f29_hud::MapData::for_terrain(sim.terrain(), sim.route());
     let layout = ScreenLayout::cockpit(aspect);

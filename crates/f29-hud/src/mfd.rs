@@ -1,9 +1,9 @@
 //! Multifunktionsanzeigen (MFDs) im Instrumentenbrett.
 //!
 //! Links: Karte (Gitter oder Satellitenbild, Flugrichtung oben, stufenweise
-//! zoombar). Rechts: Seiten mit Systeminformationen, umschaltbar: Ressourcen
-//! (Treibstoff, Waffenstationen), Waffen, Triebwerk, Reserve-Horizont und
-//! Systeme (siehe `pages`). Dazwischen ein senkrechter Balken, der für die
+//! zoombar). Rechts: Seiten mit Systeminformationen, umschaltbar: Mission,
+//! Waffen, Triebwerk mit Treibstoff, Reserve-Horizont und Systeme (siehe
+//! `pages`). Dazwischen ein senkrechter Balken, der für die
 //! Stealth- und Radarimpuls-Anzeige reserviert ist.
 
 use crate::canvas::{Align, DisplayList, Ink, Rect};
@@ -15,7 +15,7 @@ use f29_core::units;
 
 /// Kartenbereiche: Entfernung von der Mitte bis zum Rand in Seemeilen.
 pub const MAP_RANGES_NM: [f64; 5] = [2.0, 5.0, 10.0, 20.0, 40.0];
-/// Anzahl Waffenstationen auf der Ressourcen-Seite.
+/// Anzahl Waffenschächte.
 pub const WEAPON_STATIONS: usize = 4;
 
 /// Darstellungsart der Karte.
@@ -31,12 +31,12 @@ pub enum MapMode {
 /// Seiten des rechten MFDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RightPage {
-    /// Treibstoff und Waffenstationen.
+    /// Mission: Ziele, Route, Heimweg.
     #[default]
-    Resources,
+    Mission,
     /// Waffenschächte und gewählte Waffe.
     Weapons,
-    /// Drehzahl, Schub, Verbrauch.
+    /// Drehzahl, Schub, Verbrauch, Treibstoff.
     Engine,
     /// Künstlicher Horizont (Reserveinstrument).
     Attitude,
@@ -46,18 +46,13 @@ pub enum RightPage {
 
 impl RightPage {
     /// Alle Seiten in Umschaltreihenfolge.
-    pub const ALL: [RightPage; 5] = [
-        RightPage::Resources,
-        RightPage::Weapons,
-        RightPage::Engine,
-        RightPage::Attitude,
-        RightPage::Systems,
-    ];
+    pub const ALL: [RightPage; 5] =
+        [RightPage::Mission, RightPage::Weapons, RightPage::Engine, RightPage::Attitude, RightPage::Systems];
 
     /// Kurzname in der Seitenleiste.
     pub fn label(self) -> &'static str {
         match self {
-            RightPage::Resources => "RES",
+            RightPage::Mission => "MSN",
             RightPage::Weapons => "WPN",
             RightPage::Engine => "ENG",
             RightPage::Attitude => "ADI",
@@ -79,7 +74,7 @@ pub struct MfdState {
 
 impl Default for MfdState {
     fn default() -> Self {
-        Self { map_mode: MapMode::Grid, map_zoom: 2, right_page: RightPage::Resources, selected_bay: 0 }
+        Self { map_mode: MapMode::Grid, map_zoom: 2, right_page: RightPage::Mission, selected_bay: 0 }
     }
 }
 
@@ -202,7 +197,7 @@ pub(crate) fn draw(
     dl.set_clip(Some(m.right_screen));
     let rs = m.right_screen;
     match state.right_page {
-        RightPage::Resources => draw_resources(dl, fd, rs),
+        RightPage::Mission => crate::pages::mission(dl, fd, rs, map),
         RightPage::Weapons => crate::pages::weapons(dl, fd, rs, state.selected_bay),
         RightPage::Engine => crate::pages::engine(dl, fd, rs),
         RightPage::Attitude => crate::pages::attitude(dl, fd, rs),
@@ -351,34 +346,10 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
     dl.text_mid([c[0], top], txt, Align::Center, &format!("{:03}", heading_deg(fd.heading)), Ink::Mfd);
 }
 
-/// Ressourcen: Waffenstationen (Platzhalter), Treibstoffbalken.
-fn draw_resources(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
-    let w = screen.max[0] - screen.min[0];
-    let h = screen.max[1] - screen.min[1];
-    // Zeichenvorschub = Zeichenhöhe: Größen so, dass alles in die Breite passt.
-    let txt = w * 0.042;
-    let small = w * 0.031;
-    let x0 = screen.min[0] + w * 0.05;
-    let x1 = screen.max[0] - w * 0.05;
-    dl.text_mid([x0, screen.max[1] - txt * 1.2], txt, Align::Left, "RESOURCES", Ink::Mfd);
-
-    // Waffenstationen: leere Rahmen als Platzhalter
-    let slot_top = screen.max[1] - h * 0.17;
-    let slot_bottom = screen.min[1] + h * 0.39;
-    let slot_w = (x1 - x0) / WEAPON_STATIONS as f32;
-    for k in 0..WEAPON_STATIONS {
-        let r = Rect {
-            min: [x0 + slot_w * k as f32 + slot_w * 0.08, slot_bottom],
-            max: [x0 + slot_w * (k + 1) as f32 - slot_w * 0.08, slot_top],
-        };
-        dl.rect(r, Ink::MfdDim);
-        let cx = r.center()[0];
-        dl.text_mid([cx, slot_top - txt * 1.1], txt, Align::Center, &format!("{}", k + 1), Ink::Mfd);
-        dl.text_mid([cx, r.center()[1]], small, Align::Center, "EMPTY", Ink::MfdDim);
-    }
-
-    // Treibstoffbalken am unteren Rand
-    let bar = Rect { min: [x0, screen.min[1] + h * 0.15], max: [x1, screen.min[1] + h * 0.22] };
+/// Treibstoff als waagerechter Balken mit Viertelmarken und BINGO-Marke
+/// (Bedarf bis nach Hause plus Reserve), darüber Menge und Restflugzeit.
+/// `txt` ist die Schriftgröße der Beschriftung.
+pub(crate) fn fuel_bar(dl: &mut DisplayList, fd: &FlightData, bar: Rect, txt: f32) {
     let low = fd.warnings.fuel_low || fd.warnings.bingo || fd.warnings.flameout;
     let fill_ink = if low { Ink::Warning } else { Ink::Needle };
     let frac = fd.fuel_fraction.clamp(0.0, 1.0) as f32;
@@ -395,7 +366,6 @@ fn draw_resources(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
         let x = bar.min[0] + (bar.max[0] - bar.min[0]) * q as f32 / 4.0;
         dl.line([x, bar.min[1]], [x, bar.min[1] + (bar.max[1] - bar.min[1]) * 0.35], Ink::Mfd);
     }
-    // BINGO-Marke: Bedarf bis nach Hause plus Reserve
     let bingo = (fd.bingo_fuel_kg / (fd.fuel_kg / fd.fuel_fraction.max(1e-9))).clamp(0.0, 1.0) as f32;
     if fd.fuel_fraction > 1e-9 && bingo > 0.0 {
         let x = bar.min[0] + (bar.max[0] - bar.min[0]) * bingo;
@@ -405,9 +375,9 @@ fn draw_resources(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     let lb = (units::kg_to_lb(fd.fuel_kg) / 10.0).round() as i64 * 10;
     let label_y = bar.max[1] + txt * 1.1;
     let label_ink = if low { Ink::Warning } else { Ink::Mfd };
-    dl.text_mid([x0, label_y], txt, Align::Left, &format!("FUEL {lb} LB"), label_ink);
+    dl.text_mid([bar.min[0], label_y], txt, Align::Left, &format!("FUEL {lb} LB"), label_ink);
     let min = (fd.endurance_s / 60.0).floor() as i64;
-    dl.text_mid([x1, label_y], txt, Align::Right, &format!("{min} MIN"), label_ink);
+    dl.text_mid([bar.max[0], label_y], txt, Align::Right, &format!("{min} MIN"), label_ink);
 }
 
 /// Platzhalter für die Stealth- und Radarimpuls-Anzeige (kommt mit v0.2).
