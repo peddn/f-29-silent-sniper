@@ -974,7 +974,7 @@ Format jedes Eintrags:
 - **Unsere Werte:** Mk 82 241 kg, Cw·A 0,020 m²,
   Fallschirm 0,9 m² nach 0,3 s, zwei je Schacht, Wirkradius 30 m, Splitterbereich
   180 m. GBU-12 227 kg, Cw·A 0,022 m², Steuerung 6°/s. Abschusskreis ±8°.
-  Maverick 210 kg, 320 m/s, 25°/s, 16 km (Sweet Spot um 8 km), Suchkegel ±25°,
+  Maverick 210 kg, 600 m/s (deutlich schneller als das Flugzeug), 25°/s, 16 km (Sweet Spot um 8 km), Suchkegel ±25°,
   Wirkradius 8 m;
   HARM 360 kg, 650 m/s, 20°/s, 30 km, ±35°; Harpoon 520 kg, 270 m/s,
   10°/s, 30 km, ±40°. Startgüte an der Reichweitengrenze 0,25, im Sweet Spot

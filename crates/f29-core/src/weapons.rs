@@ -217,8 +217,9 @@ const MISSILE: WeaponSpec = WeaponSpec {
     deploy_s: 0.0,
     per_bay: 2,
     seeker: Seeker::Optical,
-    cruise_mps: 320.0,
-    accel_mps2: 120.0,
+    // Deutlich schneller als das Flugzeug (Spielerwunsch v0.2.7).
+    cruise_mps: 600.0,
+    accel_mps2: 300.0,
     turn_rate_rad: deg(25.0),
     max_range_m: 16_000.0,
     seeker_cone_rad: deg(25.0),
