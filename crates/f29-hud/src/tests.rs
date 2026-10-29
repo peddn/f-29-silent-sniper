@@ -70,7 +70,7 @@ fn ladder_moves_down_when_nose_goes_up() {
     // Horizontlinie: längste Linie, die nahe der Mitte waagrecht liegt
     let horizon_y = |fd: &FlightData| {
         let mut dl = DisplayList::new();
-        hud::draw(&mut dl, fd, &layout);
+        hud::draw(&mut dl, fd, &layout, crate::HudMode::AirToGround);
         dl.lines
             .iter()
             .filter(|l| (l.a[1] - l.b[1]).abs() < 1e-6 && (l.b[0] - l.a[0]).abs() > 0.08)
@@ -88,7 +88,12 @@ fn crash_screen_replaces_hud() {
     let mut fd = sample();
     fd.warnings.crashed = true;
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
-    let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
+    let dl = build(
+        &fd,
+        &layout,
+        &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
+        None,
+    );
     assert!(dl.lines.iter().all(|l| l.ink == Ink::HudWarning));
 }
 
@@ -271,7 +276,13 @@ fn fuel_bar_shrinks_with_fuel() {
         let dl = build(
             &fd,
             &layout,
-            &HudOptions { show_hud: false, show_panel: true, mfd, camera_feed: false },
+            &HudOptions {
+                show_hud: false,
+                show_panel: true,
+                mfd,
+                camera_feed: false,
+                ..HudOptions::default()
+            },
             None,
         );
         dl.lines
@@ -301,7 +312,7 @@ fn configuration_rows_do_not_move() {
     // Unterkante der Textzeilen einer Tinte im linken unteren Bereich des Glases
     let row_y = |fd: &FlightData, ink: Ink, len: usize| {
         let mut dl = DisplayList::new();
-        hud::draw(&mut dl, fd, &layout);
+        hud::draw(&mut dl, fd, &layout, crate::HudMode::AirToGround);
         let mut ys: Vec<f32> = dl
             .lines
             .iter()
@@ -337,7 +348,13 @@ fn every_mfd_page_draws_inside_its_screen() {
     let mut seen = Vec::new();
     for _ in 0..RightPage::ALL.len() {
         seen.push(state.right_page);
-        let opts = HudOptions { show_hud: false, show_panel: true, mfd: state, camera_feed: false };
+        let opts = HudOptions {
+            show_hud: false,
+            show_panel: true,
+            mfd: state,
+            camera_feed: false,
+            ..HudOptions::default()
+        };
         let dl = build(&fd, &layout, &opts, None);
         let screen = m.right_screen;
         let inside = dl.lines.iter().filter(|l| screen.contains(l.a) && screen.contains(l.b)).count();
@@ -358,7 +375,12 @@ fn open_bay_shows_in_the_weapon_line() {
         let mut fd = sample();
         fd.stores.door = door;
         fd.time_s = time_s;
-        let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
+        let dl = build(
+            &fd,
+            &layout,
+            &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
+            None,
+        );
         dl.lines.iter().filter(|l| l.ink == Ink::HudWarning).count()
     };
     let closed = warn_lines(0.0, 10.0);
@@ -404,7 +426,12 @@ fn target_box_shows_the_launch_zone() {
     let lines = |zone: Option<LaunchZone>| {
         let mut fd = base.clone();
         fd.target = Some(f29_core::TargetInfo { zone, ..t });
-        let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
+        let dl = build(
+            &fd,
+            &layout,
+            &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
+            None,
+        );
         (dl.lines.len(), dl.lines.iter().filter(|l| l.ink == Ink::HudWarning).count())
     };
     let (plain, plain_red) = lines(None);
@@ -427,7 +454,12 @@ fn bomb_aim_draws_the_pipper() {
         let mut fd = base.clone();
         fd.roll = 0.0;
         fd.bomb_aim = aim;
-        let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
+        let dl = build(
+            &fd,
+            &layout,
+            &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
+            None,
+        );
         (dl.lines.len(), dl.lines.iter().filter(|l| l.ink == Ink::HudWarning).count())
     };
     let aim = f29_core::BombAim {
@@ -454,11 +486,20 @@ fn launch_circle_only_for_missiles() {
     let lines = |kind: WeaponKind| {
         let mut fd = base.clone();
         fd.stores.selected = 0;
+        fd.stores.gun_selected = false;
         fd.stores.bays[0] = Bay { kind: Some(kind), count: 1 };
         fd.bomb_aim = None;
-        // Nur gedämpfte Linien zählen (der Kreis); Waffennamen sind hell.
-        let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
-        dl.lines.iter().filter(|l| l.ink == Ink::HudDim).count()
+        // Nur Linien auf dem Kreisradius um die Glasmitte zählen.
+        let dl = build(
+            &fd,
+            &layout,
+            &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
+            None,
+        );
+        let c = layout.view_rect().center();
+        let r = layout.focal() * (f29_core::weapons::LAUNCH_CIRCLE_RAD as f32).tan();
+        let on = |p: [f32; 2]| ((p[0] - c[0]).hypot(p[1] - c[1]) - r).abs() < 1e-4;
+        dl.lines.iter().filter(|l| on(l.a) && on(l.b)).count()
     };
     let bomb = lines(WeaponKind::FreeFall);
     assert_eq!(lines(WeaponKind::GuidedBomb), bomb);
@@ -479,6 +520,7 @@ fn shoot_cue_follows_zone_and_circle() {
     let red = |kind: WeaponKind, zone: LaunchZone, off_deg: f64| {
         let mut fd = base.clone();
         fd.stores.selected = 0;
+        fd.stores.gun_selected = false;
         fd.stores.bays[0] = Bay { kind: Some(kind), count: 1 };
         fd.bomb_aim = None;
         let a = off_deg.to_radians();
@@ -488,7 +530,12 @@ fn shoot_cue_follows_zone_and_circle() {
             direction_body: f29_core::DVec3::new(a.cos(), 0.0, a.sin()),
             ..t0
         });
-        let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
+        let dl = build(
+            &fd,
+            &layout,
+            &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
+            None,
+        );
         dl.lines.iter().filter(|l| l.ink == Ink::HudWarning).count()
     };
     let lgb_good = red(WeaponKind::GuidedBomb, LaunchZone::Good, 25.0);
@@ -512,6 +559,7 @@ fn corners_only_inside_the_launch_circle() {
     let lines = |off_deg: f64, zone: Option<LaunchZone>| {
         let mut fd = base.clone();
         fd.stores.selected = 0;
+        fd.stores.gun_selected = false;
         fd.stores.bays[0] = Bay { kind: Some(WeaponKind::AirToGround), count: 1 };
         fd.bomb_aim = None;
         let a = off_deg.to_radians();
@@ -521,7 +569,14 @@ fn corners_only_inside_the_launch_circle() {
             direction_body: f29_core::DVec3::new(a.cos(), a.sin(), 0.0),
             ..t0
         });
-        build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None).lines.len()
+        build(
+            &fd,
+            &layout,
+            &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
+            None,
+        )
+        .lines
+        .len()
     };
     // 12° neben der Nase: außerhalb des Kreises, aber noch im Glas.
     assert_eq!(lines(12.0, Some(LaunchZone::InRange)), lines(12.0, Some(LaunchZone::OutOfRange)));
@@ -556,7 +611,14 @@ fn gun_cross_marks_the_impact_point() {
     let count = |aim: Option<f29_core::GunAim>, rounds: u16| {
         let mut fd = base.clone();
         fd.gun = f29_core::GunInfo { rounds, firing: false, aim };
-        build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None).lines.len()
+        build(
+            &fd,
+            &layout,
+            &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
+            None,
+        )
+        .lines
+        .len()
     };
     let aim = f29_core::GunAim {
         impact: f29_core::DVec3::ZERO,
@@ -564,6 +626,40 @@ fn gun_cross_marks_the_impact_point() {
         range_m: 1_500.0,
     };
     assert_eq!(count(Some(aim), 600), count(None, 600) + 4);
-    // „GUN 0“ hat weniger Striche als „GUN 600“ – aber kein Kreuz mehr.
-    assert!(count(Some(aim), 0) < count(Some(aim), 600) - 4);
+    // Leer: kein Kreuz mehr.
+    assert_eq!(count(Some(aim), 0), count(None, 0));
+}
+
+/// HUD-Modi: NAV ohne Waffensymbolik, AG mit Zielrahmen und Waffe, AA mit
+/// großem Boresight-Kreis; die Landehilfen nur in NAV.
+#[test]
+fn hud_modes_show_their_symbology() {
+    use crate::HudMode;
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let mut sim = Sim::new(SimConfig::new(0x0F29));
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.55, f29_core::controls::flags::RADAR_TOGGLE));
+    let mut fd = sim.flight_data();
+    let mut t = fd.target.expect("Ziel");
+    t.direction_body = f29_core::DVec3::new(1.0, 0.0, 0.05).normalize_or_zero();
+    fd.target = Some(t);
+    let draw = |fd: &f29_core::FlightData, mode: HudMode| {
+        build(fd, &layout, &HudOptions { show_panel: false, hud_mode: mode, ..HudOptions::default() }, None)
+            .lines
+    };
+    let c = layout.view_rect().center();
+    let r = layout.focal() * crate::hud::AA_CIRCLE_DEG.to_radians().tan();
+    let on_aa = |l: &crate::Line| ((l.a[0] - c[0]).hypot(l.a[1] - c[1]) - r).abs() < 1e-4;
+    assert_eq!(draw(&fd, HudMode::AirToAir).iter().filter(|l| on_aa(l)).count(), 48, "AA-Kreis");
+    assert_eq!(draw(&fd, HudMode::Nav).iter().filter(|l| on_aa(l)).count(), 0);
+    // Zielrahmen und Waffenzeile nur in den Waffenmodi.
+    assert!(draw(&fd, HudMode::AirToGround).len() > draw(&fd, HudMode::Nav).len() + 20);
+    // Landemodus: Gleitlinie und Sinkratenskala nur in NAV.
+    let mut land = fd.clone();
+    land.gear = 1.0;
+    land.on_ground = false;
+    let gained = |mode: HudMode| draw(&land, mode).len() as i64 - draw(&fd, mode).len() as i64;
+    assert!(gained(HudMode::Nav) > gained(HudMode::AirToGround) + 5);
+    // Reihenfolge der Modi
+    assert_eq!(HudMode::default(), HudMode::Nav);
+    assert_eq!(HudMode::Nav.next().next().next(), HudMode::Nav);
 }

@@ -71,3 +71,22 @@ fn gun_is_deterministic() {
     hold(&mut quiet, 4.2, 0);
     assert_ne!(run(), quiet.state_hash());
 }
+
+/// Die Kanone ist die Startwahl: Der gehaltene Abzug der gewählten Waffe
+/// feuert sie; nach dem Weiterschalten zu einem Schacht nicht mehr.
+#[test]
+fn trigger_fires_the_selected_gun() {
+    let mut sim = air();
+    assert!(sim.stores().gun_selected);
+    hold(&mut sim, 0.5, weapon_flags::TRIGGER | weapon_flags::RELEASE);
+    let after = sim.flight_data().gun.rounds;
+    assert!(after < gun::ROUNDS - 20, "{after}");
+    assert!(sim.weapons_in_flight().is_empty(), "keine Schachtwaffe");
+    hold(&mut sim, 0.1, 0);
+    hold(&mut sim, 1.0 / f64::from(TICK_HZ), weapon_flags::NEXT_BAY);
+    hold(&mut sim, 0.5, weapon_flags::TRIGGER);
+    assert_eq!(sim.flight_data().gun.rounds, after, "Schacht gewählt: Abzug feuert die Kanone nicht");
+    // Rücktaste feuert die Kanone immer.
+    hold(&mut sim, 0.2, weapon_flags::GUN);
+    assert!(sim.flight_data().gun.rounds < after);
+}

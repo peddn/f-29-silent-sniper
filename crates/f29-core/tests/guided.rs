@@ -48,7 +48,8 @@ fn lined_up_at(
             ..Spawn::default()
         },
     });
-    step(&mut sim, flags::RADAR_TOGGLE, 0);
+    // Startwahl ist die Kanone: weiter zu Schacht 1.
+    step(&mut sim, flags::RADAR_TOGGLE, weapon_flags::NEXT_BAY);
     step(&mut sim, ControlFrame::look_flags(LookDir::Right.code()), 0);
     step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()), 0);
     for _ in 0..40 {

@@ -9,13 +9,51 @@ use f29_core::weapons::LaunchZone;
 /// Zeichenhöhe der HUD-Schrift (Bildschirmeinheiten).
 const TXT: f32 = 0.020;
 const TXT_SMALL: f32 = 0.016;
+/// Luft-Luft-Kreis um die Flugzeugnase (halber Öffnungswinkel), einheitlich
+/// für alle Luft-Luft-Waffen (Spielerwunsch v0.2.8).
+pub(crate) const AA_CIRCLE_DEG: f32 = 10.0;
 
-pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout) {
+/// HUD-Modus (Taste H blättert): Was das HUD neben den Flugdaten zeigt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HudMode {
+    /// Navigation: nur, was für den Anflug von Wegpunkten und Landeplätzen
+    /// zählt (Navigationspunkt, Konfiguration, im Landemodus Gleitlinie und
+    /// Sinkratenskala).
+    #[default]
+    Nav,
+    /// Luft-Boden: Zielrahmen und Zielhilfe je nach gewählter Waffe
+    /// (Kanonenkreuz, Bombenkreis, Abschusskreis, Feuersignal).
+    AirToGround,
+    /// Luft-Luft: großer Boresight-Kreis für alle Luft-Luft-Waffen, immer
+    /// sichtbar.
+    AirToAir,
+}
+
+impl HudMode {
+    pub fn next(self) -> Self {
+        match self {
+            HudMode::Nav => HudMode::AirToGround,
+            HudMode::AirToGround => HudMode::AirToAir,
+            HudMode::AirToAir => HudMode::Nav,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            HudMode::Nav => "NAV",
+            HudMode::AirToGround => "AG",
+            HudMode::AirToAir => "AA",
+        }
+    }
+}
+
+pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, mode: HudMode) {
     let view = layout.view_rect();
     let vh = view.max[1] - view.min[1];
     let c = view.center();
-    // Das HUD-Glas: etwa 60 % der Ansichtshöhe, leicht breiter als hoch.
-    let glass = Rect::from_center(c, [vh * 0.36, vh * 0.34]);
+    // Das HUD-Glas: gut drei Viertel der Ansichtshöhe und deutlich breiter als
+    // hoch, damit Daten und Symbole nach außen rücken (v0.2.8).
+    let glass = Rect::from_center(c, [vh * 0.56, vh * 0.38]);
 
     if fd.warnings.crashed {
         dl.text_mid(c, TXT * 2.2, Align::Center, "CRASHED", Ink::HudWarning);
@@ -27,7 +65,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout)
     }
 
     pitch_ladder(dl, fd, layout, &glass);
-    if landing_mode(fd) {
+    if mode == HudMode::Nav && landing_mode(fd) {
         glide_line(dl, fd, layout, &glass);
         sink_scale(dl, fd, &glass);
     }
@@ -35,17 +73,29 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout)
     boresight(dl, c, vh);
     flight_path_marker(dl, fd, layout, &glass, vh);
     steerpoint_marker(dl, fd, layout, &glass, vh);
-    target_marker(dl, fd, layout, &glass, vh);
-    bomb_aim(dl, fd, layout, &glass, vh);
-    gun_cross(dl, fd, layout, &glass, vh);
-    launch_circle(dl, fd, layout, c);
-    shoot_cue(dl, fd, &glass);
+    match mode {
+        HudMode::Nav => {}
+        HudMode::AirToGround => {
+            target_marker(dl, fd, layout, &glass, vh);
+            bomb_aim(dl, fd, layout, &glass, vh);
+            gun_cross(dl, fd, layout, &glass, vh);
+            launch_circle(dl, fd, layout, c);
+            shoot_cue(dl, fd, &glass);
+        }
+        HudMode::AirToAir => {
+            let r = layout.focal() * AA_CIRCLE_DEG.to_radians().tan();
+            dl.circle(c, r, 48, Ink::Hud);
+        }
+    }
     heading_tape(dl, fd, &glass);
     bank_scale(dl, fd, &glass);
-    left_data(dl, fd, &glass);
-    right_data(dl, fd, &glass);
-    warnings(dl, fd, &glass);
+    left_data(dl, fd, &glass, mode);
+    right_data(dl, fd, &glass, mode);
+    warnings(dl, fd, &glass, mode);
     weapon_messages(dl, fd, &glass);
+    // Modus links unter dem Kursband
+    let at = [glass.min[0] + 0.018, glass.max[1] - 0.075];
+    dl.boxed_text(at, TXT_SMALL, Align::Left, mode.label(), Ink::Hud);
 }
 
 /// Nicklage-Leiter: Sprossen alle 5°, konform zur Außenwelt.
@@ -179,7 +229,7 @@ fn gun_cross(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass
     let Some(aim) = &fd.gun.aim else {
         return;
     };
-    if fd.gun.rounds == 0 {
+    if fd.gun.rounds == 0 || !fd.stores.gun_selected {
         return;
     }
     let Some(p) = layout.project_body(aim.direction_body.to_array()) else {
@@ -198,14 +248,16 @@ fn gun_cross(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass
 /// aufgeschaltete Ziel darin, übernimmt die Rakete es beim Abschuss.
 fn launch_circle(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, center: [f32; 2]) {
     let st = &fd.stores;
-    let Some(kind) = st.bays[st.selected].kind.filter(|_| st.bays[st.selected].count > 0) else {
+    let Some(kind) = st.bays[st.selected].kind.filter(|_| st.bays[st.selected].count > 0 && !st.gun_selected)
+    else {
         return;
     };
     if !kind.uses_launch_circle() {
         return;
     }
     let r = layout.focal() * (f29_core::weapons::LAUNCH_CIRCLE_RAD as f32).tan();
-    dl.circle(center, r, 40, Ink::HudDim);
+    // Heller als früher, fast wie die übrige Symbolik (Spielerwunsch v0.2.8).
+    dl.circle(center, r, 40, Ink::Hud);
 }
 
 /// Reichweitenzone, wie sie Zielrahmen und Feuersignal zeigen: Bei Raketen
@@ -214,7 +266,7 @@ fn launch_circle(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, c
 fn armed_zone(fd: &FlightData, t: &f29_core::TargetInfo) -> Option<LaunchZone> {
     let zone = t.zone?;
     let st = &fd.stores;
-    let circle = st.bays[st.selected].kind.is_some_and(|k| k.uses_launch_circle());
+    let circle = !st.gun_selected && st.bays[st.selected].kind.is_some_and(|k| k.uses_launch_circle());
     let in_circle =
         t.direction_body.x >= f29_core::weapons::LAUNCH_CIRCLE_RAD.cos() * t.direction_body.length();
     match zone {
@@ -231,7 +283,10 @@ fn shoot_cue(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
         return;
     };
     let st = &fd.stores;
-    if !st.bays[st.selected].kind.is_some_and(|k| k.is_guided()) || st.bays[st.selected].count == 0 {
+    if st.gun_selected
+        || !st.bays[st.selected].kind.is_some_and(|k| k.is_guided())
+        || st.bays[st.selected].count == 0
+    {
         return;
     }
     let pos = [glass.center()[0], glass.min[1] + TXT * 1.4];
@@ -439,32 +494,38 @@ fn bank_scale(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     );
 }
 
-/// Links: Geschwindigkeit, Mach, g, Anstellwinkel.
-fn left_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
-    let x = glass.min[0] + 0.01;
+/// Links: Geschwindigkeit, Mach, g, Anstellwinkel; Konfiguration; in den
+/// Waffenmodi die gewählte Waffe.
+fn left_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect, mode: HudMode) {
+    let x = glass.min[0] + 0.012;
     let cy = glass.center()[1];
     let kmh = units::mps_to_kmh(fd.tas_mps).round() as i64;
-    dl.text_mid([x, cy + 0.045], TXT_SMALL, Align::Left, &format!("G {:.1}", fd.load_factor), Ink::Hud);
+    dl.text_mid([x, cy + 0.055], TXT_SMALL, Align::Left, &format!("G {:.1}", fd.load_factor), Ink::Hud);
     dl.boxed_text([x + 0.006, cy], TXT, Align::Left, &format!("{kmh:>4}"), Ink::Hud);
-    dl.text_mid([x, cy - 0.045], TXT_SMALL, Align::Left, &format!("M {:.2}", fd.mach), Ink::Hud);
+    dl.text_mid([x, cy - 0.055], TXT_SMALL, Align::Left, &format!("M {:.2}", fd.mach), Ink::Hud);
     dl.text_mid(
-        [x, cy - 0.075],
+        [x, cy - 0.085],
         TXT_SMALL,
         Align::Left,
         &format!("A {:.1}", fd.alpha.to_degrees()),
         Ink::HudDim,
     );
-    configuration(dl, fd, [x, cy - 0.12]);
-    selected_weapon(dl, fd, glass);
+    configuration(dl, fd, [x, cy - 0.13]);
+    if mode != HudMode::Nav {
+        selected_weapon(dl, fd, glass);
+    }
 }
 
-/// Gewählte Waffe unten links: Name, Anzahl, Schacht und Klappenzustand.
+/// Gewählte Waffe unten links: Name und Anzahl (bzw. Kanone mit Munition),
+/// darunter Schacht und Klappenzustand.
 fn selected_weapon(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let st = &fd.stores;
     let bay = st.bays[st.selected];
-    let x = glass.min[0] + 0.01;
+    let x = glass.min[0] + 0.012;
     let y = glass.min[1] + TXT_SMALL * 1.2;
     let (text, ink) = match bay.kind {
+        _ if st.gun_selected && fd.gun.rounds > 0 => (format!("GUN {}", fd.gun.rounds), Ink::Hud),
+        _ if st.gun_selected => ("GUN EMPTY".to_string(), Ink::HudDim),
         Some(kind) if bay.count > 0 => (format!("{} x{}", kind.label(), bay.count), Ink::Hud),
         Some(kind) => (format!("{} EMPTY", kind.label()), Ink::HudDim),
         None => ("NO STORE".to_string(), Ink::HudDim),
@@ -478,11 +539,9 @@ fn selected_weapon(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
         "SAFE"
     };
     let ink = if st.door > 0.0 { Ink::HudWarning } else { Ink::HudDim };
-    dl.text_mid([x, y], TXT_SMALL, Align::Left, &format!("BAY {} {door}", st.selected + 1), ink);
-    // Bordkanone: eigenes System, immer mit Munitionsstand.
-    let g = &fd.gun;
-    let ink = if g.rounds == 0 { Ink::HudDim } else { Ink::Hud };
-    dl.text_mid([x, y + TXT_SMALL * 3.4], TXT_SMALL, Align::Left, &format!("GUN {}", g.rounds), ink);
+    let bay_txt =
+        if st.gun_selected { format!("BAYS {door}") } else { format!("BAY {} {door}", st.selected + 1) };
+    dl.text_mid([x, y], TXT_SMALL, Align::Left, &bay_txt, ink);
 }
 
 /// Konfiguration unten links: Fahrwerk, Klappen, Bremse – nur, wenn
@@ -513,13 +572,14 @@ const CONFIG_GEAR: usize = 0;
 const CONFIG_FLAPS: usize = 1;
 const CONFIG_BRAKE: usize = 2;
 
-/// Rechts: Höhe (m), Radarhöhe (m), Steigrate (m/s), Steerpoint (km).
-fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
-    let x = glass.max[0] - 0.01;
+/// Rechts: Höhe (m), Radarhöhe (m), Steigrate (m/s), Steerpoint (km); in
+/// den Waffenmodi die Zielerfassung.
+fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect, mode: HudMode) {
+    let x = glass.max[0] - 0.012;
     let cy = glass.center()[1];
     let alt = fd.altitude_m.round() as i64;
     let vs = fd.vertical_speed_mps.round() as i64;
-    dl.text_mid([x, cy + 0.045], TXT_SMALL, Align::Right, &format!("{vs:+}"), Ink::Hud);
+    dl.text_mid([x, cy + 0.055], TXT_SMALL, Align::Right, &format!("{vs:+}"), Ink::Hud);
     dl.boxed_text([x - 0.006, cy], TXT, Align::Right, &format!("{alt:>5}"), Ink::Hud);
     // Höhe über Grund (Radarhöhe) immer anzeigen: Das Gelände hat echte Berge,
     // die Höhe über dem Meer allein reicht für den Tiefflug nicht.
@@ -527,10 +587,13 @@ fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let step = if ragl < 300.0 { 5.0 } else { 10.0 };
     let r = (ragl / step).round() as i64 * step as i64;
     let ink = if ragl < 150.0 { Ink::HudWarning } else { Ink::Hud };
-    dl.text_mid([x, cy - 0.045], TXT_SMALL, Align::Right, &format!("R {r:>5}"), ink);
+    dl.text_mid([x, cy - 0.055], TXT_SMALL, Align::Right, &format!("R {r:>5}"), ink);
     if let Some(sp) = &fd.steerpoint {
         let txt = format!("{} {:.1}", sp.name, units::m_to_km(sp.range));
         dl.text_mid([x, glass.min[1] + 0.03], TXT_SMALL, Align::Right, &txt, Ink::Hud);
+    }
+    if mode == HudMode::Nav {
+        return;
     }
     // Zielerfassung: Radar an, Blickrichtung, aufgeschaltetes Ziel
     let mut sensor = String::new();
@@ -548,15 +611,15 @@ fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
 /// Waffenmeldungen unter dem HUD-Glas in der Außensicht, neueste oben.
 fn weapon_messages(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let c = glass.center();
-    let mut y = glass.min[1] - TXT * 1.6;
+    let mut y = glass.min[1] - TXT_SMALL * 1.3;
     for m in fd.weapon_messages.iter().rev() {
         let ink = if m.warning { Ink::HudWarning } else { Ink::Hud };
-        dl.text_mid([c[0], y], TXT, Align::Center, &m.text, ink);
-        y -= TXT * 1.8;
+        dl.text_mid([c[0], y], TXT_SMALL, Align::Center, &m.text, ink);
+        y -= TXT_SMALL * 1.45;
     }
 }
 
-fn warnings(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
+fn warnings(dl: &mut DisplayList, fd: &FlightData, glass: &Rect, mode: HudMode) {
     let blink = (fd.time_s * 2.0).fract() < 0.6;
     let c = glass.center();
     let mut y = c[1] - (glass.max[1] - glass.min[1]) * 0.22;
@@ -582,7 +645,7 @@ fn warnings(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
         show(dl, "GEAR SPEED");
     }
     // Bombe fiele in den eigenen Splitterbereich (M-014).
-    if fd.bomb_aim.is_some_and(|a| a.too_low) {
+    if mode == HudMode::AirToGround && fd.bomb_aim.is_some_and(|a| a.too_low) {
         show(dl, "TOO LOW");
     }
     if fd.warnings.flameout {

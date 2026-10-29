@@ -86,7 +86,7 @@ pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
         let x = f.x0 + col as f32 * (bay_w + gap);
         let y = top - rowi as f32 * (bay_h + gap) - bay_h;
         let r = Rect { min: [x, y], max: [x + bay_w, y + bay_h] };
-        let sel = k == selected;
+        let sel = k == selected && !st.gun_selected;
         let ink = if sel { Ink::Mfd } else { Ink::MfdDim };
         dl.rect(r, ink);
         if sel {
@@ -132,6 +132,23 @@ pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     // Angaben zum gewählten Schacht
     let info_top = top - 2.0 * bay_h - gap - f.h * 0.05;
     let step = f.txt * 1.35;
+    if st.gun_selected {
+        // Bordkanone gewählt (eigenes System, vor den Schächten).
+        dl.text_mid([f.x0, info_top], f.txt, Align::Left, "SELECTED GUN", Ink::Mfd);
+        let rounds = fd.gun.rounds.to_string();
+        let ready = if fd.gun.rounds > 0 { ("READY", Ink::Warning) } else { ("EMPTY", Ink::MfdDim) };
+        let rows: [(&str, &str, Ink); 5] = [
+            ("STORE", "20 MM GUN", Ink::Mfd),
+            ("ROUNDS", &rounds, Ink::Mfd),
+            ("RATE", "50 /S", Ink::Mfd),
+            ("GUIDANCE", "NONE", Ink::Mfd),
+            ("FIRE", ready.0, ready.1),
+        ];
+        for (i, (name, value, ink)) in rows.iter().enumerate() {
+            row(dl, &f, info_top - step * (i as f32 + 1.1), name, value, *ink);
+        }
+        return;
+    }
     dl.text_mid([f.x0, info_top], f.txt, Align::Left, &format!("SELECTED BAY {}", selected + 1), Ink::Mfd);
     let bay = st.bays[selected];
     let release = if bay.count == 0 {

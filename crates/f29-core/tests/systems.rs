@@ -119,7 +119,7 @@ fn sensor_damage_shortens_the_range() {
 #[test]
 fn failed_bay_jams_the_doors_and_blocks_release() {
     let mut sim = with(System::WeaponBay, Condition::Failed);
-    sim.step(level(0.6, 0).with_weapons(weapon_flags::BAY_DOORS));
+    sim.step(level(0.6, 0).with_weapons(weapon_flags::BAY_DOORS | weapon_flags::NEXT_BAY));
     fly(&mut sim, weapons::DOOR_TIME_S + 0.5, level(0.6, 0));
     assert_eq!(sim.stores().door, 0.0, "Klappen klemmen");
     sim.step(level(0.6, 0).with_weapons(weapon_flags::RELEASE));

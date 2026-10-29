@@ -40,12 +40,19 @@ pub enum ViewMode {
 pub struct ViewSettings {
     pub mode: ViewMode,
     pub hud: bool,
+    /// HUD-Modus (H blättert NAV → AG → AA).
+    pub hud_mode: f29_hud::HudMode,
     pub retro: RetroMode,
 }
 
 impl Default for ViewSettings {
     fn default() -> Self {
-        Self { mode: ViewMode::Cockpit, hud: true, retro: RetroMode::Full }
+        Self {
+            mode: ViewMode::Cockpit,
+            hud: true,
+            hud_mode: f29_hud::HudMode::default(),
+            retro: RetroMode::Full,
+        }
     }
 }
 

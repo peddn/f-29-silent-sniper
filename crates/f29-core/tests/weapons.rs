@@ -39,7 +39,7 @@ fn approach_at(
         .find(|(_, t)| t.class == class)
         .map(|(i, t)| (i, t.clone()))
         .expect("Zielklasse vorhanden");
-    let sim = Sim::new(SimConfig {
+    let mut sim = Sim::new(SimConfig {
         seed: SEED,
         spawn: Spawn {
             north: t.north - back,
@@ -53,12 +53,20 @@ fn approach_at(
             ..Spawn::default()
         },
     });
+    // Startwahl ist die Kanone: weiter zu Schacht 1.
+    step(&mut sim, weapon_flags::NEXT_BAY);
     (sim, i)
 }
 
 #[test]
 fn release_needs_open_bay_and_drops_mass() {
     let mut sim = Sim::new(SimConfig::new(SEED));
+    // Startwahl ist die Kanone; die Auslösetaste löst dann nichts aus.
+    assert!(sim.stores().gun_selected);
+    step(&mut sim, weapon_flags::RELEASE);
+    assert!(sim.weapon_events().is_empty());
+    step(&mut sim, weapon_flags::NEXT_BAY);
+    assert!(!sim.stores().gun_selected);
     let bay0 = sim.stores().bays[0];
     assert_eq!(bay0.kind, Some(WeaponKind::FreeFall));
     let mass0 = sim.flight_data().mass_kg;
@@ -90,6 +98,15 @@ fn release_needs_open_bay_and_drops_mass() {
         step(&mut sim, 0);
     }
     assert_eq!(sim.stores().door, 0.0);
+    // Reihe GUN → BAY 1 … BAY 4 → GUN.
+    step(&mut sim, weapon_flags::NEXT_BAY);
+    step(&mut sim, weapon_flags::NEXT_BAY);
+    assert_eq!(sim.stores().selected, 3);
+    step(&mut sim, weapon_flags::NEXT_BAY);
+    assert!(sim.stores().gun_selected);
+    step(&mut sim, weapon_flags::NEXT_BAY);
+    assert!(!sim.stores().gun_selected);
+    assert_eq!(sim.stores().selected, 0);
 }
 
 /// Ergebnis eines Bombenanflugs.
@@ -202,6 +219,7 @@ fn retarded_bomb_avoids_the_frag_warning_at_low_level() {
             let pull = (0.02 * (70.0 - fd.altitude_m) - 0.08 * fd.vertical_speed_mps).clamp(-0.4, 0.4);
             sim.step(ControlFrame::from_analog(pull, -0.5 * fd.roll, 0.0, 0.8, 0).with_weapons(w));
         };
+        hold(&mut sim, weapon_flags::NEXT_BAY);
         let shift = if bay == 1 { weapon_flags::NEXT_BAY } else { 0 };
         hold(&mut sim, weapon_flags::BAY_DOORS | shift);
         for _ in 0..ticks(weapons::DOOR_TIME_S + 0.1) {
@@ -290,6 +308,7 @@ fn bomb_aim_warns_too_low_except_with_the_snakeye() {
                 ..Spawn::default()
             },
         });
+        step(&mut sim, weapon_flags::NEXT_BAY);
         step(&mut sim, if bay_shift { weapon_flags::NEXT_BAY } else { 0 });
         for _ in 0..12 {
             step(&mut sim, 0);

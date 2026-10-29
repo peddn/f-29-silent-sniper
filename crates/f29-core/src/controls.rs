@@ -29,10 +29,13 @@ pub mod weapon_flags {
     pub const RELEASE: u8 = 1 << 0;
     /// Schachtklappen öffnen bzw. schließen.
     pub const BAY_DOORS: u8 = 1 << 1;
-    /// Nächsten Schacht wählen.
+    /// Nächste Waffe wählen (GUN, BAY 1–4).
     pub const NEXT_BAY: u8 = 1 << 2;
-    /// Bordkanone feuern (gehalten, keine Flanke).
+    /// Bordkanone feuern, gleich welche Waffe gewählt ist (gehalten).
     pub const GUN: u8 = 1 << 3;
+    /// Abzug der gewählten Waffe gehalten: feuert die Kanone, wenn sie gewählt
+    /// ist (Schachtwaffen lösen über die Flanke `RELEASE` aus).
+    pub const TRIGGER: u8 = 1 << 4;
 }
 
 /// Ein Tick Steuereingabe, quantisiert.

@@ -690,6 +690,9 @@ pub struct Stores {
     pub bays: [Bay; BAYS],
     /// Gewählter Schacht (0-basiert).
     pub selected: usize,
+    /// Die Bordkanone ist gewählt (vor Schacht 1 in der Reihe GUN, BAY 1–4;
+    /// Startwahl, Spielerwunsch v0.2.8).
+    pub gun_selected: bool,
     /// Klappen 0 (zu) .. 1 (offen).
     pub door: f64,
     /// Klappen sollen offen sein.
@@ -781,6 +784,7 @@ impl Stores {
         Self {
             bays,
             selected,
+            gun_selected: true,
             door: 0.0,
             door_cmd: false,
             in_flight: Vec::new(),
@@ -806,13 +810,23 @@ impl Stores {
 
     /// Waffe des gewählten Schachts, falls noch eine da ist.
     pub fn selected_weapon(&self) -> Option<WeaponKind> {
+        if self.gun_selected {
+            return None;
+        }
         let b = self.bays[self.selected];
         b.kind.filter(|_| b.count > 0)
     }
 
-    /// Nächster Schacht (mit Umlauf).
+    /// Nächste Waffe in der Reihe GUN → BAY 1 → … → BAY 4 → GUN.
     pub fn next_bay(&mut self) {
-        self.selected = (self.selected + 1) % BAYS;
+        if self.gun_selected {
+            self.gun_selected = false;
+            self.selected = 0;
+        } else if self.selected + 1 >= BAYS {
+            self.gun_selected = true;
+        } else {
+            self.selected += 1;
+        }
     }
 
     fn log(&mut self, tick: u64, e: WeaponEvent) {

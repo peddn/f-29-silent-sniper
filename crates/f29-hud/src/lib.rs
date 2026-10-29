@@ -18,6 +18,7 @@ mod throttle;
 pub use canvas::{Align, DisplayList, Ink, Line, Rect};
 use f29_core::FlightData;
 use f29_core::systems::{Condition, System};
+pub use hud::HudMode;
 pub use map::MapData;
 pub use mfd::{MapMode, MfdLayout, MfdState, RightPage};
 pub use pages::target_image_rect;
@@ -82,6 +83,8 @@ impl ScreenLayout {
 pub struct HudOptions {
     /// HUD-Symbolik in der 3D-Ansicht zeichnen.
     pub show_hud: bool,
+    /// HUD-Modus: Navigation, Luft-Boden, Luft-Luft.
+    pub hud_mode: HudMode,
     /// Instrumentenbrett (MFDs) zeichnen.
     pub show_panel: bool,
     /// Bedienzustand der MFDs.
@@ -93,7 +96,13 @@ pub struct HudOptions {
 
 impl Default for HudOptions {
     fn default() -> Self {
-        Self { show_hud: true, show_panel: true, mfd: MfdState::default(), camera_feed: false }
+        Self {
+            show_hud: true,
+            hud_mode: HudMode::default(),
+            show_panel: true,
+            mfd: MfdState::default(),
+            camera_feed: false,
+        }
     }
 }
 
@@ -109,7 +118,7 @@ pub fn build(
     let on = displays_on(fd);
     // Der Absturzbildschirm erscheint immer.
     if opts.show_hud && (on || fd.warnings.crashed) {
-        hud::draw(&mut dl, fd, layout);
+        hud::draw(&mut dl, fd, layout, opts.hud_mode);
     }
     if opts.show_panel && layout.panel_fraction > 0.0 {
         dl.set_clip(None);

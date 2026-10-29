@@ -76,9 +76,10 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | N | A / Kreuz | nächster Navigationspunkt |
 | V | rechter Stick drücken | Radar ein/aus (schaltet ohne Sichtlinie auf, erhöht später die eigene Sichtbarkeit) |
 | O | linker Stick drücken | Schachtklappen auf/zu |
-| Tab | linke Schultertaste | nächster Waffenschacht |
-| Leertaste | rechte Schultertaste | Waffe auslösen (nur bei offenem Schacht) |
-| Rücktaste (gehalten) | | Bordkanone feuern (unabhängig vom Schacht, nicht am Boden) |
+| Tab | linke Schultertaste | nächste Waffe: GUN → BAY 1 → … → BAY 4 → GUN (Start: GUN) |
+| Leertaste | rechte Schultertaste | gewählte Waffe auslösen (Schachtwaffen nur bei offenem Schacht; die Kanone feuert, solange die Taste gehalten wird) |
+| Rücktaste (gehalten) | | Bordkanone feuern, gleich welche Waffe gewählt ist (nicht am Boden) |
+| H | | HUD-Modus: NAV → AG (Luft-Boden) → AA (Luft-Luft) |
 | I / L / K / J | Steuerkreuz | Blickrichtung der Zielerfassung: voraus / rechts / hinten / links (schaltet automatisch auf das nächste Ziel; dieselbe Richtung noch einmal = nächstweiteres Ziel; die Richtung folgt einem aufgeschalteten Ziel) |
 | Shift+F1 / Shift+F2 | Select | Cockpit / Verfolger |
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
@@ -201,6 +202,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Sensoren 50 km (nachts optisch 20 km), Nachtflug, AWACS-Datalink für
       Ziele außerhalb der eigenen Erfassung, Feuersignal „IN RANGE“/„SHOOT“,
       HUD-Warnfarbe blau (v0.2.7)
+- [x] HUD überarbeitet: breiteres Glas, drei Modi NAV/AG/AA (Taste H), Kanone als
+      erste Waffe in der Wahl GUN, BAY 1–4 (v0.2.8)
 - [ ] Auslöseklammer für Bomben, neu entworfen (vorgemerkt)
 - [x] Bordkanone als eigenes Waffensystem: 600 Schuss (50/s), Rücktaste, 2 %
       Schaden pro Treffer bei jedem Ziel, Kanonenkreuz am Aufschlagpunkt,

@@ -3,7 +3,7 @@
 //! ```text
 //! f29-headless demo     [--seed N] [--seconds S] [--record DATEI]
 //! f29-headless replay   DATEI
-//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
+//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N]
 //! f29-headless sound    [--out VERZEICHNIS]
@@ -27,7 +27,7 @@ f29-headless – F-29 Silent Sniper ohne Grafik
 Befehle:
   demo     [--seed N] [--seconds S] [--record DATEI]   Autopilot fliegt die Route ab
   replay   DATEI                                       Replay abspielen und Hash prüfen
-  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
+  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
                                                        HUD nach S Sekunden Demo als SVG
                                                        (SEITE des rechten MFDs: msn, tgt, wpn, eng, adi, sys;
                                                        --radar 1 schaltet am Ende das Radar ein,
@@ -35,7 +35,7 @@ Befehle:
                                                        --push S drückt S Sekunden die Nase,
                                                        --gun S feuert S Sekunden die Kanone,
                                                        --damage 1 beschädigt Beispielsysteme,
-                                                       --bay N wählt Waffenschacht N,
+                                                       --bay N wählt Waffenschacht N (0 = Kanone),
                                                        --zoom Kartenstufe 0..4 = 5..80 km)
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
@@ -256,7 +256,8 @@ fn hud_svg(args: &Args) -> Result<(), String> {
     if args.get("radar", 0_u8)? != 0 {
         sim.step(f29_core::ControlFrame { flags: last.flags | flags::RADAR_TOGGLE, ..last });
     }
-    for _ in 1..args.get("bay", 1_usize)? {
+    // Startwahl ist die Kanone; --bay N schaltet N-mal weiter (0 = Kanone).
+    for _ in 0..args.get("bay", 1_usize)? {
         sim.step(last.with_weapons(f29_core::controls::weapon_flags::NEXT_BAY));
     }
     // Schacht öffnen, eine Waffe auslösen und kurz weiterfliegen (Meldung, Bestand).
@@ -294,6 +295,12 @@ fn hud_svg(args: &Args) -> Result<(), String> {
     let mut opts = HudOptions::default();
     opts.mfd.right_page = right_page;
     opts.mfd.map_zoom = args.get("zoom", opts.mfd.map_zoom)?;
+    opts.hud_mode = match args.opt("mode").unwrap_or("ag") {
+        "nav" => f29_hud::HudMode::Nav,
+        "ag" => f29_hud::HudMode::AirToGround,
+        "aa" => f29_hud::HudMode::AirToAir,
+        m => return Err(format!("unbekannter HUD-Modus {m} (nav, ag, aa)")),
+    };
     let dl = f29_hud::build(&sim.flight_data(), &layout, &opts, Some(&map));
     let svg = f29_hud::svg::to_svg(&dl, &layout, 720);
     std::fs::write(out, svg).map_err(|e| format!("{out}: {e}"))?;

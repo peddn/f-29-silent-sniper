@@ -40,6 +40,8 @@ pub struct PilotInput {
     weapons: u8,
     /// Abzug der Bordkanone (gehalten).
     gun: bool,
+    /// Abzug der gewählten Waffe (gehalten; feuert die gewählte Kanone).
+    trigger: bool,
 }
 
 impl Default for PilotInput {
@@ -57,6 +59,7 @@ impl Default for PilotInput {
             look: 0,
             weapons: 0,
             gun: false,
+            trigger: false,
         }
     }
 }
@@ -86,8 +89,11 @@ impl PilotInput {
             f |= flags::RADAR_TOGGLE;
         }
         f |= ControlFrame::look_flags(std::mem::take(&mut self.look));
-        ControlFrame::from_analog(self.pitch, self.roll, self.yaw, self.throttle, f)
-            .with_weapons(std::mem::take(&mut self.weapons) | if self.gun { weapon_flags::GUN } else { 0 })
+        ControlFrame::from_analog(self.pitch, self.roll, self.yaw, self.throttle, f).with_weapons(
+            std::mem::take(&mut self.weapons)
+                | if self.gun { weapon_flags::GUN } else { 0 }
+                | if self.trigger { weapon_flags::TRIGGER } else { 0 },
+        )
     }
 }
 
@@ -172,10 +178,12 @@ fn flight_input(
         }
     }
 
-    // Bordkanone: Rücktaste (gehalten)
+    // Bordkanone: Rücktaste (gehalten) feuert sie immer; die Leertaste
+    // feuert die gewählte Waffe – gehalten die Kanone, wenn sie gewählt ist.
     pilot.gun = keys.pressed(KeyCode::Backspace);
+    pilot.trigger = keys.pressed(KeyCode::Space);
 
-    // Waffen: Leertaste auslösen, O Schacht auf/zu, Tab nächster Schacht
+    // Waffen: Leertaste auslösen, O Schacht auf/zu, Tab nächste Waffe (GUN, BAY 1–4)
     for (key, flag) in [
         (KeyCode::Space, weapon_flags::RELEASE),
         (KeyCode::KeyO, weapon_flags::BAY_DOORS),
@@ -281,6 +289,10 @@ fn hotkeys(
     }
     if shift && keys.just_pressed(KeyCode::F4) {
         view.hud = !view.hud;
+    }
+    // HUD-Modus: NAV → AG → AA
+    if keys.just_pressed(KeyCode::KeyH) {
+        view.hud_mode = view.hud_mode.next();
     }
     // MFDs: F3 Karte Gitter/Satellit, F4 nächste Seite rechts,
     // Y/X zoomen nach Tastenbeschriftung (deutsche und US-Tastatur).

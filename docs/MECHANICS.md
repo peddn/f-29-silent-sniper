@@ -1057,6 +1057,29 @@ Format jedes Eintrags:
 - **Unsere Werte:** 600 Schuss, 50 Schuss/s (12 s Dauerfeuer), 1000 m/s
   Mündungsgeschwindigkeit, 3 s Flugzeit (≈ 3 km), Streuung 3 mrad, 2 % Schaden
   je Treffer (50 Treffer zerstören jedes Ziel).
+- **Status:** umgesetzt (v0.2.8); Kanone als erste Waffe in der Wahl und
+  Feuern mit der Auslösetaste (v0.2.8, siehe M-017)
+
+### M-017 HUD-Modi und Waffenwahl
+
+- **Verhalten:** Das HUD zeigt je nach Aufgabe nur die passende Symbolik.
+- **Referenzstelle:** keine (eigener Entwurf nach Spielerwunsch).
+- **Unser Design:** drei Modi, mit einer Taste (H) durchgeblättert; der Modus
+  ist reine Anzeige und gehört nicht zum Simulationszustand.
+  - **NAV** (Start): Flugdaten, Navigationspunkt, Konfiguration; mit
+    ausgefahrenem Fahrwerk Gleitlinie und Sinkratenskala. Keine Waffen- und
+    Zielsymbolik.
+  - **AG** (Luft-Boden): Zielrahmen, Zielerfassung, gewählte Waffe und die
+    Zielhilfe je nach Waffe – Kanone: Kanonenkreuz am vorausberechneten
+    Bodeneinschlag; ungelenkte Bombe: Bombenkreis; Rakete: Abschusskreis (jetzt
+    in der vollen HUD-Farbe statt gedämpft); Lenkwaffen: Feuersignal.
+  - **AA** (Luft-Luft): ein großer Boresight-Kreis (±10°), einheitlich für alle
+    Luft-Luft-Waffen und immer sichtbar.
+  Das HUD-Glas ist breiter (Daten und Symbole weiter außen). Die Waffenwahl
+  (Tab) läuft GUN → BAY 1 → … → BAY 4 → GUN; die Kanone ist die Startwahl. Die
+  Auslösetaste feuert bei gewählter Kanone, solange sie gehalten wird (eigenes
+  Bit im Waffenbyte), sonst löst sie die Schachtwaffe aus. Die Rücktaste feuert
+  die Kanone unabhängig von der Wahl. Die Wahl geht in den Zustandshash ein.
 - **Status:** umgesetzt (v0.2.8)
 
 ### M-020 Radar-/Detektionsmodell (Stealth)

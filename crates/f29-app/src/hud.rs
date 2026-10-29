@@ -93,6 +93,7 @@ fn draw_hud(
     // Ein optisch erfasstes Ziel zeigt die Zielkamera (tgt_camera.rs) statt des Drahtgitters.
     let opts = HudOptions {
         show_hud: view.hud && view.mode == ViewMode::Cockpit,
+        hud_mode: view.hud_mode,
         show_panel: true,
         mfd: mfd.0,
         camera_feed: true,

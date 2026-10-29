@@ -242,8 +242,10 @@ pub struct TargetInfo {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StoresInfo {
     pub bays: [Bay; weapons::BAYS],
-    /// Gewählter Schacht (0-basiert).
+    /// Gewählter Schacht (0-basiert); gilt nur, wenn nicht die Kanone gewählt ist.
     pub selected: usize,
+    /// Die Bordkanone ist gewählt.
+    pub gun_selected: bool,
     /// Schachtklappen 0 (zu) .. 1 (offen).
     pub door: f64,
     /// Eigene Waffen in der Luft.
@@ -631,10 +633,12 @@ impl Sim {
         self.stores.update_door(DT, self.systems.bay_door_speed());
         // Bordkanone: eigenes System, unabhängig von Schacht und Klappen.
         let a = &self.aircraft;
-        let fire = controls.has_weapon(weapon_flags::GUN) && !a.on_ground;
+        let gun_trigger = controls.has_weapon(weapon_flags::TRIGGER) && self.stores.gun_selected;
+        let fire = (controls.has_weapon(weapon_flags::GUN) || gun_trigger) && !a.on_ground;
         self.gun.trigger(self.tick, fire, a.position, a.velocity, a.attitude, DT);
         let bay_ok = !self.systems.get(System::WeaponBay).is_failed();
-        if controls.has_weapon(weapon_flags::RELEASE) {
+        // Bei gewählter Kanone löst die Auslösetaste keine Schachtwaffe aus.
+        if controls.has_weapon(weapon_flags::RELEASE) && !self.stores.gun_selected {
             let a = &self.aircraft;
             let launch = weapons::Launch {
                 tick: self.tick,
@@ -1071,6 +1075,7 @@ impl Sim {
             stores: StoresInfo {
                 bays: self.stores.bays,
                 selected: self.stores.selected,
+                gun_selected: self.stores.gun_selected,
                 door: self.stores.door,
                 in_flight: self.stores.in_flight.len(),
                 mass_kg: self.stores.mass_kg(),
@@ -1251,7 +1256,7 @@ impl Sim {
             h.u64(b.kind.map_or(99, |k| k as u64));
             h.u64(u64::from(b.count));
         }
-        h.u64(st.selected as u64);
+        h.u64(st.selected as u64 | u64::from(st.gun_selected) << 8);
         for (kind, value) in self.systems.hash_parts() {
             h.u64(kind);
             h.f64(value);
