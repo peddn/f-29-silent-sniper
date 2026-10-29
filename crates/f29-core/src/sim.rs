@@ -387,7 +387,23 @@ pub struct FlightData {
     pub awacs: bool,
     /// Zielhilfe, wenn eine ungelenkte Bombe gewählt ist und das Flugzeug fliegt.
     pub bomb_aim: Option<BombAim>,
+    /// Waffen in der Luft für die Karte: eigene und (ab Etappe 3) feindliche.
+    pub munitions: Vec<MunitionInfo>,
     pub warnings: Warnings,
+}
+
+/// Eine Waffe in der Luft, wie die Karte sie zeigt.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MunitionInfo {
+    /// NED (m).
+    pub position: DVec3,
+    /// NED (m/s).
+    pub velocity: DVec3,
+    /// Rakete (mit Antrieb) statt Bombe: Die Karte zeigt sie als Strich.
+    pub missile: bool,
+    /// Feindliche Waffe (Boden-Luft- oder Luft-Luft-Rakete). Noch gibt es
+    /// keine; die Karte kann sie schon darstellen.
+    pub hostile: bool,
 }
 
 /// Die Simulation.
@@ -1021,6 +1037,17 @@ impl Sim {
                 })
                 .collect(),
             bomb_aim: self.bomb_aim(),
+            munitions: self
+                .stores
+                .in_flight
+                .iter()
+                .map(|w| MunitionInfo {
+                    position: w.position,
+                    velocity: w.velocity,
+                    missile: w.kind.spec().cruise_mps > 0.0,
+                    hostile: false,
+                })
+                .collect(),
             destroyed_targets: (0..self.targets.len()).filter(|&i| !self.targets[i].is_intact()).collect(),
             warnings,
         }

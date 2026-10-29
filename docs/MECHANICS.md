@@ -935,11 +935,9 @@ Format jedes Eintrags:
     gewürfelten Punkt, Bild und Meldung passen also zusammen.
   - **Zielrahmen** (wie im Original: erfasst, näher dran Farbwechsel; keine
     Mindestreichweite): außer Reichweite einfacher Rahmen, in Reichweite der
-    gewählten Lenkwaffe kräftige Ecken, im **Bereich hoher Trefferchance** blau
-    hervorgehoben (näher dran wieder nur Ecken). Der Bereich beginnt vor dem
-    Sweet Spot und endet danach (30–70 % der Reichweite, Startgüte darin über
-    ≈ 0,8; Laserbombe bis 45 % der Korridorabweichung), der Sweet Spot selbst
-    (40–60 %) zeigt zusätzlich „SHOOT“ (Spielerwunsch v0.2.7),
+    gewählten Lenkwaffe kräftige Ecken, im Sweet Spot blau hervorgehoben (näher
+    dran wieder nur Ecken; ein breiterer blauer Bereich um den Sweet Spot wurde
+    erprobt und verworfen, Spielerentscheidung v0.2.7),
     gestrichelt „NO EFF“, wenn die Waffe nicht wirkt oder ihr Suchkopf die Klasse
     nicht sieht. Beschädigte Ziele tragen „DMG“.
   - **Wrack:** Nach der Zerstörung bleibt die Aufschaltung auf dem Wrack (Rahmen
@@ -963,14 +961,18 @@ Format jedes Eintrags:
     Maßstab; die Längs- und Querablage liefert der Kern schon
     (`BombAim::target_offset`).
   - **Feuersignal** der Lenkwaffen unten mittig im HUD-Glas: „IN RANGE“ in
-    Reichweite und im Bereich hoher Trefferchance, „SHOOT“ (umrahmt) im Sweet Spot; bei der Laserbombe, wenn sie im
+    Reichweite – auch im Sweet Spot –, darüber zusätzlich „SHOOT“ (umrahmt) im Sweet Spot; bei der Laserbombe, wenn sie im
     Sweet Spot des Gleitkorridors ist (Spielerwunsch v0.2.7). Bei Raketen
     zählen Reichweite und Sweet Spot – auch für die Ecken und die Farbe des
     Zielrahmens – nur, wenn das Ziel im Abschusskreis liegt: Die Ecken
     bedeuten „die Waffe würde übernehmen“.
   - **HUD-Warnfarbe blau** (Spielerwunsch v0.2.7): Warnungen und
-    Hervorhebungen im HUD (z. B. „TOO LOW“, Zielrahmen im Bereich hoher
-    Trefferchance, „SHOOT“) sind blau statt rot; die MFDs bleiben bei Rot.
+    Hervorhebungen im HUD (z. B. „TOO LOW“, Zielrahmen im Sweet
+    Spot, „SHOOT“) sind blau statt rot; die MFDs bleiben bei Rot.
+  - **Karte:** Waffen in der Luft erscheinen auf der Karte, Raketen als kurzer
+    Strich in Flugrichtung, Bomben als Punkt; eigene in der Farbe des
+    Flugzeugsymbols, feindliche rot (`FlightData::munitions`; feindliche
+    Raketen kommen mit Etappe 3, Spielerwunsch v0.2.7).
   - **HUD unten links:** gewählte Waffe mit Anzahl (z. B. „MK-82 X2“) und
     Schacht mit Klappenzustand („BAY 1 SAFE/DOORS/OPEN“, offen rot).
   - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,

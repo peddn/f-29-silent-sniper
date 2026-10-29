@@ -3,7 +3,7 @@
 //! ```text
 //! f29-headless demo     [--seed N] [--seconds S] [--record DATEI]
 //! f29-headless replay   DATEI
-//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
+//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N]
 //! f29-headless sound    [--out VERZEICHNIS]
@@ -27,7 +27,7 @@ f29-headless – F-29 Silent Sniper ohne Grafik
 Befehle:
   demo     [--seed N] [--seconds S] [--record DATEI]   Autopilot fliegt die Route ab
   replay   DATEI                                       Replay abspielen und Hash prüfen
-  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
+  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
                                                        HUD nach S Sekunden Demo als SVG
                                                        (SEITE des rechten MFDs: msn, tgt, wpn, eng, adi, sys;
                                                        --radar 1 schaltet am Ende das Radar ein,
@@ -265,7 +265,8 @@ fn hud_svg(args: &Args) -> Result<(), String> {
             sim.step(last);
         }
         sim.step(last.with_weapons(weapon_flags::RELEASE));
-        for _ in 0..(f29_core::TICK_HZ / 2) {
+        let after = args.get("after", 0.5_f64)?;
+        for _ in 0..(after * f64::from(f29_core::TICK_HZ)) as u32 {
             sim.step(last);
         }
     }

@@ -224,6 +224,40 @@ fn map_draws_inside_left_screen_in_all_modes_and_zooms() {
     assert_eq!(s.map_zoom, mfd::MAP_RANGES_KM.len() - 1);
 }
 
+/// Waffen in der Luft erscheinen auf der Karte: Rakete als Strich, Bombe als
+/// Punkt, feindliche rot.
+#[test]
+fn munitions_show_on_the_map() {
+    use f29_core::MunitionInfo;
+    let sim = Sim::new(SimConfig::new(0x0F29));
+    let base = sim.flight_data();
+    let map = MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let m = layout.mfd_layout().unwrap();
+    let ahead = base.position + f29_core::DVec3::new(base.heading.cos(), base.heading.sin(), 0.0) * 2_000.0;
+    let count = |munitions: Vec<MunitionInfo>| {
+        let mut fd = base.clone();
+        fd.munitions = munitions;
+        let opts = HudOptions { show_hud: false, ..HudOptions::default() };
+        let dl = build(&fd, &layout, &opts, Some(&map));
+        let left = |l: &&crate::Line| m.left.contains(l.a) && m.left.contains(l.b);
+        (
+            dl.lines.iter().filter(left).count(),
+            dl.lines.iter().filter(left).filter(|l| l.ink == Ink::Warning).count(),
+        )
+    };
+    let w = MunitionInfo {
+        position: ahead,
+        velocity: f29_core::DVec3::new(500.0, 0.0, 0.0),
+        missile: true,
+        hostile: false,
+    };
+    let (none, none_red) = count(Vec::new());
+    assert_eq!(count(vec![w]).0, none + 1, "Rakete als ein Strich");
+    assert_eq!(count(vec![MunitionInfo { missile: false, ..w }]).0, none + 6, "Bombe als Punkt");
+    assert_eq!(count(vec![MunitionInfo { hostile: true, ..w }]).1, none_red + 1, "feindlich rot");
+}
+
 #[test]
 fn fuel_bar_shrinks_with_fuel() {
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
@@ -376,14 +410,11 @@ fn target_box_shows_the_launch_zone() {
     let (plain, plain_red) = lines(None);
     let (in_range, _) = lines(Some(LaunchZone::InRange));
     let (good, good_red) = lines(Some(LaunchZone::Good));
-    let (high, high_red) = lines(Some(LaunchZone::High));
     let (none, _) = lines(Some(LaunchZone::NoEffect));
     assert_eq!(lines(Some(LaunchZone::OutOfRange)).0, plain);
     assert_eq!(in_range, plain + 8, "acht Eckstriche");
     assert!(good_red > plain_red + 8, "gute Zone blau");
-    assert!(high_red > plain_red + 8, "Bereich hoher Trefferchance blau");
     assert_eq!(good, in_range);
-    assert_eq!(high, in_range);
     assert_ne!(none, plain, "ohne Wirkung gestrichelt");
 }
 

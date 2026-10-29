@@ -376,6 +376,33 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
         }
     }
 
+    // Waffen in der Luft: Raketen als kurzer Strich in Flugrichtung (Spitze
+    // vorn), Bomben als Punkt; eigene in der Farbe des Flugzeugsymbols,
+    // feindliche rot.
+    for w in &fd.munitions {
+        let pos = [w.position.x, w.position.y];
+        if !near(pos) {
+            continue;
+        }
+        let p = proj.to_screen(pos);
+        if !screen.contains(p) {
+            continue;
+        }
+        let ink = if w.hostile { Ink::Warning } else { Ink::Hud };
+        let v = [w.velocity.x, w.velocity.y];
+        let speed = v[0].hypot(v[1]);
+        if w.missile && speed > 1.0 {
+            let ahead =
+                proj.to_screen([pos[0] + v[0] / speed * range * 0.1, pos[1] + v[1] / speed * range * 0.1]);
+            let d = [ahead[0] - p[0], ahead[1] - p[1]];
+            let len = d[0].hypot(d[1]).max(1e-6);
+            let tail = [p[0] - d[0] / len * txt * 1.1, p[1] - d[1] / len * txt * 1.1];
+            dl.line(tail, p, ink);
+        } else {
+            dl.circle(p, txt * 0.18, 6, ink);
+        }
+    }
+
     // Eigenes Flugzeug
     let s = txt * 0.9;
     dl.polyline(

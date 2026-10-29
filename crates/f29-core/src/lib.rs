@@ -31,8 +31,8 @@ pub mod weapons;
 pub use controls::ControlFrame;
 pub use math::{DQuat, DVec3};
 pub use sim::{
-    BombAim, CrashCause, DT, FlightData, Sim, SimConfig, SpawnKind, Status, StoresInfo, TICK_HZ, TargetInfo,
-    Touchdown, WeaponMessage,
+    BombAim, CrashCause, DT, FlightData, MunitionInfo, Sim, SimConfig, SpawnKind, Status, StoresInfo,
+    TICK_HZ, TargetInfo, Touchdown, WeaponMessage,
 };
 
 pub use f29_data as data;
