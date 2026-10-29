@@ -179,7 +179,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Lenkwaffen mit eigenem Suchkopf (Fire and Forget): Gleitbombe,
       Luft-Boden-Rakete, Radarjäger, Seezielrakete; gewürfelter Endanflug nach
       Startgüte (Miss, Near Miss, Hit, 1 % kritisch), Schaden pro Treffer sammelt
-      sich am Ziel, Zielrahmen zeigt Reichweite und gute Zone (v0.2.5)
+      sich am Ziel, Zielrahmen zeigt Reichweite und Sweet Spot (v0.2.5)
 - [ ] Zielhilfe im HUD: Aufschlagpunkt, Auslöseklammer, Warnung „zu tief“ (v0.2.6)
 - [ ] Bodenziele und Boden-Luft-Bedrohungen (Radar-SAM, Flak)
 - [ ] Radar-/Detektionsmodell: aspektabhängiger Radarquerschnitt, Geländemaskierung,

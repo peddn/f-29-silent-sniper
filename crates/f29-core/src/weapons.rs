@@ -62,10 +62,15 @@ const GUIDANCE_DELAY_S: f64 = 0.4;
 const SEEKER_LOS_TICKS: u64 = 12;
 /// Ohne Ziel senkt eine Lenkwaffe die Nase so schnell (rad/s, 2°/s).
 const BLIND_NOSE_DROP: f64 = 0.035;
-/// Startgüte: volle Güte bis zu diesem Anteil der Reichweite (gute Zone).
-pub const GOOD_ZONE_FRACTION: f64 = 0.5;
+/// Sweet Spot: volle Startgüte zwischen diesen Anteilen der Reichweite. Von
+/// der Reichweitengrenze steigt die Güte bis dorthin an und fällt bei weiterer
+/// Annäherung wieder ab (Spielerentscheidung v0.2.5).
+pub const SWEET_SPOT_FAR: f64 = 0.5;
+pub const SWEET_SPOT_NEAR: f64 = 0.3;
 /// Startgüte an der Reichweitengrenze.
 const QUALITY_AT_MAX_RANGE: f64 = 0.25;
+/// Startgüte direkt am Ziel (zu nah: kaum Zeit zum Eindrehen).
+const QUALITY_AT_ZERO_RANGE: f64 = 0.3;
 /// Startgüte am Rand des Suchkopfkegels.
 const QUALITY_AT_CONE_EDGE: f64 = 0.6;
 /// Ablage, bis zu der die volle Güte gilt (rad, 5°).
@@ -384,7 +389,7 @@ pub fn launch_zone(kind: WeaponKind, position: DVec3, target: &Target, visible: 
     let max = kind.max_range(-position.z - target.elevation);
     if (s.seeker == Seeker::Optical && !visible) || range > max {
         LaunchZone::OutOfRange
-    } else if range <= max * GOOD_ZONE_FRACTION {
+    } else if (SWEET_SPOT_NEAR..=SWEET_SPOT_FAR).contains(&(range / max.max(1.0))) {
         LaunchZone::Good
     } else {
         LaunchZone::InRange
@@ -395,16 +400,27 @@ pub fn launch_zone(kind: WeaponKind, position: DVec3, target: &Target, visible: 
 /// (Leistung der Bordoptik bei optischen Suchköpfen, sonst 1).
 pub fn launch_quality(kind: WeaponKind, range: f64, off_angle: f64, sensor: f64, max_range: f64) -> f64 {
     let s = kind.spec();
-    let r = (range / max_range.max(1.0)).max(0.0);
-    let f_range = if r <= GOOD_ZONE_FRACTION {
-        1.0
-    } else {
-        1.0 - (1.0 - QUALITY_AT_MAX_RANGE) * ((r - GOOD_ZONE_FRACTION) / (1.0 - GOOD_ZONE_FRACTION)).min(1.0)
-    };
+    let f_range = range_quality(range / max_range.max(1.0));
     let span = (s.seeker_cone_rad - BORESIGHT_FREE_RAD).max(1e-6);
     let a = ((off_angle - BORESIGHT_FREE_RAD) / span).clamp(0.0, 1.0);
     let f_angle = 1.0 - (1.0 - QUALITY_AT_CONE_EDGE) * a;
     (f_range * f_angle * sensor.clamp(0.0, 1.0)).clamp(0.0, 1.0)
+}
+
+/// Entfernungsanteil der Startgüte über `r` = Entfernung / Reichweite: niedrig
+/// an der Reichweitengrenze, ansteigend bis zum Sweet Spot, dort 1, bei
+/// weiterer Annäherung wieder abfallend.
+pub fn range_quality(r: f64) -> f64 {
+    let r = r.max(0.0);
+    if r >= 1.0 {
+        QUALITY_AT_MAX_RANGE
+    } else if r > SWEET_SPOT_FAR {
+        1.0 - (1.0 - QUALITY_AT_MAX_RANGE) * (r - SWEET_SPOT_FAR) / (1.0 - SWEET_SPOT_FAR)
+    } else if r >= SWEET_SPOT_NEAR {
+        1.0
+    } else {
+        QUALITY_AT_ZERO_RANGE + (1.0 - QUALITY_AT_ZERO_RANGE) * r / SWEET_SPOT_NEAR
+    }
 }
 
 /// Wahrscheinlichkeiten (Miss, Near Miss, Hit) bei Startgüte `q`.
@@ -1126,12 +1142,19 @@ mod tests {
     fn quality_and_odds() {
         let k = WeaponKind::AirToGround;
         let max = k.spec().max_range_m;
-        assert_eq!(launch_quality(k, max * 0.3, 0.0, 1.0, max), 1.0);
+        assert_eq!(launch_quality(k, max * 0.4, 0.0, 1.0, max), 1.0);
         let far = launch_quality(k, max, 0.0, 1.0, max);
         assert!((far - QUALITY_AT_MAX_RANGE).abs() < 1e-9);
-        let edge = launch_quality(k, max * 0.3, k.spec().seeker_cone_rad, 1.0, max);
+        let edge = launch_quality(k, max * 0.4, k.spec().seeker_cone_rad, 1.0, max);
         assert!((edge - QUALITY_AT_CONE_EDGE).abs() < 1e-9);
-        assert_eq!(launch_quality(k, max * 0.3, 0.0, 0.5, max), 0.5);
+        assert_eq!(launch_quality(k, max * 0.4, 0.0, 0.5, max), 0.5);
+        // Sweet Spot: von der Reichweitengrenze ansteigend, danach wieder fallend.
+        let curve: Vec<f64> = (0..=20).map(|i| range_quality(f64::from(i) / 20.0)).collect();
+        let peak = curve.iter().cloned().fold(0.0, f64::max);
+        assert_eq!(peak, 1.0);
+        assert!(range_quality(0.95) < range_quality(0.75) && range_quality(0.75) < range_quality(0.5));
+        assert!(range_quality(0.05) < range_quality(0.2) && range_quality(0.2) < range_quality(0.3));
+        assert!(range_quality(0.0) < 0.5 && range_quality(1.0) < 0.5);
         for q in [0.0, 0.4, 1.0] {
             let (m, n, h) = outcome_odds(q);
             assert!((m + n + h - 1.0).abs() < 1e-12 && m >= 0.0 && n >= 0.0 && h >= 0.0);

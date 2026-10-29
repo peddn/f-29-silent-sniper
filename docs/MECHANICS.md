@@ -883,8 +883,9 @@ Format jedes Eintrags:
   - **Gewürfelter Endanflug (Spielerentscheidung):** Beim Erfassen wird aus der
     **Startgüte** gewürfelt: Miss (30–80 m daneben, keine Wirkung), Near Miss
     (knapp daneben, halber Treffer-Schaden), Hit (voller Schaden nach Matrix, 1 %
-    kritisch). Startgüte = Entfernung (volle Güte bis zur halben Reichweite, dann
-    abnehmend) × Ablage vom Suchkopfkegel (Ziel nahe der Flugrichtung – Nase aufs
+    kritisch). Startgüte = Entfernung (**Sweet Spot**: an der Reichweitengrenze
+    niedrig, ansteigend bis zum Sweet Spot bei 30–50 % der Reichweite, dort am
+    höchsten, bei weiterer Annäherung wieder abfallend) × Ablage vom Suchkopfkegel (Ziel nahe der Flugrichtung – Nase aufs
     Ziel – ist besser) × Leistung der Bordoptik bei optischen Suchköpfen
     (Schadensmodell). Die Waffe fliegt sichtbar auf den gewürfelten Punkt, Bild
     und Meldung passen also zusammen. Verliert der Suchkopf das Ziel (Kegel,
@@ -892,7 +893,8 @@ Format jedes Eintrags:
     sinkt langsam; ein Einschlag zählt dann physikalisch wie bei Bomben.
   - **Zielrahmen** (wie im Original: erfasst, näher dran Farbwechsel; keine
     Mindestreichweite): außer Reichweite einfacher Rahmen, in Reichweite der
-    gewählten Lenkwaffe kräftige Ecken, in der guten Zone (halbe Reichweite) rot,
+    gewählten Lenkwaffe kräftige Ecken, im Sweet Spot rot (näher dran wieder nur
+    Ecken),
     gestrichelt „NO EFF“, wenn die Waffe nicht wirkt oder ihr Suchkopf die Klasse
     nicht sieht. Beschädigte Ziele tragen „DMG“.
   - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,
@@ -908,11 +910,13 @@ Format jedes Eintrags:
   180 m. Gleitbombe 220 m/s, 12°/s, bis 10 km (Gleitzahl 6), Kegel ±30°.
   Luft-Boden-Rakete 210 kg, 320 m/s, 25°/s, 12 km, ±25°, Wirkradius 8 m;
   Radarjäger 360 kg, 650 m/s, 20°/s, 30 km, ±35°; Seezielrakete 520 kg, 270 m/s,
-  10°/s, 30 km, ±40°. Startgüte an der Reichweitengrenze 0,25, am Kegelrand 0,6;
+  10°/s, 30 km, ±40°. Startgüte an der Reichweitengrenze 0,25, im Sweet Spot
+  (30–50 % der Reichweite) 1, direkt am Ziel 0,3; am Kegelrand × 0,6.
   Ausgang bei Güte 1: 5 % Miss, 15 % Near Miss, 80 % Hit; bei Güte 0: 55 %, 30 %,
-  15 %. Gemessen (Luft-Boden-Rakete gegen weiche Ziele, 80 Anflüge aus 1500 m
-  Höhe, Ziel 20° unter der Nase): aus der guten Zone 69 % zerstört, 15 %
-  daneben; an der Reichweitengrenze 47 % zerstört, 29 % daneben. Volle
+  15 %. Gemessen (Luft-Boden-Rakete gegen weiche Ziele, je bis zu 80 flache
+  Anflüge): aus dem Sweet Spot 82 % zerstört, 6 % daneben; an der
+  Reichweitengrenze 54 % zerstört, 21 % daneben; zu nah (1,5 km) 58 % zerstört,
+  24 % daneben. Volle
   Wirkung bis 40 % des Wirkradius (vom Zielrand gemessen), dann linear auf null.
   Gehärtet ab 60° Eintreffwinkel. Größenordnungen aus öffentlichen Daten realer
   250-kg-Bomben und leichter Luft-Boden-Flugkörper, Wirkung nach Spielbalance.

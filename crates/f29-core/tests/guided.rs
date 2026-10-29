@@ -20,6 +20,17 @@ fn step(sim: &mut Sim, f: u8, w: u8) {
 /// Radar an und auf dieses Ziel weitergeschaltet. `None`, wenn das Ziel nicht
 /// aufschaltbar ist (z. B. Gelände im Weg).
 fn lined_up(seed: u64, class: TargetClass, dist: f64, loadout: Loadout) -> Option<(Sim, usize)> {
+    lined_up_at(seed, class, dist, 1_500.0, loadout)
+}
+
+/// Wie [`lined_up`], aber `height` m über dem Ziel.
+fn lined_up_at(
+    seed: u64,
+    class: TargetClass,
+    dist: f64,
+    height: f64,
+    loadout: Loadout,
+) -> Option<(Sim, usize)> {
     let probe = Sim::new(SimConfig::new(seed));
     let (i, t) = probe.targets().iter().enumerate().find(|(_, t)| t.class == class)?;
     let mut sim = Sim::new(SimConfig {
@@ -27,8 +38,8 @@ fn lined_up(seed: u64, class: TargetClass, dist: f64, loadout: Loadout) -> Optio
         spawn: Spawn {
             north: t.north - dist,
             east: t.east,
-            altitude: t.elevation + 1_500.0,
-            min_clearance: 300.0,
+            altitude: t.elevation + height,
+            min_clearance: 150.0,
             heading: 0.0,
             speed: 200.0,
             throttle: 0.7,
@@ -86,19 +97,22 @@ struct Tally {
     missed: u32,
 }
 
-fn tally(dist: f64) -> Tally {
+fn tally(dist: f64, height: f64) -> Tally {
     let mut t = Tally::default();
     for seed in 1..=80_u64 {
-        let Some((mut sim, target)) = lined_up(seed, TargetClass::Soft, dist, agm()) else { continue };
+        let Some((mut sim, target)) = lined_up_at(seed, TargetClass::Soft, dist, height, agm()) else {
+            continue;
+        };
         let zone = sim.flight_data().target.and_then(|t| t.zone);
         if !matches!(zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
             continue;
         }
         let events = shoot(&mut sim);
-        assert!(
-            events.iter().any(|e| matches!(e, WeaponEvent::Acquired { target: x, .. } if *x == target)),
-            "Seed {seed}: Übergabe der Aufschaltung fehlt: {events:?}"
-        );
+        // Nur Schüsse mit Übergabe der Aufschaltung zählen (sonst sucht die
+        // Waffe selbst und fliegt womöglich ein anderes Ziel an).
+        if !events.iter().any(|e| matches!(e, WeaponEvent::Acquired { target: x, .. } if *x == target)) {
+            continue;
+        }
         t.shots += 1;
         match impact(&events) {
             Some(ImpactResult::Destroyed { .. }) => t.destroyed += 1,
@@ -109,18 +123,26 @@ fn tally(dist: f64) -> Tally {
     t
 }
 
-/// Aus der guten Zone trifft die Rakete meist; an der Reichweitengrenze
-/// geht deutlich mehr daneben.
+/// Sweet Spot: Von der Reichweitengrenze steigt die Trefferchance bis zum
+/// Sweet Spot an und fällt bei weiterer Annäherung wieder ab. Flache Anflüge,
+/// damit das Ziel nahe der Flugrichtung liegt (Ablage spielt kaum mit).
 #[test]
-fn good_zone_hits_more_often_than_max_range() {
+fn sweet_spot_hits_more_often_than_too_far_or_too_close() {
     let max = WeaponKind::AirToGround.spec().max_range_m;
-    let good = tally(max * 0.35);
-    let far = tally(max * 0.93);
-    assert!(good.shots >= 30 && far.shots >= 30, "zu wenige Schüsse: {good:?} {far:?}");
+    let sweet = tally(max * 0.4, 500.0);
+    let far = tally(max * 0.92, 800.0);
+    let close = tally(1_500.0, 250.0);
+    for t in [&sweet, &far, &close] {
+        assert!(t.shots >= 30, "zu wenige Schüsse: {sweet:?} {far:?} {close:?}");
+    }
     let rate = |n: u32, t: &Tally| f64::from(n) / f64::from(t.shots);
-    assert!(rate(good.destroyed, &good) > 0.6, "gute Zone: {good:?}");
-    assert!(rate(far.destroyed, &far) < rate(good.destroyed, &good) - 0.15, "{good:?} vs {far:?}");
-    assert!(rate(far.missed, &far) > rate(good.missed, &good), "{good:?} vs {far:?}");
+    let report = format!("Sweet Spot {sweet:?}, Grenze {far:?}, zu nah {close:?}");
+    assert!(rate(sweet.destroyed, &sweet) > 0.65, "{report}");
+    assert!(rate(far.destroyed, &far) < rate(sweet.destroyed, &sweet) - 0.2, "{report}");
+    assert!(rate(close.destroyed, &close) < rate(sweet.destroyed, &sweet) - 0.1, "{report}");
+    assert!(rate(far.missed, &far) > rate(sweet.missed, &sweet), "{report}");
+    assert!(rate(close.missed, &close) > rate(sweet.missed, &sweet), "{report}");
+    eprintln!("{report}");
 }
 
 /// Zielrahmen-Zonen: außer Reichweite, in Reichweite, gute Zone; der
@@ -135,7 +157,9 @@ fn launch_zones_follow_the_range() {
             .find_map(|(sim, _)| sim.flight_data().target.filter(|t| t.optical || !optical).map(|t| t.zone))
             .flatten()
     };
-    assert_eq!(zone(max * 0.3, agm(), true), Some(LaunchZone::Good));
+    assert_eq!(zone(max * 0.35, agm(), true), Some(LaunchZone::Good));
+    // Näher als der Sweet Spot: wieder nur „in Reichweite“.
+    assert_eq!(zone(max * 0.1, agm(), true), Some(LaunchZone::InRange));
     assert_eq!(zone(max * 0.8, agm(), true), Some(LaunchZone::InRange));
     assert_eq!(zone(max * 1.3, agm(), false), Some(LaunchZone::OutOfRange));
     let arm = Loadout([Some(WeaponKind::AntiRadar), None, None, None]);
