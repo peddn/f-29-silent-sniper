@@ -880,6 +880,33 @@ Format jedes Eintrags:
 - **Status:** Abwurf, Ballistik und Wirkung umgesetzt (v0.2.4); Lenkung (v0.2.5) und
   HUD-Zielhilfe (v0.2.6) folgen
 
+### M-015 Bordsysteme und Schadensmodell (Gerüst)
+
+- **Verhalten:** Treffer und Splitter beschädigen einzelne Bordsysteme, die danach
+  eingeschränkt oder gar nicht mehr arbeiten.
+- **Referenzstelle:** f19re `src_en/egcombat.c` (Splitterschaden nach eigenem
+  Bombeneinschlag und nach Flugkörpertreffern).
+- **Lesephase (eigene Worte, keine Werte):** Ein Treffer setzt zufällig eine oder
+  mehrere Schadensmarken aus einer festen, kleinen Liste von Systemen; auf schweren
+  Stufen mehr. Das Cockpit zeigt die Schäden auf einer eigenen Anzeige.
+- **Unser Design (Gerüst, Spielerentscheidung):** `f29_core::systems`. Acht Systeme
+  (Triebwerk, Treibstoff, Hydraulik, Flugsteuerung, Radar, Optik, Waffenschacht,
+  Anzeigen), jedes intakt, eingeschränkt (Restleistung 0..1) oder ausgefallen.
+  Vorerst ist alles intakt; das Schadensmodell (Etappe 4) setzt Zustände über
+  `Sim::set_condition` mit eigenem Zufallsstrom. Die Wirkung hängt schon jetzt an
+  genau einer Stelle je System: Höchstschub, Treibstoffleck, Stellgeschwindigkeit
+  von Klappen, Fahrwerk und Schachtklappen (ausgefallen = blockiert), Drehraten
+  (ausgefallen = Notsteuerung), Radar- und Optikreichweite (ausgefallenes Radar
+  lässt sich nicht einschalten), Waffenschacht (ausgefallen = Klappen klemmen,
+  kein Auslösen, Meldung „BAY FAULT“), Anzeigen (flackern, ausgefallen dunkel; der
+  mechanische Schubhebel bleibt). Die SYS-Seite zeigt alle acht: intakt gedämpft,
+  eingeschränkt gelb mit Restleistung, ausgefallen rot umrahmt. Der Zustand geht in
+  den Zustandshash ein.
+- **Unsere Werte:** Leck bis 3 kg/s (volle Tanks in knapp 30 min leer),
+  Notsteuerung 30 % Drehrate. Welche Treffer welche Systeme wie stark beschädigen,
+  folgt mit Etappe 4.
+- **Status:** Gerüst umgesetzt (v0.2.4), Schadensquellen geplant (Etappe 4)
+
 ### M-020 Radar-/Detektionsmodell (Stealth)
 
 - **Verhalten:** Wie leicht der Gegner das Flugzeug entdeckt, hängt von der eigenen

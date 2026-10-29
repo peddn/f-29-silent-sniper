@@ -332,3 +332,23 @@ fn open_bay_blinks_as_warning() {
     // Blinkphase aus: nichts zusätzlich
     assert_eq!(warn_lines(1.0, 10.4), closed);
 }
+
+/// Ausgefallene Anzeigen: HUD und MFD-Inhalte dunkel, Schubhebel bleibt;
+/// beschädigte flackern.
+#[test]
+fn failed_displays_go_dark_and_damaged_ones_flicker() {
+    use f29_core::systems::{Condition, System};
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let count = |cond: Condition, time_s: f64| {
+        let mut fd = sample();
+        fd.systems.set(System::Displays, cond);
+        fd.time_s = time_s;
+        build(&fd, &layout, &HudOptions::default(), None).lines.len()
+    };
+    let ok = count(Condition::Ok, 10.0);
+    let dark = count(Condition::Failed, 10.0);
+    assert!(dark > 0 && dark < ok / 4, "dunkel {dark} von {ok} Linien");
+    let samples: Vec<usize> =
+        (0..40).map(|i| count(Condition::Degraded(0.3), 10.0 + i as f64 * 0.013)).collect();
+    assert!(samples.contains(&ok) && samples.contains(&dark), "flackert nicht");
+}

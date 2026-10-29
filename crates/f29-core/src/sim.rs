@@ -7,6 +7,7 @@ use crate::math::DVec3;
 use crate::nav::{self, Steerpoint};
 use crate::rng::Pcg32;
 use crate::sensors::{self, LookDir, Sensors};
+use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
 use crate::weapons::{self, Bay, ImpactResult, Loadout, Stores, Weapon, WeaponEvent};
 use f29_data::{AircraftSpec, F29_SPEC};
@@ -333,6 +334,8 @@ pub struct FlightData {
     pub stores: StoresInfo,
     /// Aktuelle Waffenmeldungen, neueste zuletzt (höchstens drei).
     pub weapon_messages: Vec<WeaponMessage>,
+    /// Zustand der Bordsysteme (Schadensmodell).
+    pub systems: Systems,
     pub warnings: Warnings,
 }
 
@@ -356,6 +359,7 @@ pub struct Sim {
     targets: Vec<Target>,
     sensors: Sensors,
     stores: Stores,
+    systems: Systems,
 }
 
 impl Sim {
@@ -426,6 +430,29 @@ impl Sim {
             targets,
             sensors,
             stores,
+            systems: Systems::default(),
+        }
+    }
+
+    /// Setzt den Zustand eines Bordsystems – Zugang für das Schadensmodell
+    /// (Etappe 4) und für Tests. Die Wirkung gilt ab sofort.
+    pub fn set_condition(&mut self, system: System, condition: Condition) {
+        self.systems.set(system, condition);
+        self.apply_systems();
+    }
+
+    /// Bordsysteme (Schadensmodell).
+    pub fn systems(&self) -> &Systems {
+        &self.systems
+    }
+
+    /// Systemzustände auf Flugmodell und Sensoren übertragen.
+    fn apply_systems(&mut self) {
+        self.aircraft.health = self.systems.health();
+        self.sensors.radar_capability = self.systems.capability(System::Radar);
+        self.sensors.optics_capability = self.systems.capability(System::Optics);
+        if self.systems.get(System::Radar).is_failed() {
+            self.sensors.radar_on = false;
         }
     }
 
@@ -463,14 +490,15 @@ impl Sim {
         if controls.has_weapon(weapon_flags::NEXT_BAY) {
             self.stores.next_bay();
         }
-        self.stores.update_door(DT);
+        self.stores.update_door(DT, self.systems.bay_door_speed());
+        let bay_ok = !self.systems.get(System::WeaponBay).is_failed();
         if controls.has_weapon(weapon_flags::RELEASE) {
             let a = &self.aircraft;
             let lock = self.sensors.lock.map(|l| l.target);
             let dropped = if a.on_ground {
                 0.0
             } else {
-                self.stores.release(self.tick, a.position, a.velocity, a.attitude, lock)
+                self.stores.release(self.tick, a.position, a.velocity, a.attitude, lock, bay_ok)
             };
             self.aircraft.stores_kg = (self.aircraft.stores_kg - dropped).max(0.0);
         }
@@ -502,7 +530,8 @@ impl Sim {
         let (pos, heading) = (self.aircraft.position, self.aircraft.attitude.to_euler().0);
         let mut done = false;
         if controls.has(flags::RADAR_TOGGLE) {
-            self.sensors.radar_on = !self.sensors.radar_on;
+            // Ein ausgefallenes Radar lässt sich nicht einschalten.
+            self.sensors.radar_on = !self.sensors.radar_on && !self.systems.get(System::Radar).is_failed();
             self.sensors.update(&self.targets, &self.terrain, pos, heading);
             done = true;
         }
@@ -859,6 +888,7 @@ impl Sim {
                 mass_kg: self.stores.mass_kg(),
             },
             weapon_messages: self.weapon_messages(),
+            systems: self.systems,
             warnings,
         }
     }
@@ -878,6 +908,7 @@ impl Sim {
                 let (text, warning) = match e {
                     WeaponEvent::Released { kind, .. } => (format!("{} AWAY", kind.label()), false),
                     WeaponEvent::BayClosed => ("BAY CLOSED".to_string(), true),
+                    WeaponEvent::BayFault => ("BAY FAULT".to_string(), true),
                     WeaponEvent::BayEmpty => ("BAY EMPTY".to_string(), true),
                     WeaponEvent::BankLimit => ("BANK LIMIT".to_string(), true),
                     WeaponEvent::Busy => ("WEAPONS BUSY".to_string(), true),
@@ -950,6 +981,10 @@ impl Sim {
             h.u64(u64::from(b.count));
         }
         h.u64(st.selected as u64);
+        for (kind, value) in self.systems.hash_parts() {
+            h.u64(kind);
+            h.f64(value);
+        }
         let (ws, wi) = st.rng_state();
         h.u64(ws);
         h.u64(wi);

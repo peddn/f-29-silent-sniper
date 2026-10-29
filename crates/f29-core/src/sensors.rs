@@ -114,11 +114,28 @@ pub struct Lock {
 }
 
 /// Zustand der Zielerfassung.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sensors {
     pub radar_on: bool,
     pub look: LookDir,
     pub lock: Option<Lock>,
+    /// Leistung des Radars 0..1 (Schadensmodell, [`crate::systems`]):
+    /// Faktor auf die Reichweite, 0 = ausgefallen.
+    pub radar_capability: f64,
+    /// Leistung des optischen Systems 0..1, wie oben.
+    pub optics_capability: f64,
+}
+
+impl Default for Sensors {
+    fn default() -> Self {
+        Self {
+            radar_on: false,
+            look: LookDir::Forward,
+            lock: None,
+            radar_capability: 1.0,
+            optics_capability: 1.0,
+        }
+    }
 }
 
 /// Freie Sicht von `from` nach `to` (Nord, Ost, Höhe über NN)? `height`
@@ -143,11 +160,22 @@ pub fn line_of_sight(height: impl Fn(f64, f64) -> f64, from: [f64; 3], to: [f64;
 }
 
 impl Sensors {
+    /// Radarreichweite unter Berücksichtigung von Schäden (m).
+    pub fn radar_range(&self) -> f64 {
+        RADAR_RANGE_M * self.radar_capability.clamp(0.0, 1.0)
+    }
+
+    /// Optische Reichweite unter Berücksichtigung von Schäden (m).
+    pub fn optical_range(&self) -> f64 {
+        OPTICAL_RANGE_M * self.optics_capability.clamp(0.0, 1.0)
+    }
+
     /// Kandidaten im Kegel der Blickrichtung und in Reichweite des größeren
     /// Systems, nach Entfernung sortiert: `(Entfernung, Index)`.
     fn candidates(&self, targets: &[Target], pos: DVec3, heading: f64) -> Vec<(f64, usize)> {
         let look = heading + self.look.offset();
-        let max_range = if self.radar_on { RADAR_RANGE_M } else { OPTICAL_RANGE_M };
+        let max_range =
+            if self.radar_on { self.radar_range().max(self.optical_range()) } else { self.optical_range() };
         let mut c: Vec<(f64, usize)> = targets
             .iter()
             .enumerate()
@@ -174,9 +202,9 @@ impl Sensors {
         i: usize,
     ) -> Option<Lock> {
         let c = targets[i].center_ned();
-        let optical = range <= OPTICAL_RANGE_M
+        let optical = range <= self.optical_range()
             && line_of_sight(|n, e| terrain.elevation(n, e), [pos.x, pos.y, -pos.z], [c[0], c[1], -c[2]]);
-        let radar = self.radar_on && range <= RADAR_RANGE_M;
+        let radar = self.radar_on && range <= self.radar_range();
         (optical || radar).then_some(Lock { target: i, optical, radar })
     }
 

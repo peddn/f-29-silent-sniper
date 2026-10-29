@@ -137,7 +137,8 @@ fn update(
     let h = window.height();
     let mfd = layout_for(&window).mfd_layout();
     let fd = state.sim.flight_data();
-    let target = fd.target.filter(|t| t.optical);
+    // Dunkle oder flackernde Anzeigen (Schadensmodell) zeigen auch kein Kamerabild.
+    let target = fd.target.filter(|t| t.optical && f29_hud::displays_on(&fd));
     let (Some(m), Some(t), RightPage::Target) = (mfd, target, view.0.right_page) else {
         cam.is_active = false;
         **visibility = Visibility::Hidden;

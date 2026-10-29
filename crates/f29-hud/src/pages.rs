@@ -9,6 +9,7 @@ use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::heading_deg;
 use crate::map::MapData;
 use crate::mfd::{RightPage, WEAPON_STATIONS, fuel_bar};
+use f29_core::systems::{Condition, System};
 use f29_core::targets::TargetRole;
 use f29_core::units;
 use f29_core::weapons::{Seeker, WeaponKind};
@@ -416,8 +417,8 @@ pub(crate) fn attitude(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
 pub(crate) fn systems(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     let f = frame(screen);
     title(dl, screen, &f, "SYSTEMS");
-    let step = f.txt * 1.55;
-    let mut y = screen.max[1] - f.h * 0.15;
+    let step = f.txt * 1.45;
+    let mut y = screen.max[1] - f.h * 0.14;
     let gear = if fd.gear >= f29_core::flight::GEAR_LOCKED {
         "DOWN"
     } else if fd.gear <= 0.0 {
@@ -432,12 +433,31 @@ pub(crate) fn systems(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
         ("AIRBRAKE", format!("{:.0}%", fd.airbrake * 100.0), Ink::Mfd),
         ("GROSS WT", format!("{} LB", (units::kg_to_lb(fd.mass_kg) / 100.0).round() as i64 * 100), Ink::Mfd),
         ("STALL SPD", format!("{} KT", units::mps_to_kt(fd.stall_speed_mps).round() as i64), Ink::Mfd),
-        ("MACH", format!("{:.2}", fd.mach), Ink::Mfd),
     ];
     for (name, value, ink) in &rows {
         row(dl, &f, y, name, value, *ink);
         y -= step;
     }
+
+    // Bordsysteme: 4 × 2 Felder, intakt gedämpft, eingeschränkt gelb mit
+    // Restleistung, ausgefallen rot umrahmt.
+    y -= step * 0.4;
+    dl.line([f.x0, y + step * 0.5], [f.x1, y + step * 0.5], Ink::MfdDim);
+    let col4 = (f.x1 - f.x0) * 0.25;
+    for (i, sys) in System::ALL.into_iter().enumerate() {
+        let x = f.x0 + col4 * (i % 4) as f32 + col4 * 0.5;
+        let yy = y - step * 0.6 - step * (i / 4) as f32;
+        let size = f.txt * 0.8;
+        match fd.systems.get(sys) {
+            Condition::Ok => dl.text_mid([x, yy], size, Align::Center, sys.label(), Ink::MfdDim),
+            Condition::Degraded(c) => {
+                let txt = format!("{} {:.0}", sys.label(), c.clamp(0.0, 1.0) * 100.0);
+                dl.text_mid([x, yy], size * 0.85, Align::Center, &txt, Ink::Needle);
+            }
+            Condition::Failed => dl.boxed_text([x, yy], size, Align::Center, sys.label(), Ink::Warning),
+        }
+    }
+    y -= step * 2.3;
 
     // Warnfeld: alle Warnungen, aktive hell
     y -= step * 0.4;

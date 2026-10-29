@@ -139,7 +139,8 @@ fn place_screens(
     let layout = layout_for(&window);
     let mfd = layout.mfd_layout();
     let fd = state.sim.flight_data();
-    let sat_visible = view.0.map_mode == MapMode::Satellite && assets.sat.is_some();
+    let sat_visible =
+        view.0.map_mode == MapMode::Satellite && assets.sat.is_some() && f29_hud::displays_on(&fd);
     for (screen, mut transform, mut sprite, mut vis) in &mut screens {
         let Some(m) = mfd else {
             *vis = Visibility::Hidden;

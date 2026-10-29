@@ -23,6 +23,7 @@ pub mod replay;
 pub mod rng;
 pub mod sensors;
 pub mod sim;
+pub mod systems;
 pub mod targets;
 pub mod units;
 pub mod weapons;

@@ -191,6 +191,7 @@ pub(crate) fn draw(
     state: &MfdState,
     map: Option<&MapData>,
     camera_feed: bool,
+    screens_on: bool,
 ) {
     let Some(m) = layout.mfd_layout() else {
         return;
@@ -201,6 +202,13 @@ pub(crate) fn draw(
 
     bezel(dl, m.left, m.left_screen);
     bezel(dl, m.right, m.right_screen);
+    // Der Schubhebel ist mechanisch und bleibt auch bei dunklen Anzeigen sichtbar.
+    if m.throttle.max[0] - m.throttle.min[0] > 0.03 {
+        crate::throttle::draw(dl, fd, m.throttle);
+    }
+    if !screens_on {
+        return;
+    }
     dl.set_clip(Some(m.left_screen));
     draw_map(dl, fd, m.left_screen, state, map);
     dl.set_clip(Some(m.right_screen));
@@ -216,9 +224,6 @@ pub(crate) fn draw(
     crate::pages::page_bar(dl, rs, state.right_page);
     dl.set_clip(None);
     signature_placeholder(dl, m.center);
-    if m.throttle.max[0] - m.throttle.min[0] > 0.03 {
-        crate::throttle::draw(dl, fd, m.throttle);
-    }
 }
 
 /// Gehäuse mit Bildschirmrahmen und je fünf Tasten oben und unten.

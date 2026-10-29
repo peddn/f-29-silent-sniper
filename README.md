@@ -174,6 +174,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Ballistik (Freifall, Fallschirm), Wirkungsmatrix Waffe × Zielklasse mit
       Abstandsabfall, gehärtete Ziele nur bei steilem Eintreffen, Wracks,
       Splitterwarnung, WPN-Seite mit Bestand, Meldungen (v0.2.4)
+- [x] Bordsysteme als Gerüst für das Schadensmodell: acht Systeme mit Zustand
+      und Wirkung, Übersicht auf der SYS-Seite (v0.2.4)
 - [ ] Gelenkte Waffen mit eigenem Suchkopf: Gleitbombe, Luft-Boden-Rakete,
       Radarjäger, Seezielrakete (v0.2.5)
 - [ ] Zielhilfe im HUD: Aufschlagpunkt, Auslöseklammer, Warnung „zu tief“ (v0.2.6)

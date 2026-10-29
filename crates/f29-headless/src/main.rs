@@ -3,7 +3,7 @@
 //! ```text
 //! f29-headless demo     [--seed N] [--seconds S] [--record DATEI]
 //! f29-headless replay   DATEI
-//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--out DATEI]
+//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N]
 //! f29-headless sound    [--out VERZEICHNIS]
@@ -27,11 +27,12 @@ f29-headless – F-29 Silent Sniper ohne Grafik
 Befehle:
   demo     [--seed N] [--seconds S] [--record DATEI]   Autopilot fliegt die Route ab
   replay   DATEI                                       Replay abspielen und Hash prüfen
-  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--out DATEI]
+  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--out DATEI]
                                                        HUD nach S Sekunden Demo als SVG
                                                        (SEITE des rechten MFDs: msn, tgt, wpn, eng, adi, sys;
                                                        --radar 1 schaltet am Ende das Radar ein,
-                                                       --drop 1 öffnet den Schacht und löst eine Waffe aus)
+                                                       --drop 1 öffnet den Schacht und löst eine Waffe aus,
+                                                       --damage 1 beschädigt Beispielsysteme)
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N]                                 Flugplätze und Route auflisten
@@ -265,6 +266,13 @@ fn hud_svg(args: &Args) -> Result<(), String> {
         for _ in 0..(f29_core::TICK_HZ / 2) {
             sim.step(last);
         }
+    }
+    if args.get("damage", 0_u8)? != 0 {
+        use f29_core::systems::{Condition, System};
+        sim.set_condition(System::Engine, Condition::Degraded(0.6));
+        sim.set_condition(System::Hydraulics, Condition::Degraded(0.35));
+        sim.set_condition(System::Radar, Condition::Failed);
+        sim.set_condition(System::WeaponBay, Condition::Failed);
     }
     let map = f29_hud::MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
     let layout = ScreenLayout::cockpit(aspect);

@@ -418,6 +418,8 @@ pub enum WeaponEvent {
     },
     /// Auslösen bei geschlossenem Schacht.
     BayClosed,
+    /// Waffenschacht defekt (Schadensmodell): kein Auslösen.
+    BayFault,
     /// Gewählter Schacht leer.
     BayEmpty,
     /// Querlage zu groß zum Auslösen.
@@ -509,9 +511,9 @@ impl Stores {
         self.events.push((tick, e));
     }
 
-    /// Klappen bewegen.
-    pub fn update_door(&mut self, dt: f64) {
-        let step = dt / DOOR_TIME_S;
+    /// Klappen bewegen; `speed` 0..1 aus dem Systemzustand (0 = klemmen).
+    pub fn update_door(&mut self, dt: f64, speed: f64) {
+        let step = speed * dt / DOOR_TIME_S;
         self.door = if self.door_cmd { (self.door + step).min(1.0) } else { (self.door - step).max(0.0) };
     }
 
@@ -526,10 +528,12 @@ impl Stores {
         velocity: DVec3,
         attitude: DQuat,
         lock: Option<usize>,
+        bay_ok: bool,
     ) -> f64 {
         let bay = self.bays[self.selected];
         let (_, _, roll) = attitude.to_euler();
         let event = match bay.kind {
+            _ if !bay_ok => Some(WeaponEvent::BayFault),
             _ if !self.door_open() => Some(WeaponEvent::BayClosed),
             Some(_) if bay.count == 0 => Some(WeaponEvent::BayEmpty),
             None => Some(WeaponEvent::BayEmpty),

@@ -17,6 +17,7 @@ mod throttle;
 
 pub use canvas::{Align, DisplayList, Ink, Line, Rect};
 use f29_core::FlightData;
+use f29_core::systems::{Condition, System};
 pub use map::MapData;
 pub use mfd::{MapMode, MfdLayout, MfdState, RightPage};
 pub use pages::target_image_rect;
@@ -105,15 +106,28 @@ pub fn build(
     map: Option<&MapData>,
 ) -> DisplayList {
     let mut dl = DisplayList::new();
-    if opts.show_hud {
+    let on = displays_on(fd);
+    // Der Absturzbildschirm erscheint immer.
+    if opts.show_hud && (on || fd.warnings.crashed) {
         hud::draw(&mut dl, fd, layout);
     }
     if opts.show_panel && layout.panel_fraction > 0.0 {
         dl.set_clip(None);
-        mfd::draw(&mut dl, fd, layout, &opts.mfd, map, opts.camera_feed);
+        mfd::draw(&mut dl, fd, layout, &opts.mfd, map, opts.camera_feed, on);
     }
     dl.set_clip(None);
     dl
+}
+
+/// Leuchten HUD und MFDs gerade? Beschädigte Anzeigen flackern (je weniger
+/// Leistung, desto länger dunkel), ausgefallene bleiben dunkel. Frontends
+/// blenden damit auch ihre eigenen Bildflächen (Satellitenbild, Zielkamera) aus.
+pub fn displays_on(fd: &FlightData) -> bool {
+    match fd.systems.get(System::Displays) {
+        Condition::Ok => true,
+        Condition::Failed => false,
+        Condition::Degraded(c) => (fd.time_s * 7.3).fract() < 0.35 + 0.65 * c.clamp(0.0, 1.0),
+    }
 }
 
 /// Formatiert einen Kurs als dreistellige Gradzahl („045“).

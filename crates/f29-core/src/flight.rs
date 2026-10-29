@@ -41,6 +41,7 @@ use crate::atmosphere::{self, G0, RHO0};
 use crate::controls::{ControlFrame, flags};
 use crate::detmath;
 use crate::math::{DQuat, DVec3};
+use crate::systems::Health;
 use f29_data::AircraftSpec;
 
 /// Zustand eines Flugzeugs. Nur Primärgrößen – alles andere wird abgeleitet.
@@ -66,6 +67,8 @@ pub struct AircraftState {
     pub fuel_kg: f64,
     /// Masse der Waffen in den Schächten, kg (vom Sim gesetzt).
     pub stores_kg: f64,
+    /// Wirkung der Systemzustände (vom Sim gesetzt, siehe [`crate::systems`]).
+    pub health: Health,
     /// Fahrwerk 0 = eingefahren … 1 = ausgefahren und verriegelt.
     pub gear: f64,
     /// Steht bzw. rollt auf dem Boden (Rollmodus statt Flugmodell).
@@ -90,6 +93,7 @@ impl AircraftState {
             flaps: 0.0,
             fuel_kg: f29_data::F29_SPEC.fuel_capacity_kg,
             stores_kg: 0.0,
+            health: Health::default(),
             gear: 0.0,
             on_ground: false,
             height_agl_m: f64::INFINITY,
@@ -253,7 +257,10 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
     let gross = if s.flamed_out() {
         0.0
     } else {
-        spec.thrust_max_n * s.engine * detmath::powf(air.density / RHO0, spec.thrust_density_exponent)
+        spec.thrust_max_n
+            * s.health.thrust
+            * s.engine
+            * detmath::powf(air.density / RHO0, spec.thrust_density_exponent)
     };
     let thrust = gross - spec.idle_ram_drag * s.velocity.length() * (1.0 - s.engine);
     if tas < MIN_AERO_SPEED {
@@ -319,17 +326,20 @@ fn update_systems(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, 
     if !s.flamed_out() {
         s.fuel_kg = (s.fuel_kg - fuel_flow(spec, s.engine, aero.density) * dt).max(0.0);
     }
+    // Leck im Treibstoffsystem (Schadensmodell).
+    s.fuel_kg = (s.fuel_kg - s.health.fuel_leak_kgps * dt).max(0.0);
 
     let brake_target = if c.has(flags::AIRBRAKE) { 1.0 } else { 0.0 };
     let max_move = AIRBRAKE_RATE * dt;
     s.airbrake += (brake_target - s.airbrake).clamp(-max_move, max_move);
     // Klappen: bei jeder Fahrt nutzbar (Manöverklappen).
     let flap_target = if c.has(flags::FLAPS) { 1.0 } else { 0.0 };
-    let flap_move = spec.flap_rate * dt;
+    // Klappen und Fahrwerk laufen hydraulisch: beschädigt langsamer, ausgefallen blockiert.
+    let flap_move = spec.flap_rate * s.health.hydraulics * dt;
     s.flaps += (flap_target - s.flaps).clamp(-flap_move, flap_move);
     // Fahrwerk; am Boden lässt es sich nicht einfahren.
     let gear_target = if c.has(flags::GEAR) || s.on_ground { 1.0 } else { 0.0 };
-    let gear_move = dt / spec.gear_time_s;
+    let gear_move = s.health.hydraulics * dt / spec.gear_time_s;
     s.gear += (gear_target - s.gear).clamp(-gear_move, gear_move);
 }
 
@@ -416,8 +426,8 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
     let ctheta = detmath::cos(pitch);
     let v = aero.tas;
 
-    // Ruderwirksamkeit sinkt mit dem Staudruck.
-    let eff = control_effectiveness(spec, aero.qbar);
+    // Ruderwirksamkeit sinkt mit dem Staudruck und mit Schäden an der Flugsteuerung.
+    let eff = control_effectiveness(spec, aero.qbar) * s.health.control;
 
     // --- Nicken ---
     // Ratenkommando: Knüppel neutral ⇒ q = 0. Der Geradeausflug ist damit
