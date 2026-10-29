@@ -54,6 +54,9 @@ const MIN_DAMAGE: f64 = 0.05;
 pub const CRITICAL_CHANCE: f64 = 0.01;
 /// Längste Flugzeit einer ungelenkten Waffe (s), Schutz gegen Endlosflug.
 const MAX_FALL_S: f64 = 180.0;
+/// Sicherheitsabstand über dem Boden, ab dem die Vorhersage das Gelände nur
+/// noch selten abfragt (m).
+const PREDICT_MARGIN_M: f64 = 300.0;
 /// Nur so viele Ereignisse merken (für Meldungen).
 const EVENT_LOG: usize = 16;
 /// Lenkwaffen fallen erst frei aus dem Schacht, dann setzt die Lenkung ein (s).
@@ -1034,12 +1037,36 @@ pub fn predict_release(
     let mut w = Weapon::new(0, kind, position + down * EJECT_OFFSET_M, velocity + down * EJECT_SPEED_MPS);
     let mut targets: [Target; 0] = [];
     let world = World { terrain, targets: &mut targets, tick: 0, dt, aircraft: position };
-    // Grobe Schritte reichen für die Anzeige: 4 Simulationsschritte auf einmal.
-    let coarse = World { dt: dt * 4.0, ..world };
+    // Grobe Schritte reichen für die Anzeige: 8 Simulationsschritte auf einmal,
+    // mit gemittelter Geschwindigkeit (exakt für die Schwerkraft).
+    let coarse = World { dt: dt * 8.0, ..world };
+    // Oberhalb der höchsten möglichen Geländehöhe ist keine Abfrage nötig;
+    // hoch über dem zuletzt gemessenen Boden reicht jeder vierte Schritt (in
+    // vier groben Schritten kommt die Bombe kaum 200 m weit).
+    let ceiling = terrain.max_elevation();
+    let mut last_ground = f64::MIN;
+    let mut since_check = 0;
+    let mut density = 0.0;
+    let mut steps = 0_u32;
     while w.age_s < MAX_FALL_S {
         let before = w;
-        fly(&mut w, &coarse);
+        // Luftdichte ändert sich über wenige hundert Meter kaum: nur jeden
+        // vierten Schritt neu berechnen.
+        if steps.is_multiple_of(4) {
+            density = atmosphere::isa(-w.position.z).density;
+        }
+        steps += 1;
+        let v0 = w.velocity;
+        fly_with_density(&mut w, coarse.dt, density);
+        w.position = before.position + (v0 + w.velocity) * (0.5 * coarse.dt);
+        let alt = -w.position.z;
+        since_check += 1;
+        if alt > ceiling || (alt - last_ground > PREDICT_MARGIN_M && since_check < 4) {
+            continue;
+        }
+        since_check = 0;
         let ground = terrain.elevation(w.position.x, w.position.y);
+        last_ground = ground;
         if -w.position.z <= ground {
             let h0 = -before.position.z - terrain.elevation(before.position.x, before.position.y);
             let h1 = -w.position.z - ground;
@@ -1055,14 +1082,18 @@ pub fn predict_release(
 /// Ein Zeitschritt Bombenflugbahn: Schwerkraft und Widerstand (semi-implizit,
 /// stabil bei 120 Hz).
 fn fly(w: &mut Weapon, world: &World<'_>) {
+    let density = atmosphere::isa(-w.position.z).density;
+    fly_with_density(w, world.dt, density);
+}
+
+/// Wie [`fly`] mit vorgegebener Luftdichte.
+fn fly_with_density(w: &mut Weapon, dt: f64, density: f64) {
     let s = w.kind.spec();
-    let dt = world.dt;
-    let air = atmosphere::isa(-w.position.z);
     let speed = w.velocity.length();
     let drag_area = if w.chute_open() { s.deployed_drag_area_m2 } else { s.drag_area_m2 };
     let mut accel = DVec3::new(0.0, 0.0, G0);
     if speed > 0.0 {
-        accel -= w.velocity / speed * (0.5 * air.density * speed * speed * drag_area / s.mass_kg);
+        accel -= w.velocity / speed * (0.5 * density * speed * speed * drag_area / s.mass_kg);
     }
     w.velocity += accel * dt;
     w.position += w.velocity * dt;

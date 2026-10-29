@@ -36,6 +36,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout)
     flight_path_marker(dl, fd, layout, &glass, vh);
     steerpoint_marker(dl, fd, layout, &glass, vh);
     target_marker(dl, fd, layout, &glass, vh);
+    bomb_aim(dl, fd, layout, &glass, vh);
     heading_tape(dl, fd, &glass);
     bank_scale(dl, fd, &glass);
     left_data(dl, fd, &glass);
@@ -135,6 +136,64 @@ fn flight_path_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayo
     dl.line([p[0] - r, p[1]], [p[0] - 2.6 * r, p[1]], ink);
     dl.line([p[0] + r, p[1]], [p[0] + 2.6 * r, p[1]], ink);
     dl.line([p[0], p[1] + r], [p[0], p[1] + 2.0 * r], ink);
+}
+
+/// Zielhilfe für ungelenkte Bomben (M-014): Aufschlagpunkt mit Fall-Linie
+/// vom Flugbahnsymbol; mit aufgeschaltetem Ziel oben eine Auslöseklammer, die
+/// sich mit der Längsablage schließt (geschlossen = auslösen), darüber eine
+/// Marke für die Querablage. Rot, wenn der Einschlag im eigenen
+/// Splitterbereich läge.
+fn bomb_aim(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
+    let Some(aim) = &fd.bomb_aim else {
+        return;
+    };
+    if fd.roll.abs() > f29_core::weapons::MAX_RELEASE_BANK_RAD {
+        return;
+    }
+    let ink = if aim.too_low { Ink::Warning } else { Ink::Hud };
+    let r = vh * 0.011;
+    // Aufschlagpunkt und Fall-Linie
+    if let (Some(fpm), Some(p)) = (
+        layout.project_body(fd.velocity_dir_body.to_array()),
+        layout.project_body(aim.direction_body.to_array()),
+    ) {
+        dl.set_clip(Some(*glass));
+        let d = [p[0] - fpm[0], p[1] - fpm[1]];
+        let len = (d[0] * d[0] + d[1] * d[1]).sqrt();
+        if len > r * 2.0 {
+            let k = (len - r) / len;
+            dl.line(fpm, [fpm[0] + d[0] * k, fpm[1] + d[1] * k], ink);
+        }
+        dl.circle(p, r, 12, ink);
+        dl.line([p[0] - r * 0.2, p[1]], [p[0] + r * 0.2, p[1]], ink);
+        dl.set_clip(None);
+    }
+    // Auslöseklammer unter dem Kursband
+    let Some((along, cross)) = aim.target_offset else {
+        return;
+    };
+    let c = glass.center();
+    let half_max = (glass.max[0] - glass.min[0]) * 0.22;
+    let y = glass.max[1] - (glass.max[1] - glass.min[1]) * 0.31;
+    let tick = vh * 0.012;
+    let scale = |m: f64| (m / 2_000.0).clamp(-1.0, 1.0) as f32 * half_max;
+    let w = scale(along.abs()).max(vh * 0.004);
+    dl.line([c[0] - w, y], [c[0] + w, y], ink);
+    dl.line([c[0] - w, y], [c[0] - w, y - tick], ink);
+    dl.line([c[0] + w, y], [c[0] + w, y - tick], ink);
+    // Querablage: kleines Dreieck über der Klammer
+    let x = c[0] + scale(cross);
+    dl.polyline(
+        &[[x, y + tick * 0.3], [x - tick * 0.5, y + tick * 1.1], [x + tick * 0.5, y + tick * 1.1]],
+        true,
+        ink,
+    );
+    let lethal = aim.lethal_radius_m;
+    if along.abs() < lethal * 0.5 && cross.abs() < lethal {
+        dl.boxed_text([c[0], y - tick * 2.4], TXT_SMALL, Align::Center, "RELEASE", ink);
+    } else if along < -lethal {
+        dl.text_mid([c[0], y - tick * 2.4], TXT_SMALL, Align::Center, "PAST", Ink::HudDim);
+    }
 }
 
 /// Raute über dem aktiven Navigationspunkt bzw. Pfeil am Glasrand.
@@ -468,6 +527,10 @@ fn warnings(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     }
     if fd.warnings.gear_overspeed {
         show(dl, "GEAR SPEED");
+    }
+    // Bombe fiele in den eigenen Splitterbereich (M-014).
+    if fd.bomb_aim.is_some_and(|a| a.too_low) {
+        show(dl, "TOO LOW");
     }
     // Offener (oder sich bewegender) Waffenschacht verrät das Flugzeug (M-014).
     if fd.stores.door > 0.0 {

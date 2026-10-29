@@ -910,6 +910,18 @@ Format jedes Eintrags:
     gedämpft, „DESTROYED“, Zielbild zeigt das Wrack), bis der Spieler mit einer
     Richtungstaste ein neues Ziel wählt; Wracks sind dann nicht mehr anwählbar.
     Auf der Karte verschwinden zerstörte Ziele.
+  - **Zielhilfe für Bomben (v0.2.6)** nach der Lesephase oben, eigene Gestaltung:
+    Bei gewählter Mk 82 / Snakeye und höchstens 60° Querlage zeigt das HUD den
+    vorausberechneten Aufschlagpunkt (Kreis mit Punkt) und eine Fall-Linie vom
+    Flugbahnsymbol dorthin. Mit aufgeschaltetem, intaktem Ziel steht unter dem
+    Kursband eine **Auslöseklammer**, deren Breite die Längsablage zwischen
+    Aufschlagpunkt und Ziel zeigt (bis 2 km); ein Dreieck darüber zeigt die
+    Querablage. Ist die Längsablage kleiner als der halbe Wirkradius und die
+    Querablage kleiner als der Wirkradius, erscheint „RELEASE“; ist das Ziel
+    schon überflogen, „PAST“. Läge der Einschlag im Splitterbereich des
+    weiterfliegenden Flugzeugs, wird alles rot und „TOO LOW“ blinkt. Die
+    Vorhersage nutzt dieselbe Flugbahnrechnung wie die echte Bombe (20-mal pro
+    Sekunde, grobe Schritte mit gemittelter Geschwindigkeit).
   - **HUD unten links:** gewählte Waffe mit Anzahl (z. B. „MK-82 X2“) und
     Schacht mit Klappenzustand („BAY 1 SAFE/DOORS/OPEN“, offen rot).
   - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,
@@ -938,7 +950,7 @@ Format jedes Eintrags:
   Volle Standardbeladung wiegt knapp 2 t; Landeanflüge in Tests fliegen leer.
 - **Status:** Abwurf, Ballistik und Wirkung umgesetzt (v0.2.4); Lenkwaffen,
   gewürfelter Endanflug und Zielrahmen nach Reichweite (v0.2.5); HUD-Zielhilfe für
-  Bomben (v0.2.6) folgt
+  Bomben (v0.2.6)
 
 ### M-015 Bordsysteme und Schadensmodell (Gerüst)
 

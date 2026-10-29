@@ -244,6 +244,28 @@ pub struct StoresInfo {
     pub mass_kg: f64,
 }
 
+/// Zielhilfe für ungelenkte Bomben (M-014): vorausberechneter Aufschlag.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BombAim {
+    /// Aufschlagpunkt (NED, auf der Oberfläche).
+    pub impact: DVec3,
+    /// Richtung zum Aufschlagpunkt in Körperachsen, normiert.
+    pub direction_body: DVec3,
+    /// Fallzeit (s).
+    pub fall_time_s: f64,
+    /// Der Einschlag läge im Splitterbereich des weiterfliegenden Flugzeugs.
+    pub too_low: bool,
+    /// Ablage des aufgeschalteten (intakten) Ziels vom Aufschlagpunkt (m):
+    /// längs der Flugrichtung (+ = Ziel liegt noch voraus, Bombe fiele zu kurz)
+    /// und quer (+ = Ziel liegt rechts).
+    pub target_offset: Option<(f64, f64)>,
+    /// Wirkradius der gewählten Bombe (m), für die Auslöseanzeige.
+    pub lethal_radius_m: f64,
+}
+
+/// Die Zielhilfe wird alle so viele Ticks neu berechnet (20 Hz).
+const BOMB_AIM_TICKS: u64 = 6;
+
 /// Meldung zu einem Waffenereignis, z. B. „MK-82 AWAY“.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WeaponMessage {
@@ -346,6 +368,8 @@ pub struct FlightData {
     pub systems: Systems,
     /// Indizes der zerstörten Ziele, aufsteigend (die Karte blendet sie aus).
     pub destroyed_targets: Vec<usize>,
+    /// Zielhilfe, wenn eine ungelenkte Bombe gewählt ist und das Flugzeug fliegt.
+    pub bomb_aim: Option<BombAim>,
     pub warnings: Warnings,
 }
 
@@ -370,6 +394,9 @@ pub struct Sim {
     sensors: Sensors,
     stores: Stores,
     systems: Systems,
+    /// Vorausberechneter Aufschlag (Punkt, Fallzeit) der gewählten Bombe;
+    /// abgeleitet, nicht Teil des Zustandshashes.
+    bomb_prediction: Option<(DVec3, f64)>,
 }
 
 impl Sim {
@@ -423,7 +450,7 @@ impl Sim {
         sensors.update(&targets, &terrain, aircraft.position, aircraft.attitude.to_euler().0);
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
-        Self {
+        let mut sim = Self {
             config,
             spec,
             terrain,
@@ -441,7 +468,10 @@ impl Sim {
             sensors,
             stores,
             systems: Systems::default(),
-        }
+            bomb_prediction: None,
+        };
+        sim.update_bomb_prediction();
+        sim
     }
 
     /// Setzt den Zustand eines Bordsystems – Zugang für das Schadensmodell
@@ -490,6 +520,20 @@ impl Sim {
         }
         self.update_height_agl();
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
+        if self.tick.is_multiple_of(BOMB_AIM_TICKS) {
+            self.update_bomb_prediction();
+        }
+    }
+
+    /// Aufschlag der gewählten ungelenkten Bombe vorausberechnen (M-014).
+    fn update_bomb_prediction(&mut self) {
+        let a = &self.aircraft;
+        self.bomb_prediction = match self.stores.selected_weapon() {
+            Some(kind) if !kind.is_guided() && !a.on_ground => {
+                weapons::predict_release(kind, a.position, a.velocity, a.attitude, &self.terrain, DT)
+            }
+            _ => None,
+        };
     }
 
     /// Schacht öffnen/schließen, Schacht wählen, auslösen (M-014).
@@ -499,6 +543,7 @@ impl Sim {
         }
         if controls.has_weapon(weapon_flags::NEXT_BAY) {
             self.stores.next_bay();
+            self.update_bomb_prediction();
         }
         self.stores.update_door(DT, self.systems.bay_door_speed());
         let bay_ok = !self.systems.get(System::WeaponBay).is_failed();
@@ -909,9 +954,36 @@ impl Sim {
             },
             weapon_messages: self.weapon_messages(),
             systems: self.systems,
+            bomb_aim: self.bomb_aim(),
             destroyed_targets: (0..self.targets.len()).filter(|&i| !self.targets[i].is_intact()).collect(),
             warnings,
         }
+    }
+
+    /// Zielhilfe aus der zuletzt berechneten Aufschlagvorhersage.
+    fn bomb_aim(&self) -> Option<BombAim> {
+        let kind = self.stores.selected_weapon().filter(|k| !k.is_guided())?;
+        let (impact, fall_time_s) = self.bomb_prediction?;
+        let a = &self.aircraft;
+        let to = impact - a.position;
+        // Wo das Flugzeug beim Einschlag wäre (geradeaus weiter).
+        let later = a.position + a.velocity * fall_time_s;
+        let too_low = (later - impact).length() < kind.spec().frag_radius_m;
+        let h = DVec3::new(a.velocity.x, a.velocity.y, 0.0).normalize_or_zero();
+        let right = DVec3::new(-h.y, h.x, 0.0);
+        let target_offset = self.sensors.lock.and_then(|l| {
+            let t = self.targets.get(l.target).filter(|t| t.is_intact())?;
+            let d = DVec3::new(t.north - impact.x, t.east - impact.y, 0.0);
+            Some((d.dot(h), d.dot(right)))
+        });
+        Some(BombAim {
+            impact,
+            direction_body: a.attitude.inverse_rotate(to).normalize_or_zero(),
+            fall_time_s,
+            too_low,
+            target_offset,
+            lethal_radius_m: kind.spec().lethal_radius_m,
+        })
     }
 
     /// Meldungen der letzten [`WEAPON_MESSAGE_S`] Sekunden, neueste zuletzt.

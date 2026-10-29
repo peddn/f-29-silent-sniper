@@ -218,3 +218,84 @@ fn retarded_bomb_avoids_the_frag_warning_at_low_level() {
     assert!(frag(0), "Freifall im Tiefflug ohne Splitterwarnung");
     assert!(!frag(1), "Fallschirmbombe mit Splitterwarnung");
 }
+
+/// Zielhilfe: Mit aufgeschaltetem Ziel auslösen, wenn die Längsablage null
+/// wird – die Bombe schlägt längs der Flugrichtung am Ziel ein.
+#[test]
+fn release_cue_puts_the_bomb_on_the_target_along_track() {
+    let (mut sim, target) = approach_at(TargetClass::Soft, 900.0, 5_000.0, 0.0, Loadout::default());
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, f29_core::controls::flags::RADAR_TOGGLE));
+    // Bis zum gewünschten Ziel weiterschalten (Richtung voraus).
+    for _ in 0..40 {
+        if sim.sensors().lock.map(|l| l.target) == Some(target) {
+            break;
+        }
+        let look = ControlFrame::look_flags(f29_core::sensors::LookDir::Forward.code());
+        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, look));
+    }
+    assert_eq!(sim.sensors().lock.map(|l| l.target), Some(target));
+    step(&mut sim, weapon_flags::BAY_DOORS);
+    let mut released = None;
+    for _ in 0..ticks(40.0) {
+        let aim = sim.flight_data().bomb_aim.expect("Zielhilfe bei gewählter Mk 82");
+        assert!(!aim.too_low, "900 m: kein Splitterrisiko");
+        let (along, _) = aim.target_offset.expect("Ablage zum aufgeschalteten Ziel");
+        let w = if released.is_none() && sim.stores().door_open() && along <= 0.0 {
+            released = Some((sim.flight_data().tick, sim.aircraft().velocity));
+            weapon_flags::RELEASE
+        } else {
+            0
+        };
+        step(&mut sim, w);
+        if released.is_some() && sim.weapons_in_flight().is_empty() {
+            break;
+        }
+    }
+    let (t0, v) = released.expect("Auslöseklammer geschlossen");
+    let impact = events_since(&sim, t0)
+        .into_iter()
+        .find_map(|e| match e {
+            WeaponEvent::Impact { position, .. } => Some(position),
+            _ => None,
+        })
+        .expect("Einschlag");
+    let goal = &sim.targets()[target];
+    let h = f29_core::DVec3::new(v.x, v.y, 0.0).normalize_or_zero();
+    let along_miss = f29_core::DVec3::new(goal.north - impact.x, goal.east - impact.y, 0.0).dot(h);
+    assert!(along_miss.abs() < 20.0, "längs {along_miss:.1} m daneben");
+}
+
+/// Zielhilfe warnt im Tiefflug vor dem eigenen Splitterbereich – mit der
+/// Snakeye nicht.
+#[test]
+fn bomb_aim_warns_too_low_except_with_the_snakeye() {
+    let probe = Sim::new(SimConfig::new(SEED));
+    let water =
+        |n: f64, e: f64| (0..=12).all(|k| probe.terrain().elevation(n + f64::from(k) * 250.0, e) <= 1.0);
+    let start = (-40..=40)
+        .flat_map(|i| (-40..=40).map(move |j| (f64::from(i) * 2_000.0, f64::from(j) * 2_000.0)))
+        .find(|&(n, e)| water(n, e))
+        .expect("offene See");
+    let too_low = |bay_shift: bool| {
+        let mut sim = Sim::new(SimConfig {
+            seed: SEED,
+            spawn: Spawn {
+                north: start.0,
+                east: start.1,
+                altitude: 70.0,
+                min_clearance: 0.0,
+                heading: 0.0,
+                speed: 200.0,
+                throttle: 0.8,
+                ..Spawn::default()
+            },
+        });
+        step(&mut sim, if bay_shift { weapon_flags::NEXT_BAY } else { 0 });
+        for _ in 0..12 {
+            step(&mut sim, 0);
+        }
+        sim.flight_data().bomb_aim.expect("Zielhilfe").too_low
+    };
+    assert!(too_low(false), "Mk 82 im Tiefflug ohne Warnung");
+    assert!(!too_low(true), "Snakeye mit Warnung");
+}

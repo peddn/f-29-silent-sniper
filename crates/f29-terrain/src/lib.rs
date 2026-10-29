@@ -176,6 +176,13 @@ impl Terrain {
         base + mountains + hills
     }
 
+    /// Obere Schranke der Geländehöhe (m): Rauschfunktionen liegen in −1..1.
+    /// Darüber muss niemand das Gelände abfragen (z. B. Bombenvorhersage).
+    pub fn max_elevation(&self) -> f64 {
+        let p = &self.params;
+        p.continent_amplitude.abs() + p.base_height + p.mountain_height.abs() + p.hill_amplitude.abs() + 50.0
+    }
+
     /// Kollisionshöhe: Boden oder Wasseroberfläche, je nachdem was höher ist.
     pub fn elevation(&self, x: f64, y: f64) -> f64 {
         self.ground_height(x, y).max(SEA_LEVEL_M)
@@ -261,6 +268,21 @@ impl Terrain {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn max_elevation_bounds_the_terrain() {
+        for seed in [1, 42, 0x0F29, 9_999] {
+            let t = Terrain::new(seed);
+            let bound = t.max_elevation();
+            let mut highest = f64::MIN;
+            for i in -150..=150 {
+                for j in -150..=150 {
+                    highest = highest.max(t.elevation(f64::from(i) * 700.0, f64::from(j) * 700.0));
+                }
+            }
+            assert!(highest < bound, "Seed {seed}: {highest:.0} m über Schranke {bound:.0} m");
+        }
+    }
 
     #[test]
     fn same_seed_same_terrain() {

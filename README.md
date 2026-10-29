@@ -185,7 +185,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Wrack, zerstörte Ziele verschwinden von der Karte; gewählte Waffe unten
       links im HUD; Maverick nur mit optischer Aufschaltung, ohne Aufschaltung
       geradeaus in Abschusslage (v0.2.5)
-- [ ] Zielhilfe im HUD: Aufschlagpunkt, Auslöseklammer, Warnung „zu tief“ (v0.2.6)
+- [x] Zielhilfe für Bomben im HUD: Aufschlagpunkt mit Fall-Linie, Auslöseklammer
+      mit Längs- und Querablage, „RELEASE“, Warnung „TOO LOW“ (v0.2.6)
 - [ ] Bordkanone als eigenes Waffensystem (v0.2.7)
 - [ ] Bodenziele und Boden-Luft-Bedrohungen (Radar-SAM, Flak)
 - [ ] Radar-/Detektionsmodell: aspektabhängiger Radarquerschnitt, Geländemaskierung,
