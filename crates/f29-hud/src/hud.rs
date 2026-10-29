@@ -34,6 +34,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout)
     boresight(dl, c, vh);
     flight_path_marker(dl, fd, layout, &glass, vh);
     steerpoint_marker(dl, fd, layout, &glass, vh);
+    target_marker(dl, fd, layout, &glass, vh);
     heading_tape(dl, fd, &glass);
     bank_scale(dl, fd, &glass);
     left_data(dl, fd, &glass);
@@ -140,7 +141,6 @@ fn steerpoint_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayou
         return;
     };
     let s = vh * 0.014;
-    let c = glass.center();
     match layout.project_body(sp.direction_body.to_array()) {
         Some(p) if glass.contains(p) => {
             dl.polyline(
@@ -150,31 +150,66 @@ fn steerpoint_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayou
             );
         }
         _ => {
-            // Pfeil am Rand in Richtung des Punktes (Projektion auf die Bildebene).
-            let d = sp.direction_body;
-            let dir = [d.y as f32, -d.z as f32];
-            let len = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
-            if len < 1e-6 {
-                return;
+            edge_arrow(dl, sp.direction_body, glass, s, Ink::Hud);
+        }
+    }
+}
+
+/// Pfeil am Glasrand in Richtung `d` (Körperachsen, Projektion auf die
+/// Bildebene); liefert die Pfeilspitze.
+fn edge_arrow(dl: &mut DisplayList, d: f29_core::DVec3, glass: &Rect, s: f32, ink: Ink) -> Option<[f32; 2]> {
+    let c = glass.center();
+    let dir = [d.y as f32, -d.z as f32];
+    let len = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
+    if len < 1e-6 {
+        return None;
+    }
+    let u = [dir[0] / len, dir[1] / len];
+    let half = [(glass.max[0] - glass.min[0]) * 0.5 - s * 2.0, (glass.max[1] - glass.min[1]) * 0.5 - s * 2.0];
+    let k = (half[0] / u[0].abs().max(1e-6)).min(half[1] / u[1].abs().max(1e-6));
+    let tip = [c[0] + u[0] * k, c[1] + u[1] * k];
+    let n = [-u[1], u[0]];
+    let back = [tip[0] - u[0] * s * 1.6, tip[1] - u[1] * s * 1.6];
+    dl.polyline(
+        &[
+            [back[0] + n[0] * s * 0.8, back[1] + n[1] * s * 0.8],
+            tip,
+            [back[0] - n[0] * s * 0.8, back[1] - n[1] * s * 0.8],
+        ],
+        false,
+        ink,
+    );
+    Some(tip)
+}
+
+/// Zielrahmen um das aufgeschaltete Ziel (M-013) bzw. Pfeil am Glasrand.
+/// Zivile Ziele sind durchgekreuzt.
+fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
+    let Some(t) = &fd.target else {
+        return;
+    };
+    let s = vh * 0.02;
+    let ink = if t.civilian { Ink::HudDim } else { Ink::Hud };
+    match layout.project_body(t.direction_body.to_array()) {
+        Some(p) if glass.contains(p) => {
+            let r = Rect::from_center(p, [s, s]);
+            dl.rect(r, ink);
+            if t.civilian {
+                dl.line(r.min, r.max, ink);
+                dl.line([r.min[0], r.max[1]], [r.max[0], r.min[1]], ink);
             }
-            let u = [dir[0] / len, dir[1] / len];
-            let half = [
-                (glass.max[0] - glass.min[0]) * 0.5 - s * 2.0,
-                (glass.max[1] - glass.min[1]) * 0.5 - s * 2.0,
-            ];
-            let k = (half[0] / u[0].abs().max(1e-6)).min(half[1] / u[1].abs().max(1e-6));
-            let tip = [c[0] + u[0] * k, c[1] + u[1] * k];
-            let n = [-u[1], u[0]];
-            let back = [tip[0] - u[0] * s * 1.6, tip[1] - u[1] * s * 1.6];
-            dl.polyline(
-                &[
-                    [back[0] + n[0] * s * 0.8, back[1] + n[1] * s * 0.8],
-                    tip,
-                    [back[0] - n[0] * s * 0.8, back[1] - n[1] * s * 0.8],
-                ],
-                false,
-                Ink::Hud,
-            );
+            let sys = if t.optical { "OPT" } else { "RDR" };
+            dl.text_mid([p[0], p[1] - s * 2.0], TXT_SMALL * 0.8, Align::Center, sys, ink);
+        }
+        _ => {
+            if let Some(tip) = edge_arrow(dl, t.direction_body, glass, s * 0.8, ink) {
+                let c = glass.center();
+                let back = [
+                    tip[0] + (c[0] - tip[0]).signum() * s * 2.4,
+                    tip[1] + (c[1] - tip[1]).signum() * s * 1.6,
+                ];
+                dl.text_mid(back, TXT_SMALL * 0.8, Align::Center, "TGT", ink);
+            }
         }
     }
 }
@@ -312,6 +347,16 @@ fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
         let txt = format!("{} {:.1}", sp.name, nm);
         dl.text_mid([x, glass.min[1] + 0.03], TXT_SMALL, Align::Right, &txt, Ink::Hud);
     }
+    // Zielerfassung: Radar an, Blickrichtung, aufgeschaltetes Ziel
+    let mut sensor = String::new();
+    if fd.radar_on {
+        sensor.push_str("RDR ");
+    }
+    sensor.push_str(fd.look.label());
+    if let Some(t) = &fd.target {
+        sensor = format!("{sensor} {:.1}", units::m_to_nm(t.range));
+    }
+    dl.text_mid([x, glass.min[1] + 0.055], TXT_SMALL, Align::Right, &sensor, Ink::Hud);
 }
 
 /// Warnungen in der unteren Glasmitte; blinken mit 2 Hz.

@@ -2,7 +2,7 @@
 //!
 //! Links: Karte (Gitter oder Satellitenbild, Flugrichtung oben, stufenweise
 //! zoombar). Rechts: Seiten mit Systeminformationen, umschaltbar: Mission,
-//! Waffen, Triebwerk mit Treibstoff, Reserve-Horizont und Systeme (siehe
+//! Ziel (optisches Zielbild), Waffen, Triebwerk mit Treibstoff, Reserve-Horizont und Systeme (siehe
 //! `pages`). Dazwischen ein senkrechter Balken, der für die
 //! Stealth- und Radarimpuls-Anzeige reserviert ist.
 
@@ -10,6 +10,7 @@ use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::map::{MapData, MapProjection};
 use crate::{ScreenLayout, heading_deg};
 use f29_core::FlightData;
+use f29_core::targets::{TargetClass, TargetRole};
 use f29_core::terrain::AirfieldKind;
 use f29_core::units;
 
@@ -34,6 +35,8 @@ pub enum RightPage {
     /// Mission: Ziele, Route, Heimweg.
     #[default]
     Mission,
+    /// Aufgeschaltetes Ziel mit optischem Zielbild.
+    Target,
     /// Waffenschächte und gewählte Waffe.
     Weapons,
     /// Drehzahl, Schub, Verbrauch, Treibstoff.
@@ -46,13 +49,20 @@ pub enum RightPage {
 
 impl RightPage {
     /// Alle Seiten in Umschaltreihenfolge.
-    pub const ALL: [RightPage; 5] =
-        [RightPage::Mission, RightPage::Weapons, RightPage::Engine, RightPage::Attitude, RightPage::Systems];
+    pub const ALL: [RightPage; 6] = [
+        RightPage::Mission,
+        RightPage::Target,
+        RightPage::Weapons,
+        RightPage::Engine,
+        RightPage::Attitude,
+        RightPage::Systems,
+    ];
 
     /// Kurzname in der Seitenleiste.
     pub fn label(self) -> &'static str {
         match self {
             RightPage::Mission => "MSN",
+            RightPage::Target => "TGT",
             RightPage::Weapons => "WPN",
             RightPage::Engine => "ENG",
             RightPage::Attitude => "ADI",
@@ -198,6 +208,7 @@ pub(crate) fn draw(
     let rs = m.right_screen;
     match state.right_page {
         RightPage::Mission => crate::pages::mission(dl, fd, rs, map),
+        RightPage::Target => crate::pages::target(dl, fd, rs),
         RightPage::Weapons => crate::pages::weapons(dl, fd, rs, state.selected_bay),
         RightPage::Engine => crate::pages::engine(dl, fd, rs),
         RightPage::Attitude => crate::pages::attitude(dl, fd, rs),
@@ -291,6 +302,35 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                 let pc = proj.to_screen(rw.center);
                 dl.text_mid([pc[0] + txt * 0.8, pc[1] - txt * 1.4], txt * 0.8, Align::Left, rw.name, ink);
             }
+            // Ziele
+            let locked = fd.target.as_ref().map(|t| t.index);
+            for (k, t) in map.targets.iter().enumerate() {
+                if !near(t.pos) {
+                    continue;
+                }
+                let p = proj.to_screen(t.pos);
+                let ink = if t.civilian { Ink::MfdDim } else { Ink::Warning };
+                let s = txt * 0.55;
+                target_symbol(dl, p, s, t.class, ink);
+                let tag = match t.role {
+                    TargetRole::Primary => Some("P"),
+                    TargetRole::Secondary => Some("S"),
+                    TargetRole::None => None,
+                };
+                if let Some(tag) = tag {
+                    dl.circle(p, s * 2.2, 10, Ink::Warning);
+                    dl.text_mid([p[0] + s * 2.6, p[1] + s * 1.6], txt * 0.75, Align::Left, tag, Ink::Warning);
+                }
+                if Some(k) == locked {
+                    let b = s * 1.8;
+                    let c = b * 0.45;
+                    for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                        let corner = [p[0] + sx * b, p[1] + sy * b];
+                        dl.line(corner, [corner[0] - sx * c, corner[1]], Ink::Hud);
+                        dl.line(corner, [corner[0], corner[1] - sy * c], Ink::Hud);
+                    }
+                }
+            }
             // Route
             let active = fd.steerpoint.as_ref().map(|s| s.index);
             let mut prev: Option<[f32; 2]> = None;
@@ -378,6 +418,63 @@ pub(crate) fn fuel_bar(dl: &mut DisplayList, fd: &FlightData, bar: Rect, txt: f3
     dl.text_mid([bar.min[0], label_y], txt, Align::Left, &format!("FUEL {lb} LB"), label_ink);
     let min = (fd.endurance_s / 60.0).floor() as i64;
     dl.text_mid([bar.max[0], label_y], txt, Align::Right, &format!("{min} MIN"), label_ink);
+}
+
+/// Kartensymbol einer Zielklasse um `p` mit Größe `s`.
+pub(crate) fn target_symbol(dl: &mut DisplayList, p: [f32; 2], s: f32, class: TargetClass, ink: Ink) {
+    let [x, y] = p;
+    match class {
+        TargetClass::Soft => dl.circle(p, s * 0.6, 6, ink),
+        TargetClass::Armored => dl.rect(Rect::from_center(p, [s * 0.7, s * 0.5]), ink),
+        TargetClass::Building => dl.polyline(
+            &[
+                [x - s * 0.7, y - s * 0.6],
+                [x + s * 0.7, y - s * 0.6],
+                [x + s * 0.7, y + s * 0.2],
+                [x, y + s * 0.8],
+                [x - s * 0.7, y + s * 0.2],
+            ],
+            true,
+            ink,
+        ),
+        TargetClass::Hardened => {
+            dl.arc([x, y - s * 0.5], s * 0.8, 0.0, std::f32::consts::PI, 6, ink);
+            dl.line([x - s * 0.8, y - s * 0.5], [x + s * 0.8, y - s * 0.5], ink);
+        }
+        TargetClass::AirDefense => {
+            dl.polyline(
+                &[[x - s * 0.8, y - s * 0.6], [x + s * 0.8, y - s * 0.6], [x, y + s * 0.8]],
+                true,
+                ink,
+            );
+            dl.line([x, y - s * 0.6], [x, y + s * 1.3], ink);
+        }
+        TargetClass::Bridge => {
+            dl.line([x - s, y - s * 0.3], [x + s, y - s * 0.3], ink);
+            dl.line([x - s, y + s * 0.3], [x + s, y + s * 0.3], ink);
+        }
+        TargetClass::ParkedAircraft => {
+            dl.line([x - s * 0.9, y + s * 0.1], [x + s * 0.9, y + s * 0.1], ink);
+            dl.line([x, y - s * 0.8], [x, y + s * 0.8], ink);
+            dl.line([x - s * 0.35, y - s * 0.7], [x + s * 0.35, y - s * 0.7], ink);
+        }
+        TargetClass::ShipSmall | TargetClass::ShipLarge => {
+            let w = if class == TargetClass::ShipLarge { s * 1.1 } else { s * 0.7 };
+            dl.polyline(
+                &[
+                    [x - w, y + s * 0.2],
+                    [x + w, y + s * 0.2],
+                    [x + w * 0.6, y - s * 0.4],
+                    [x - w * 0.6, y - s * 0.4],
+                ],
+                true,
+                ink,
+            );
+            if class == TargetClass::ShipLarge {
+                dl.line([x - w * 0.2, y + s * 0.2], [x - w * 0.2, y + s * 0.7], ink);
+            }
+        }
+    }
 }
 
 /// Platzhalter für die Stealth- und Radarimpuls-Anzeige (kommt mit v0.2).

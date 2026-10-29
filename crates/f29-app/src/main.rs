@@ -21,6 +21,7 @@ mod mfd;
 mod retro;
 mod sim;
 mod sound;
+mod targets;
 mod terrain;
 mod view;
 
@@ -76,6 +77,7 @@ fn main() {
     app.add_plugins((
         sim::SimPlugin { config },
         airfield::AirfieldPlugin,
+        targets::TargetsPlugin,
         input::InputPlugin,
         view::ViewPlugin,
         terrain::TerrainPlugin,

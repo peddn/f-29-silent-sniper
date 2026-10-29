@@ -15,6 +15,12 @@ pub mod flags {
     pub const FLAPS: u8 = 1 << 2;
     /// Fahrwerk ausgefahren (gehalten).
     pub const GEAR: u8 = 1 << 3;
+    /// Radar ein/aus umschalten (Flanke).
+    pub const RADAR_TOGGLE: u8 = 1 << 4;
+    /// Bits 5–7: Blickrichtung der Zielerfassung wählen (Flanke, Kennung
+    /// `sensors::LookDir::code`, 0 = keine Änderung).
+    pub const LOOK_SHIFT: u8 = 5;
+    pub const LOOK_MASK: u8 = 0b111 << LOOK_SHIFT;
 }
 
 /// Ein Tick Steuereingabe, quantisiert.
@@ -75,6 +81,16 @@ impl ControlFrame {
 
     pub fn has(&self, flag: u8) -> bool {
         self.flags & flag != 0
+    }
+
+    /// Gewählte Blickrichtung der Zielerfassung (Kennung 1..4, 0 = keine).
+    pub fn look_code(&self) -> u8 {
+        (self.flags & flags::LOOK_MASK) >> flags::LOOK_SHIFT
+    }
+
+    /// Flag-Bits für eine Blickrichtungs-Kennung.
+    pub fn look_flags(code: u8) -> u8 {
+        (code << flags::LOOK_SHIFT) & flags::LOOK_MASK
     }
 }
 

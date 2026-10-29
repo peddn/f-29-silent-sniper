@@ -1,10 +1,11 @@
-//! Kartendaten für das linke MFD: Höhenlinien, Route, Flugplätze.
+//! Kartendaten für das linke MFD: Höhenlinien, Route, Flugplätze, Ziele.
 //!
 //! Die Daten liegen in Weltkoordinaten (Nord, Ost) und werden einmal pro
 //! Seed erzeugt. Beim Zeichnen werden sie kursbezogen („Flugrichtung oben“)
 //! um das Flugzeug gedreht und auf den Bildschirm des MFDs abgebildet.
 
 use f29_core::nav::Steerpoint;
+use f29_core::targets::{Target, TargetClass, TargetRole};
 use f29_core::terrain::{AirfieldKind, HeightGrid, Terrain};
 
 /// Halbe Kantenlänge des Kartengebiets um die Heimatbasis (m).
@@ -46,24 +47,35 @@ pub struct MapPoint {
     pub pos: [f64; 2],
 }
 
+/// Ein Bodenziel auf der Karte (Index wie in `Sim::targets`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct MapTarget {
+    pub name: &'static str,
+    pub class: TargetClass,
+    pub role: TargetRole,
+    pub civilian: bool,
+    pub pos: [f64; 2],
+}
+
 /// Alles, was die Karte zeichnet, außer dem Flugzeug selbst.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MapData {
     pub contours: Vec<ContourSegment>,
     pub runways: Vec<MapRunway>,
     pub route: Vec<MapPoint>,
+    pub targets: Vec<MapTarget>,
 }
 
 impl MapData {
     /// Kartendaten für das Standard-Kartengebiet (dauert einige Zehntelsekunden).
-    pub fn for_terrain(terrain: &Terrain, route: &[Steerpoint]) -> Self {
+    pub fn for_terrain(terrain: &Terrain, route: &[Steerpoint], targets: &[Target]) -> Self {
         let grid = terrain.height_grid(map_center(terrain), MAP_HALF_EXTENT_M, CONTOUR_GRID_N);
-        Self::build(terrain, &grid, route)
+        Self::build(terrain, &grid, route, targets)
     }
 
     /// Baut die Kartendaten aus einem Höhenraster (für die Höhenlinien) sowie
-    /// den Flugplätzen des Geländes und der Route.
-    pub fn build(terrain: &Terrain, grid: &HeightGrid, route: &[Steerpoint]) -> Self {
+    /// den Flugplätzen des Geländes, der Route und den Zielen.
+    pub fn build(terrain: &Terrain, grid: &HeightGrid, route: &[Steerpoint], targets: &[Target]) -> Self {
         let runways = terrain
             .runways()
             .iter()
@@ -79,7 +91,17 @@ impl MapData {
             .collect();
         let route =
             route.iter().map(|sp| MapPoint { name: sp.name.clone(), pos: [sp.north, sp.east] }).collect();
-        Self { contours: contours(grid), runways, route }
+        let targets = targets
+            .iter()
+            .map(|t| MapTarget {
+                name: t.name,
+                class: t.class,
+                role: t.role,
+                civilian: t.civilian,
+                pos: [t.north, t.east],
+            })
+            .collect();
+        Self { contours: contours(grid), runways, route, targets }
     }
 }
 

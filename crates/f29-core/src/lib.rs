@@ -21,12 +21,16 @@ pub mod math;
 pub mod nav;
 pub mod replay;
 pub mod rng;
+pub mod sensors;
 pub mod sim;
+pub mod targets;
 pub mod units;
 
 pub use controls::ControlFrame;
 pub use math::{DQuat, DVec3};
-pub use sim::{CrashCause, DT, FlightData, Sim, SimConfig, SpawnKind, Status, TICK_HZ, Touchdown};
+pub use sim::{
+    CrashCause, DT, FlightData, Sim, SimConfig, SpawnKind, Status, TICK_HZ, TargetInfo, Touchdown,
+};
 
 pub use f29_data as data;
 pub use f29_terrain as terrain;

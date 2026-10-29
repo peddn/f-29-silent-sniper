@@ -6,6 +6,8 @@ use crate::flight::{self, AeroData, AircraftState};
 use crate::math::DVec3;
 use crate::nav::{self, Steerpoint};
 use crate::rng::Pcg32;
+use crate::sensors::{self, LookDir, Sensors};
+use crate::targets::{self, Target, TargetClass, TargetRole};
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_terrain::{AirfieldKind, Terrain};
 
@@ -189,6 +191,32 @@ pub struct Warnings {
     pub gear_up: bool,
 }
 
+/// Das aufgeschaltete Ziel (M-013).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TargetInfo {
+    /// Index in [`Sim::targets`].
+    pub index: usize,
+    pub name: &'static str,
+    pub class: TargetClass,
+    /// Zivil oder befreundet: nicht angreifen.
+    pub civilian: bool,
+    pub role: TargetRole,
+    /// Optisch erfasst: Zielbild verfügbar.
+    pub optical: bool,
+    /// Vom Radar erfasst.
+    pub radar: bool,
+    /// Schrägentfernung zur Zielmitte (m).
+    pub range: f64,
+    /// Peilung (rechtweisend, rad, 0..2π).
+    pub bearing: f64,
+    /// Richtung zur Zielmitte in Körperachsen, normiert.
+    pub direction_body: DVec3,
+    /// Vektor vom Flugzeug zum Zielfußpunkt (NED, m) – für das Zielbild.
+    pub offset_ned: DVec3,
+    /// Ausrichtung des Ziels (rad, 0 = Nord).
+    pub heading: f64,
+}
+
 /// Informationen zum aktiven Navigationspunkt.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SteerpointInfo {
@@ -264,6 +292,12 @@ pub struct FlightData {
     /// 1-g-Abrissfahrt bei aktueller Masse, Höhe und Klappenstellung, m/s.
     pub stall_speed_mps: f64,
     pub steerpoint: Option<SteerpointInfo>,
+    /// Radar eingeschaltet.
+    pub radar_on: bool,
+    /// Blickrichtung der Zielerfassung.
+    pub look: LookDir,
+    /// Aufgeschaltetes Ziel.
+    pub target: Option<TargetInfo>,
     pub warnings: Warnings,
 }
 
@@ -284,6 +318,8 @@ pub struct Sim {
     /// Geglättete Turbulenz-Störraten (p, q, r) in rad/s.
     gust: DVec3,
     touchdown: Option<Touchdown>,
+    targets: Vec<Target>,
+    sensors: Sensors,
 }
 
 impl Sim {
@@ -330,6 +366,9 @@ impl Sim {
             - spec.gear_height_m)
             .max(0.0);
         let route = build_route(&terrain, config.seed, sp);
+        let targets = targets::generate(&terrain, seed, &route);
+        let mut sensors = Sensors::default();
+        sensors.update(&targets, &terrain, aircraft.position, aircraft.attitude.to_euler().0);
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
         Self {
@@ -346,6 +385,8 @@ impl Sim {
             turbulence_rng: Pcg32::new(seed, STREAM_TURBULENCE),
             gust: DVec3::ZERO,
             touchdown: None,
+            targets,
+            sensors,
         }
     }
 
@@ -359,6 +400,7 @@ impl Sim {
         if self.status != Status::Flying {
             return;
         }
+        self.update_sensors(&controls);
         self.update_turbulence();
         self.update_height_agl();
         if self.aircraft.on_ground {
@@ -369,6 +411,25 @@ impl Sim {
         }
         self.update_height_agl();
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
+    }
+
+    /// Bedienung der Zielerfassung und Aufschalten (M-013).
+    fn update_sensors(&mut self, controls: &ControlFrame) {
+        let mut changed = false;
+        if controls.has(flags::RADAR_TOGGLE) {
+            self.sensors.radar_on = !self.sensors.radar_on;
+            changed = true;
+        }
+        if let Some(look) = LookDir::from_code(controls.look_code())
+            && look != self.sensors.look
+        {
+            self.sensors.look = look;
+            changed = true;
+        }
+        if changed || self.tick.is_multiple_of(sensors::UPDATE_TICKS) {
+            let heading = self.aircraft.attitude.to_euler().0;
+            self.sensors.update(&self.targets, &self.terrain, self.aircraft.position, heading);
+        }
     }
 
     fn update_height_agl(&mut self) {
@@ -532,6 +593,16 @@ impl Sim {
         self.active_steerpoint
     }
 
+    /// Bodenziele (M-010).
+    pub fn targets(&self) -> &[Target] {
+        &self.targets
+    }
+
+    /// Zielerfassung (M-013).
+    pub fn sensors(&self) -> &Sensors {
+        &self.sensors
+    }
+
     /// Anzeige- und Autopilot-Daten für den aktuellen Zustand.
     pub fn flight_data(&self) -> FlightData {
         let a = &self.aircraft;
@@ -546,6 +617,30 @@ impl Sim {
         let crashed = matches!(self.status, Status::Crashed { .. });
         let airborne = !crashed && !a.on_ground;
         let mass = a.mass(&self.spec);
+
+        let target = self.sensors.lock.and_then(|lock| {
+            let t = self.targets.get(lock.target)?;
+            let c = t.center_ned();
+            let to_center = DVec3::new(c[0] - a.position.x, c[1] - a.position.y, c[2] - a.position.z);
+            Some(TargetInfo {
+                index: lock.target,
+                name: t.name,
+                class: t.class,
+                civilian: t.civilian,
+                role: t.role,
+                optical: lock.optical,
+                radar: lock.radar,
+                range: to_center.length(),
+                bearing: detmath::wrap_two_pi(detmath::atan2(to_center.y, to_center.x)),
+                direction_body: a.attitude.inverse_rotate(to_center).normalize_or_zero(),
+                offset_ned: DVec3::new(
+                    t.north - a.position.x,
+                    t.east - a.position.y,
+                    -t.elevation - a.position.z,
+                ),
+                heading: t.heading,
+            })
+        });
 
         let steerpoint = self.route.get(self.active_steerpoint).map(|sp| {
             let dn = sp.north - a.position.x;
@@ -646,6 +741,9 @@ impl Sim {
             qbar_pa: aero.qbar,
             stall_speed_mps: self.spec.stall_speed_1g(mass, aero.density, a.flaps),
             steerpoint,
+            radar_on: self.sensors.radar_on,
+            look: self.sensors.look,
+            target,
             warnings,
         }
     }
@@ -692,6 +790,15 @@ impl Sim {
         h.u64(rs);
         h.u64(ri);
         h.u64(self.active_steerpoint as u64);
+        h.u64(u64::from(self.sensors.radar_on));
+        h.u64(u64::from(self.sensors.look.code()));
+        if let Some(l) = self.sensors.lock {
+            h.u64(l.target as u64);
+            h.u64(u64::from(l.optical) | u64::from(l.radar) << 1);
+        }
+        for t in &self.targets {
+            h.u64(t.state as u64);
+        }
         h.finish()
     }
 }

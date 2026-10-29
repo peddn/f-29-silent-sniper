@@ -12,7 +12,8 @@ jeder Auflösung scharf bleibt.
 
 **Status:** v0.1 abgeschlossen: Freiflug über prozeduralem Gelände mit HUD und zwei
 MFDs, Start und Landung auf der Heimatbasis und geheimen Pisten, Treibstoff, Klang.
-Als Nächstes: v0.2, Angriff und Tarnung.
+v0.2 (Angriff und Tarnung) in Arbeit: Bodenziele und Zielerfassung sind da, Waffen
+folgen.
 
 [![CI](https://github.com/peddn/f-29-silent-sniper/actions/workflows/ci.yml/badge.svg)](https://github.com/peddn/f-29-silent-sniper/actions/workflows/ci.yml)
 
@@ -64,11 +65,13 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | F | X / Quadrat | Klappen ein/aus – bei jeder Fahrt: langsam gut steuerbar, schnell weniger Fahrtverlust in Kurven |
 | G | Y / Dreieck | Fahrwerk aus/ein (am Boden gesperrt) |
 | N | A / Kreuz | nächster Navigationspunkt |
+| V | rechter Stick drücken | Radar ein/aus (schaltet ohne Sichtlinie auf, erhöht später die eigene Sichtbarkeit) |
+| I / L / K / J | Steuerkreuz | Blickrichtung der Zielerfassung: voraus / rechts / hinten / links (schaltet automatisch auf das nächste Ziel) |
 | Shift+F1 / Shift+F2 | Select | Cockpit / Verfolger |
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
 | Shift+F4 | | HUD ein/aus |
 | F3 | | Karte (linkes MFD): Gitter ↔ Satellitenbild |
-| F4 | | Rechtes MFD: nächste Seite (Mission → Waffen → Triebwerk → Horizont → Systeme) |
+| F4 | | Rechtes MFD: nächste Seite (Mission → Ziel → Waffen → Triebwerk → Horizont → Systeme) |
 | Y / X | | Karte näher / weiter (2, 5, 10, 20, 40 NM) |
 | P | Start | Pause |
 | F12 | | Screenshot nach `screenshots/` |
@@ -154,7 +157,11 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Schächte, Platzhalter), Triebwerk mit Treibstoff, Reserve-Horizont,
       Systeme (v0.1.19)
 
-### v0.2: Angriff und Tarnung
+### v0.2: Angriff und Tarnung *(in Arbeit)*
+- [x] Bodenziele in neun eigenen Klassen, alle auf der Karte, Primär- und
+      Sekundärziel; Zielerfassung optisch (mit Sichtlinie) und per Radar
+      (abschaltbar, durch Berge), automatisch auf das nächste Ziel der
+      Blickrichtung; HUD-Zielrahmen und MFD-Seite mit optischem Zielbild (v0.2.1)
 - [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD
 - [ ] Wirkungsmatrix Waffe × Zielklasse, Wirkradius, gehärtete Ziele + Toss-Bombing
 - [ ] Bodenziele und Boden-Luft-Bedrohungen (Radar-SAM, Flak)

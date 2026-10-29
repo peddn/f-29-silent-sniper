@@ -96,8 +96,8 @@ fn load_maps(mut assets: ResMut<MapAssets>, state: Res<SimState>) {
         assets.map = None;
         assets.sat = None;
         let pool = AsyncComputeTaskPool::get();
-        let (t, route) = (terrain.clone(), state.sim.route().to_vec());
-        assets.map_task = Some(pool.spawn(async move { MapData::for_terrain(&t, &route) }));
+        let (t, route, targets) = (terrain.clone(), state.sim.route().to_vec(), state.sim.targets().to_vec());
+        assets.map_task = Some(pool.spawn(async move { MapData::for_terrain(&t, &route, &targets) }));
         let t = terrain.clone();
         assets.sat_task =
             Some(pool.spawn(async move {

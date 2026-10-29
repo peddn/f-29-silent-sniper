@@ -666,12 +666,23 @@ Format jedes Eintrags:
   „wirkungslos“) und bei Bomben den Wirkradius. Auch die Bordkanone hat eine Zeile.
   Die Namen der Klassen stehen in Datendateien, die f19re nicht enthält – unsere
   Klassen sind ohnehin eigene.
-- **Unser Design (Entwurf):** Eigene Zielklassen (z. B. weich, gepanzert, gehärtet,
-  Schiff, Radar/Elektronik, Flugzeug am Boden) und eine eigene Wirkungsmatrix als
-  Datendatei (`data/weapons.ron`). Ein Validierungstest stellt sicher, dass die Matrix
-  vollständig ist.
-- **Unsere Werte:** werden in v0.2 festgelegt und hier begründet.
-- **Status:** geplant (v0.2)
+- **Unser Design:** Neun eigene Zielklassen (`f29_core::targets`): weich (Lastwagen,
+  Depots), gepanzert, Gebäude, gehärtet (Bunker, Schutzbauten), Flugabwehrstellung,
+  Brücke, abgestelltes Flugzeug, kleines und großes Schiff. Radar und Flugabwehr sind
+  wie im Original **ein** Objekt: feste Stellungen mit eigenem Radar und eigenen
+  Raketenwerfern (Spielerentscheidung). Ein Kennzeichen markiert zivile Ziele
+  (Fabrik, Lagerhalle, Fischerboot, Frachter, Tanker), die nicht angegriffen werden
+  sollen; Missionsziele sind nie zivil. Jede Klasse hat eine Form aus wenigen Quadern,
+  aus der das 3D-Modell und das optische Zielbild entstehen.
+  Platzierung pro Seed (eigener RNG-Strom): Primärziel mit Bewachung am zweiten,
+  Sekundärziel am ersten Wegpunkt, fünf Flugabwehrstellungen entlang der Route,
+  Schiffsgruppen vor der Küste, weitere Stellungen verstreut; Landziele nur auf
+  flachem Land, Schiffe nur auf offenem Wasser, Abstand zu Flugplätzen und
+  untereinander. Alle Ziele erscheinen auf der Karte mit einem Symbol je Klasse,
+  Primär- und Sekundärziel markiert (P/S), zivile gedämpft.
+  Die Wirkungsmatrix Waffe × Zielklasse folgt mit den Waffen (Etappe 2).
+- **Unsere Werte:** `crates/f29-core/src/targets.rs`; je Seed etwa 30–50 Ziele.
+- **Status:** Ziele umgesetzt (v0.2.1), Wirkung geplant (Etappe 2)
 
 ### M-011 Einschlagdistanz und Schwierigkeitsfaktor
 
@@ -738,16 +749,31 @@ Format jedes Eintrags:
     fliegt er geradeaus weiter.
   - Waffenarten wechselt eine Taste (Luft-Boden, Luft-Luft, Kanone), die Station eine
     andere; der Schacht muss offen sein, sonst Meldung „Schacht zu“.
-- **Unser Design (v0.2, Spielerwunsch):** Die F-29 hat zwei Erfassungssysteme,
-  **optisch** und **Radar**. Beide arbeiten so einfach wie im Original: Innerhalb
-  ihrer Reichweite lässt sich jedes Ziel aufschalten, auch durch Berge. Das Radar
-  reicht weiter und ist abschaltbar (eingeschaltet erhöht es später die eigene
-  Sichtbarkeit, M-020). Die optische Reichweite ist kürzer. **Abweichung vom
-  Original:** Gelenkte Waffen werden über das Flugzeug geführt. Reißt die Verbindung
-  ab – Ziel außerhalb der Reichweite oder des Sichtfelds des führenden Systems, Radar
-  ausgeschaltet, anderes Ziel aufgeschaltet –, fliegt die Waffe ungelenkt weiter.
-- **Unsere Werte:** werden mit Etappe 1/2 festgelegt.
-- **Status:** geplant (v0.2)
+- **Unser Design (v0.2.1, Spielerentscheidungen):** Die F-29 hat zwei
+  Erfassungssysteme (`f29_core::sensors`):
+  - **Radar:** schaltet ohne Sichtlinie auf, also auch durch Berge; größere
+    Reichweite; abschaltbar (Taste V, beim Start aus). Eingeschaltet erhöht es die
+    eigene Sichtbarkeit (kommt mit M-020).
+  - **Optisch:** braucht freie Sichtlinie (Prüfung gegen das Gelände), hat eine
+    kürzere Reichweite, verrät das Flugzeug aber nicht. Nur ein optisch erfasstes
+    Ziel liefert ein Zielbild.
+  - Das Aufschalten ist **immer automatisch**: das nächste intakte Ziel in einem
+    Kegel um die gewählte Blickrichtung (I voraus, L rechts, K hinten, J links), wie
+    im Original. Zivile Ziele werden mit aufgeschaltet, aber gekennzeichnet.
+  - Anzeige: Zielrahmen im HUD (durchgekreuzt bei zivilen Zielen, Pfeil am Rand
+    außerhalb des Sichtfelds) mit „OPT“ oder „RDR“; Zeile mit Radar, Blickrichtung
+    und Entfernung; neue MFD-Seite TGT mit optischem Zielbild (Drahtgitter, auf das
+    Ziel gezoomt), Name, Klasse, Rolle, Entfernung, Peilung; auf der Karte ist das
+    aufgeschaltete Ziel eingeklammert.
+  - Für Etappe 2 festgelegt: Gelenkte Waffen sind **Fire and Forget** wie im
+    Original – sie tragen ihren eigenen optischen oder Radar-Suchkopf und brauchen
+    nach dem Abschuss keine Verbindung zum Flugzeug. Erste Waffen: Freifallbomben,
+    gelenkte Bomben, Fallschirmbomben (verzögerter Fall) und gelenkte Raketen.
+- **Unsere Werte:** Radar 20 NM, optisch 8 NM, Kegel ±45° um die Blickrichtung,
+  Erfassung 4-mal pro Sekunde (ein Wechsel von Radar oder Blickrichtung wirkt
+  sofort), Sichtlinie in 60-m-Schritten. Reichweiten so gewählt, dass das Radar die
+  Kartenstufe 20 NM füllt und die Optik etwa die Sichtweite bei klarem Wetter trifft.
+- **Status:** Erfassung umgesetzt (v0.2.1)
 
 ### M-020 Radar-/Detektionsmodell (Stealth)
 

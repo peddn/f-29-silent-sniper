@@ -182,7 +182,7 @@ fn map_draws_inside_left_screen_in_all_modes_and_zooms() {
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.55, 0));
     }
     let fd = sim.flight_data();
-    let map = MapData::for_terrain(sim.terrain(), sim.route());
+    let map = MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
     assert!(!map.contours.is_empty() && map.runways.len() >= 2 && map.route.len() >= 3);
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
     let m = layout.mfd_layout().unwrap();

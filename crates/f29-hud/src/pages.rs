@@ -1,4 +1,4 @@
-//! Seiten des rechten MFDs: Mission, Waffen, Triebwerk mit Treibstoff,
+//! Seiten des rechten MFDs: Mission, Ziel, Waffen, Triebwerk mit Treibstoff,
 //! künstlicher Horizont (Reserveinstrument) und Systeme.
 //!
 //! Alle Seiten zeichnen nur in ihre Bildfläche `screen` (das Clipping setzt
@@ -9,8 +9,9 @@ use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::heading_deg;
 use crate::map::MapData;
 use crate::mfd::{RightPage, WEAPON_STATIONS, fuel_bar};
-use f29_core::FlightData;
+use f29_core::targets::TargetRole;
 use f29_core::units;
+use f29_core::{DVec3, FlightData, TargetInfo};
 
 /// Anteil der Bildhöhe, den die Seitenleiste unten belegt.
 pub(crate) const PAGE_BAR: f32 = 0.075;
@@ -165,13 +166,24 @@ pub(crate) fn engine(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
 pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: Option<&MapData>) {
     let f = frame(screen);
     title(dl, screen, &f, "MISSION");
-    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, "FREE FLIGHT", Ink::MfdDim);
+    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, "STRIKE", Ink::MfdDim);
     let step = f.txt * 1.5;
     let mut y = screen.max[1] - f.h * 0.15;
-    row(dl, &f, y, "PRIMARY", "---", Ink::MfdDim);
-    y -= step;
-    row(dl, &f, y, "SECONDARY", "---", Ink::MfdDim);
-    y -= step * 0.9;
+    // Primär- und Sekundärziel mit Entfernung
+    for (role, label) in [(TargetRole::Primary, "PRI"), (TargetRole::Secondary, "SEC")] {
+        let t = map.and_then(|m| m.targets.iter().find(|t| t.role == role));
+        let (name, dist) = match t {
+            Some(t) => {
+                let (dn, de) = (t.pos[0] - fd.position.x, t.pos[1] - fd.position.y);
+                (t.name, format!("{:.1} NM", (dn * dn + de * de).sqrt() / units::M_PER_NM))
+            }
+            None => ("---", String::new()),
+        };
+        dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, &format!("{label} {name}"), Ink::Warning);
+        dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &dist, Ink::Mfd);
+        y -= step;
+    }
+    y += step * 0.1;
     dl.line([f.x0, y], [f.x1, y], Ink::MfdDim);
     y -= step * 0.8;
 
@@ -386,6 +398,128 @@ pub(crate) fn systems(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
             dl.boxed_text([x, yy], f.txt * 0.8, Align::Center, name, Ink::Warning);
         } else {
             dl.text_mid([x, yy], f.txt * 0.8, Align::Center, name, Ink::MfdDim);
+        }
+    }
+}
+
+/// Ziel: optisches Zielbild (Drahtgitter) des aufgeschalteten Ziels, sonst
+/// Radarmarke oder „NO TARGET“; darunter Name, Klasse, Entfernung, Peilung.
+pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
+    let f = frame(screen);
+    title(dl, screen, &f, "TARGET");
+    let status = match &fd.target {
+        Some(t) if t.optical && t.radar => "OPT RDR",
+        Some(t) if t.optical => "OPT",
+        Some(_) => "RDR",
+        None => "NO LOCK",
+    };
+    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, status, Ink::Mfd);
+
+    // Bildfeld
+    let img = Rect { min: [f.x0, screen.max[1] - f.h * 0.53], max: [f.x1, screen.max[1] - f.h * 0.11] };
+    dl.rect(img, Ink::MfdDim);
+    let c = img.center();
+    let half = (img.max[1] - img.min[1]) * 0.5;
+    let tick = half * 0.12;
+    for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+        let a = [c[0] + dx * half * 0.85, c[1] + dy * half * 0.85];
+        dl.line(a, [a[0] - dx * tick, a[1] - dy * tick], Ink::MfdDim);
+    }
+    match &fd.target {
+        Some(t) if t.optical => {
+            dl.set_clip(Some(img));
+            target_image(dl, t, c, half);
+            dl.set_clip(Some(screen));
+        }
+        Some(_) => {
+            dl.rect(Rect::from_center(c, [half * 0.05, half * 0.05]), Ink::Mfd);
+            dl.text_mid([c[0], c[1] - half * 0.3], f.txt * 0.85, Align::Center, "NO VISUAL", Ink::MfdDim);
+        }
+        None => {
+            dl.text_mid(c, f.txt, Align::Center, "NO TARGET", Ink::MfdDim);
+        }
+    }
+
+    // Angaben
+    let step = f.txt * 1.35;
+    let mut y = img.min[1] - step * 0.9;
+    if let Some(t) = &fd.target {
+        let name_ink = if t.civilian { Ink::Warning } else { Ink::Mfd };
+        dl.text_mid([f.x0, y], f.txt, Align::Left, t.name, name_ink);
+        let role = match t.role {
+            TargetRole::Primary => "PRIMARY",
+            TargetRole::Secondary => "SECONDARY",
+            TargetRole::None => "",
+        };
+        dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, role, Ink::Warning);
+        y -= step;
+        if t.civilian {
+            dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, "CIVILIAN - DO NOT ATTACK", Ink::Warning);
+        } else {
+            row(dl, &f, y, "CLASS", t.class.label(), Ink::Mfd);
+        }
+        y -= step;
+        row(dl, &f, y, "RANGE", &format!("{:.1} NM", units::m_to_nm(t.range)), Ink::Mfd);
+        y -= step;
+        row(dl, &f, y, "BEARING", &format!("{:03}", heading_deg(t.bearing)), Ink::Mfd);
+        y -= step;
+    } else {
+        y -= step * 4.0;
+    }
+    let radar = if fd.radar_on { "ON" } else { "OFF" };
+    let ink = if fd.radar_on { Ink::Warning } else { Ink::MfdDim };
+    row(dl, &f, y, &format!("LOOK {}", fd.look.label()), &format!("RADAR {radar}"), ink);
+}
+
+/// Drahtgitterbild des Ziels aus Sicht des Flugzeugs, so gezoomt, dass das
+/// Ziel gut die Hälfte des Bildfelds füllt; dazu ein Bodengitter.
+fn target_image(dl: &mut DisplayList, t: &TargetInfo, c: [f32; 2], half: f32) {
+    let foot = t.offset_ned;
+    let height = t.class.height();
+    let center = foot + DVec3::new(0.0, 0.0, -height * 0.5);
+    let range = center.length().max(1.0);
+    let fwd = center / range;
+    let right = fwd.cross(DVec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
+    let right = if right == DVec3::ZERO { DVec3::Y } else { right };
+    let up = right.cross(fwd);
+    let radius = t.class.radius().max(height);
+    let zoom = f64::from(half) * 0.8 * range / radius;
+    let (sh, ch) = (t.heading.sin(), t.heading.cos());
+    // Zielachsen (vorn, rechts, oben) → NED relativ zum Flugzeug
+    let to_ned = |p: [f64; 3]| foot + DVec3::new(p[0] * ch - p[1] * sh, p[0] * sh + p[1] * ch, -p[2]);
+    let project = |v: DVec3| -> Option<[f32; 2]> {
+        let z = v.dot(fwd);
+        (z > 1.0).then(|| [c[0] + (v.dot(right) / z * zoom) as f32, c[1] + (v.dot(up) / z * zoom) as f32])
+    };
+    let seg = |dl: &mut DisplayList, a: [f64; 3], b: [f64; 3], ink: Ink| {
+        if let (Some(pa), Some(pb)) = (project(to_ned(a)), project(to_ned(b))) {
+            dl.line(pa, pb, ink);
+        }
+    };
+    // Bodengitter
+    let g = radius * 1.5;
+    for k in -2..=2 {
+        let o = g * f64::from(k) / 2.0;
+        seg(dl, [o, -g, 0.0], [o, g, 0.0], Ink::MfdGrid);
+        seg(dl, [-g, o, 0.0], [g, o, 0.0], Ink::MfdGrid);
+    }
+    // Quader
+    for b in t.class.shape() {
+        let [cx, cy, cz] = b.center.map(f64::from);
+        let [hx, hy, hz] = b.half.map(f64::from);
+        let corner = |i: usize| {
+            [
+                cx + if i & 1 != 0 { hx } else { -hx },
+                cy + if i & 2 != 0 { hy } else { -hy },
+                cz + if i & 4 != 0 { hz } else { -hz },
+            ]
+        };
+        for i in 0..8 {
+            for bit in [1, 2, 4] {
+                if i & bit == 0 {
+                    seg(dl, corner(i), corner(i | bit), Ink::Mfd);
+                }
+            }
         }
     }
 }

@@ -3,7 +3,7 @@
 //! ```text
 //! f29-headless demo     [--seed N] [--seconds S] [--record DATEI]
 //! f29-headless replay   DATEI
-//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--out DATEI]
+//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N]
 //! f29-headless sound    [--out VERZEICHNIS]
@@ -27,9 +27,10 @@ f29-headless – F-29 Silent Sniper ohne Grafik
 Befehle:
   demo     [--seed N] [--seconds S] [--record DATEI]   Autopilot fliegt die Route ab
   replay   DATEI                                       Replay abspielen und Hash prüfen
-  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--out DATEI]
+  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--out DATEI]
                                                        HUD nach S Sekunden Demo als SVG
-                                                       (SEITE des rechten MFDs: msn, wpn, eng, adi, sys)
+                                                       (SEITE des rechten MFDs: msn, tgt, wpn, eng, adi, sys;
+                                                       --radar 1 schaltet am Ende das Radar ein)
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N]                                 Flugplätze und Route auflisten
@@ -246,9 +247,13 @@ fn hud_svg(args: &Args) -> Result<(), String> {
     let right_page = f29_hud::RightPage::ALL
         .into_iter()
         .find(|p| p.label().eq_ignore_ascii_case(page))
-        .ok_or_else(|| format!("unbekannte Seite {page} (msn, wpn, eng, adi, sys)"))?;
-    let sim = run_demo(seed, seconds, |_, _| {});
-    let map = f29_hud::MapData::for_terrain(sim.terrain(), sim.route());
+        .ok_or_else(|| format!("unbekannte Seite {page} (msn, tgt, wpn, eng, adi, sys)"))?;
+    let mut last = f29_core::ControlFrame::default();
+    let mut sim = run_demo(seed, seconds, |_, c| last = c);
+    if args.get("radar", 0_u8)? != 0 {
+        sim.step(f29_core::ControlFrame { flags: last.flags | flags::RADAR_TOGGLE, ..last });
+    }
+    let map = f29_hud::MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
     let layout = ScreenLayout::cockpit(aspect);
     let mut opts = HudOptions::default();
     opts.mfd.right_page = right_page;

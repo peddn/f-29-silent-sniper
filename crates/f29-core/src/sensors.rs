@@ -1,0 +1,186 @@
+//! Zielerfassung (M-013): optisches System und Radar.
+//!
+//! Beide schalten automatisch auf das **nächste** intakte Ziel in einem
+//! Kegel um die gewählte Blickrichtung auf (voraus, rechts, hinten, links).
+//! - **Radar:** große Reichweite, ohne Sichtlinie – es „sieht“ durch Berge.
+//!   Abschaltbar; eingeschaltet erhöht es später die eigene Sichtbarkeit
+//!   (M-020).
+//! - **Optisch:** kürzere Reichweite und nur mit freier Sichtlinie, verrät
+//!   das Flugzeug aber nicht. Nur ein optisch erfasstes Ziel liefert ein Bild.
+//!
+//! Die Erfassung läuft mit [`UPDATE_TICKS`] (nicht jeden Tick), damit die
+//! Sichtlinienprüfung gegen das Gelände wenig kostet; ein Wechsel der
+//! Blickrichtung oder des Radars wirkt sofort.
+
+use crate::detmath;
+use crate::math::DVec3;
+use crate::targets::Target;
+use f29_terrain::Terrain;
+
+/// Reichweite des Radars (m, 20 NM).
+pub const RADAR_RANGE_M: f64 = 37_040.0;
+/// Reichweite des optischen Systems (m, 8 NM).
+pub const OPTICAL_RANGE_M: f64 = 14_816.0;
+/// Halber Öffnungswinkel des Erfassungskegels um die Blickrichtung (rad, 45°).
+pub const CONE_HALF_RAD: f64 = std::f64::consts::FRAC_PI_4;
+/// Erfassung alle so viele Ticks (4 Hz).
+pub const UPDATE_TICKS: u64 = 30;
+/// Abstand der Prüfpunkte entlang der Sichtlinie (m).
+const LOS_STEP_M: f64 = 60.0;
+/// Die letzten Meter vor dem Ziel zählen nicht (Ziel steht selbst am Boden).
+const LOS_TARGET_CLEARANCE_M: f64 = 60.0;
+
+/// Blickrichtung der Erfassung relativ zum Kurs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum LookDir {
+    #[default]
+    Forward,
+    Right,
+    Aft,
+    Left,
+}
+
+impl LookDir {
+    pub const ALL: [LookDir; 4] = [LookDir::Forward, LookDir::Right, LookDir::Aft, LookDir::Left];
+
+    /// Winkel zum Kurs (rad, im Uhrzeigersinn).
+    pub fn offset(self) -> f64 {
+        use std::f64::consts::{FRAC_PI_2, PI};
+        match self {
+            LookDir::Forward => 0.0,
+            LookDir::Right => FRAC_PI_2,
+            LookDir::Aft => PI,
+            LookDir::Left => -FRAC_PI_2,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            LookDir::Forward => "FWD",
+            LookDir::Right => "RIGHT",
+            LookDir::Aft => "AFT",
+            LookDir::Left => "LEFT",
+        }
+    }
+
+    /// Kennung im Steuerkanal (1..4; 0 = keine Änderung).
+    pub fn code(self) -> u8 {
+        match self {
+            LookDir::Forward => 1,
+            LookDir::Right => 2,
+            LookDir::Aft => 3,
+            LookDir::Left => 4,
+        }
+    }
+
+    pub fn from_code(code: u8) -> Option<Self> {
+        match code {
+            1 => Some(LookDir::Forward),
+            2 => Some(LookDir::Right),
+            3 => Some(LookDir::Aft),
+            4 => Some(LookDir::Left),
+            _ => None,
+        }
+    }
+}
+
+/// Aufgeschaltetes Ziel und welches System es hält.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Lock {
+    /// Index in `Sim::targets`.
+    pub target: usize,
+    /// Optisch erfasst (Reichweite und freie Sicht): Zielbild verfügbar.
+    pub optical: bool,
+    /// Vom Radar erfasst.
+    pub radar: bool,
+}
+
+/// Zustand der Zielerfassung.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Sensors {
+    pub radar_on: bool,
+    pub look: LookDir,
+    pub lock: Option<Lock>,
+}
+
+/// Freie Sicht von `from` nach `to` (Nord, Ost, Höhe über NN)? `height`
+/// liefert die Gelände- bzw. Wasseroberfläche.
+pub fn line_of_sight(height: impl Fn(f64, f64) -> f64, from: [f64; 3], to: [f64; 3]) -> bool {
+    let (dn, de) = (to[0] - from[0], to[1] - from[1]);
+    let dist = (dn * dn + de * de).sqrt();
+    let usable = dist - LOS_TARGET_CLEARANCE_M;
+    if usable <= 0.0 {
+        return true;
+    }
+    let steps = (usable / LOS_STEP_M).ceil().clamp(1.0, 1_000.0) as usize;
+    for i in 1..=steps {
+        let d = usable * i as f64 / steps as f64;
+        let t = d / dist;
+        let line = from[2] + (to[2] - from[2]) * t;
+        if height(from[0] + dn * t, from[1] + de * t) > line {
+            return false;
+        }
+    }
+    true
+}
+
+impl Sensors {
+    /// Schaltet auf das nächste Ziel in der Blickrichtung auf. `pos` ist die
+    /// eigene Position (NED), `heading` der Kurs.
+    pub fn update(&mut self, targets: &[Target], terrain: &Terrain, pos: DVec3, heading: f64) {
+        let look = heading + self.look.offset();
+        let eye = [pos.x, pos.y, -pos.z];
+        // Kandidaten im Kegel und in Reichweite des größeren Systems, nach Entfernung.
+        let max_range = if self.radar_on { RADAR_RANGE_M } else { OPTICAL_RANGE_M };
+        let mut candidates: Vec<(f64, usize)> = targets
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.is_intact())
+            .filter_map(|(i, t)| {
+                let c = t.center_ned();
+                let (dn, de, dd) = (c[0] - pos.x, c[1] - pos.y, c[2] - pos.z);
+                let range = (dn * dn + de * de + dd * dd).sqrt();
+                let bearing = detmath::atan2(de, dn);
+                let off = detmath::wrap_pi(bearing - look).abs();
+                (range <= max_range && off <= CONE_HALF_RAD).then_some((range, i))
+            })
+            .collect();
+        candidates.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+
+        self.lock = None;
+        for (range, i) in candidates {
+            let t = &targets[i];
+            let c = t.center_ned();
+            let optical = range <= OPTICAL_RANGE_M
+                && line_of_sight(|n, e| terrain.elevation(n, e), eye, [c[0], c[1], -c[2]]);
+            let radar = self.radar_on && range <= RADAR_RANGE_M;
+            if optical || radar {
+                self.lock = Some(Lock { target: i, optical, radar });
+                return;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn line_of_sight_is_blocked_by_a_ridge() {
+        // Grat von 500 m Höhe bei Nord = 1000 m.
+        let ridge = |n: f64, _e: f64| if (n - 1_000.0).abs() < 50.0 { 500.0 } else { 0.0 };
+        assert!(!line_of_sight(ridge, [0.0, 0.0, 100.0], [2_000.0, 0.0, 5.0]));
+        assert!(line_of_sight(ridge, [0.0, 0.0, 1_200.0], [2_000.0, 0.0, 5.0]));
+        // Ziel am Boden, flaches Gelände: frei.
+        assert!(line_of_sight(|_, _| 0.0, [0.0, 0.0, 50.0], [5_000.0, 0.0, 2.0]));
+    }
+
+    #[test]
+    fn look_codes_roundtrip() {
+        for d in LookDir::ALL {
+            assert_eq!(LookDir::from_code(d.code()), Some(d));
+        }
+        assert_eq!(LookDir::from_code(0), None);
+    }
+}

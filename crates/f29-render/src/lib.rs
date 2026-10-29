@@ -14,6 +14,7 @@ pub mod model;
 pub mod palette;
 pub mod runway_mesh;
 pub mod sat_map;
+pub mod target_mesh;
 pub mod terrain_mesh;
 
 pub use mesh::MeshData;

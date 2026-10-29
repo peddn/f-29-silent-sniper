@@ -8,6 +8,7 @@ use bevy::input::keyboard::Key;
 use bevy::prelude::*;
 use f29_core::ControlFrame;
 use f29_core::controls::flags;
+use f29_core::sensors::LookDir;
 
 pub struct InputPlugin;
 
@@ -31,6 +32,10 @@ pub struct PilotInput {
     pub gear: bool,
     /// Wird beim nächsten Tick einmalig gesendet.
     next_steerpoint: bool,
+    /// Radar umschalten (einmalig).
+    radar_toggle: bool,
+    /// Blickrichtung der Zielerfassung wählen (Kennung, einmalig; 0 = keine).
+    look: u8,
 }
 
 impl Default for PilotInput {
@@ -44,6 +49,8 @@ impl Default for PilotInput {
             flaps: false,
             gear: false,
             next_steerpoint: false,
+            radar_toggle: false,
+            look: 0,
         }
     }
 }
@@ -69,6 +76,10 @@ impl PilotInput {
         if std::mem::take(&mut self.next_steerpoint) {
             f |= flags::NEXT_STEERPOINT;
         }
+        if std::mem::take(&mut self.radar_toggle) {
+            f |= flags::RADAR_TOGGLE;
+        }
+        f |= ControlFrame::look_flags(std::mem::take(&mut self.look));
         ControlFrame::from_analog(self.pitch, self.roll, self.yaw, self.throttle, f)
     }
 }
@@ -139,6 +150,20 @@ fn flight_input(
     if keys.just_pressed(KeyCode::KeyN) {
         pilot.next_steerpoint = true;
     }
+    // Zielerfassung: V Radar, I/L/K/J Blickrichtung voraus/rechts/hinten/links
+    if keys.just_pressed(KeyCode::KeyV) {
+        pilot.radar_toggle = true;
+    }
+    for (key, dir) in [
+        (KeyCode::KeyI, LookDir::Forward),
+        (KeyCode::KeyL, LookDir::Right),
+        (KeyCode::KeyK, LookDir::Aft),
+        (KeyCode::KeyJ, LookDir::Left),
+    ] {
+        if keys.just_pressed(key) {
+            pilot.look = dir.code();
+        }
+    }
 
     // Gamepad: übersteuert die Tastatur, sobald ein Stick ausgelenkt ist.
     for pad in &gamepads {
@@ -167,6 +192,19 @@ fn flight_input(
         }
         if pad.just_pressed(GamepadButton::West) {
             pilot.flaps = !pilot.flaps;
+        }
+        if pad.just_pressed(GamepadButton::RightThumb) {
+            pilot.radar_toggle = true;
+        }
+        for (button, dir) in [
+            (GamepadButton::DPadUp, LookDir::Forward),
+            (GamepadButton::DPadRight, LookDir::Right),
+            (GamepadButton::DPadDown, LookDir::Aft),
+            (GamepadButton::DPadLeft, LookDir::Left),
+        ] {
+            if pad.just_pressed(button) {
+                pilot.look = dir.code();
+            }
         }
     }
 }
