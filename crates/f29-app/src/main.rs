@@ -11,6 +11,7 @@
 //! f29-silent-sniper [--seed N] [--view cockpit|chase] [--start runway|air]
 //!                   [--volume 0..100] [--no-sound]
 //!                   [--loadout fall,chute,lgb,agm] [--night] [--no-awacs]
+//!                   [--joystick DATEI] [--joystick-debug]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
 
@@ -18,6 +19,8 @@ mod airfield;
 mod capture;
 mod hud;
 mod input;
+mod joystick;
+mod joystick_config;
 mod mfd;
 mod retro;
 mod sim;
@@ -68,6 +71,12 @@ fn main() {
             .and_then(|v| v.parse::<f32>().ok())
             .map_or(0.8, |v| (v / 100.0).clamp(0.0, 1.0))
     };
+    // Joystick: Belegung aus Datei (Voreinstellung Logitech Extreme 3D Pro),
+    // `--joystick-debug` meldet Achsen und Tasten auf der Konsole.
+    let joystick = joystick::JoystickSettings {
+        config: joystick::load(arg(&args, "--joystick").as_deref()),
+        debug: args.iter().any(|a| a == "--joystick-debug"),
+    };
     let auto_capture = arg(&args, "--screenshot").map(|path| capture::AutoCapture {
         path,
         after_s: arg(&args, "--after").and_then(|v| v.parse().ok()).unwrap_or(8.0),
@@ -96,6 +105,7 @@ fn main() {
         targets::TargetsPlugin,
         weapons::WeaponsPlugin,
         input::InputPlugin,
+        joystick::JoystickPlugin { settings: joystick },
         view::ViewPlugin,
         terrain::TerrainPlugin,
         hud::HudPlugin,

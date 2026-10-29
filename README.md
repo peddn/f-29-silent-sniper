@@ -63,34 +63,52 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 
 ## Steuerung
 
-| Taste | Gamepad | Funktion |
+| Taste | Joystick (Extreme 3D Pro) | Funktion |
 |---|---|---|
-| ↑ / W, ↓ / S | linker Stick vor/zurück | drücken / ziehen |
-| ← / A, → / D | linker Stick links/rechts | rollen; am Boden lenken (auch im Stand) |
-| Q / E | Trigger links/rechts | Seitenruder |
-| `+` / `-` | rechter Stick vor/zurück | Schub stufenlos |
+| ↑ / W, ↓ / S | Knüppel vor/zurück | drücken / ziehen |
+| ← / A, → / D | Knüppel links/rechts | rollen; am Boden lenken (auch im Stand) |
+| Q / E | Drehgriff | Seitenruder |
+| `+` / `-` | Schubregler | Schub stufenlos (der Regler gilt, sobald er bewegt wird) |
 | 1 … 9, 0, `^`/`` ` `` | | Schub 10 … 90 %, 100 %, Leerlauf |
-| B | B / Kreis | Luftbremse ein/aus; am Boden Radbremse |
-| F | X / Quadrat | Klappen ein/aus – bei jeder Fahrt: langsam gut steuerbar, schnell weniger Fahrtverlust in Kurven |
-| G | Y / Dreieck | Fahrwerk aus/ein (am Boden gesperrt) |
-| N | A / Kreuz | nächster Navigationspunkt |
-| V | rechter Stick drücken | Radar ein/aus (schaltet ohne Sichtlinie auf, erhöht später die eigene Sichtbarkeit) |
-| O | linker Stick drücken | Schachtklappen auf/zu |
-| Tab | linke Schultertaste | nächste Waffe: GUN → BAY 1 → … → BAY 4 → GUN (Start: GUN) |
-| Leertaste | rechte Schultertaste | gewählte Waffe auslösen (Schachtwaffen nur bei offenem Schacht; die Kanone feuert, solange die Taste gehalten wird) |
-| Rücktaste (gehalten) | | Bordkanone feuern, gleich welche Waffe gewählt ist (nicht am Boden) |
-| H | | HUD-Modus: NAV → AG (Luft-Boden) → AA (Luft-Luft) |
-| I / L / K / J | Steuerkreuz | Blickrichtung der Zielerfassung: voraus / rechts / hinten / links (schaltet automatisch auf das nächste Ziel; dieselbe Richtung noch einmal = nächstweiteres Ziel; die Richtung folgt einem aufgeschalteten Ziel) |
-| Shift+F1 / Shift+F2 | Select | Cockpit / Verfolger |
+| B | 9 | Luftbremse ein/aus; am Boden Radbremse |
+| F | 8 | Klappen ein/aus – bei jeder Fahrt: langsam gut steuerbar, schnell weniger Fahrtverlust in Kurven |
+| G | 7 | Fahrwerk aus/ein (am Boden gesperrt) |
+| N | 6 | nächster Navigationspunkt |
+| V | 5 | Radar ein/aus (schaltet ohne Sichtlinie auf, erhöht später die eigene Sichtbarkeit) |
+| O | 4 | Schachtklappen auf/zu |
+| Tab | 3 | nächste Waffe: GUN → BAY 1 → … → BAY 4 → GUN (Start: GUN) |
+| Leertaste | 2 | gewählte Waffe auslösen (Schachtwaffen nur bei offenem Schacht; die Kanone feuert, solange die Taste gehalten wird) |
+| Rücktaste (gehalten) | 1 (Abzug) | Bordkanone feuern, gleich welche Waffe gewählt ist (nicht am Boden) |
+| H | 12 | HUD-Modus: NAV → AG (Luft-Boden) → AA (Luft-Luft) |
+| I / L / K / J | Coolie-Hat | Blickrichtung der Zielerfassung: voraus / rechts / hinten / links (schaltet automatisch auf das nächste Ziel; dieselbe Richtung noch einmal = nächstweiteres Ziel; die Richtung folgt einem aufgeschalteten Ziel) |
+| Shift+F1 / Shift+F2 | | Cockpit / Verfolger |
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
 | Shift+F4 | | HUD ein/aus |
 | F3 | | Karte (linkes MFD): Gitter ↔ Satellitenbild |
-| F4 | | Rechtes MFD: nächste Seite (Mission → Ziel → Waffen → Triebwerk → Horizont → Systeme) |
-| Y / X | | Karte näher / weiter (5, 10, 20, 40, 80 km) |
-| P | Start | Pause |
+| F4 | 11 | Rechtes MFD: nächste Seite (Mission → Ziel → Waffen → Triebwerk → Horizont → Systeme) |
+| Y / X | 10 (reihum) | Karte näher / weiter (5, 10, 20, 40, 80 km) |
+| P | | Pause |
 | F12 | | Screenshot nach `screenshots/` |
 | R | | Neustart (Flug wird als Replay gesichert) |
 | Esc | | Beenden (Flug wird als Replay gesichert) |
+
+### Joystick
+
+Unterstützt wird ein Joystick mit vielen Tasten unter **Linux**; voreingestellt
+ist der **Logitech Extreme 3D Pro** (Belegung oben). Die Belegung steht als
+Text in [`config/joystick.cfg`](config/joystick.cfg). Eine eigene Fassung als
+`joystick.cfg` im Startverzeichnis (oder `--joystick DATEI`) ersetzt sie;
+nicht belegte Aktionen wie `view` oder `pause` lassen sich dort ergänzen.
+
+```sh
+cargo run --release -p f29-app -- --joystick-debug
+```
+
+meldet beim Anstecken den Namen des Sticks und danach jede Achse und Taste auf
+der Konsole – in derselben Schreibweise wie die Datei (z. B. `Taste B3
+gedrückt`, `Achse ABS 6 -0.84`). Falls Achsen falsch herum laufen, hilft
+`invert` hinter der Achse. Liest das Spiel keinen Stick, fehlt meist das
+Leserecht auf `/dev/input/event*` (Gruppe `input`).
 
 ## Klang
 
@@ -148,7 +166,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Instrumente: Triebwerk, HSI mit Navigationspunkt, künstlicher Horizont
 - [x] Navigationsroute mit Steerpoint-Anzeige in HUD und HSI
 - [x] Retro-Look: 16-Farben-Palette, Dithering, auflösungsunabhängig
-- [x] Cockpit- und Verfolgeransicht, Tastatur und Gamepad
+- [x] Cockpit- und Verfolgeransicht, Tastatur und Gamepad (Gamepad in v0.2.8 durch Joystick ersetzt)
 - [x] Erster Spieltest auf echter Hardware (Linux, AMD Radeon, Vulkan)
 - [x] Feinschliff Flugverhalten nach erstem Spielerfeedback (v0.1.1)
 - [x] Radarhöhe über Grund immer im HUD
@@ -204,6 +222,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       HUD-Warnfarbe blau (v0.2.7)
 - [x] HUD überarbeitet: breiteres Glas, drei Modi NAV/AG/AA (Taste H), Kanone als
       erste Waffe in der Wahl GUN, BAY 1–4 (v0.2.8)
+- [x] Joystick statt Gamepad: Logitech Extreme 3D Pro unter Linux, Belegung als
+      Textdatei, `--joystick-debug` (v0.2.8)
 - [ ] Auslöseklammer für Bomben, neu entworfen (vorgemerkt)
 - [x] Bordkanone als eigenes Waffensystem: 600 Schuss (50/s), Rücktaste, 2 %
       Schaden pro Treffer bei jedem Ziel, Kanonenkreuz am Aufschlagpunkt,

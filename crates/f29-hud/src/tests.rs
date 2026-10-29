@@ -227,6 +227,9 @@ fn map_draws_inside_left_screen_in_all_modes_and_zooms() {
         s.zoom_out();
     }
     assert_eq!(s.map_zoom, mfd::MAP_RANGES_KM.len() - 1);
+    // Reihum (Joystick-Taste): nach dem weitesten wieder der nächste.
+    s.cycle_zoom();
+    assert_eq!(s.map_zoom, 0);
 }
 
 /// Waffen in der Luft erscheinen auf der Karte: Rakete als Strich, Bombe als

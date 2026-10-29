@@ -1,4 +1,4 @@
-//! Tastatur und Gamepad → quantisierte Steuereingaben.
+//! Tastatur → quantisierte Steuereingaben (Joystick: `joystick.rs`).
 
 use crate::mfd::MfdView;
 use crate::sim::{SimState, SimSystems};
@@ -31,17 +31,17 @@ pub struct PilotInput {
     /// Fahrwerk ausgefahren.
     pub gear: bool,
     /// Wird beim nächsten Tick einmalig gesendet.
-    next_steerpoint: bool,
+    pub(crate) next_steerpoint: bool,
     /// Radar umschalten (einmalig).
-    radar_toggle: bool,
+    pub(crate) radar_toggle: bool,
     /// Blickrichtung der Zielerfassung wählen (Kennung, einmalig; 0 = keine).
-    look: u8,
+    pub(crate) look: u8,
     /// Waffenbedienung (einmalig, siehe `weapon_flags`).
-    weapons: u8,
+    pub(crate) weapons: u8,
     /// Abzug der Bordkanone (gehalten).
-    gun: bool,
+    pub(crate) gun: bool,
     /// Abzug der gewählten Waffe (gehalten; feuert die gewählte Kanone).
-    trigger: bool,
+    pub(crate) trigger: bool,
 }
 
 impl Default for PilotInput {
@@ -97,7 +97,6 @@ impl PilotInput {
     }
 }
 
-const DEADZONE: f32 = 0.08;
 /// Wie schnell digitale Tasten den Knüppel auslenken bzw. zurückführen (1/s).
 const KEY_RAMP: f64 = 3.0;
 const KEY_RETURN: f64 = 6.0;
@@ -115,12 +114,7 @@ fn axis(keys: &ButtonInput<KeyCode>, neg: &[KeyCode], pos: &[KeyCode]) -> f64 {
     f64::from(i8::from(p) - i8::from(n))
 }
 
-fn flight_input(
-    keys: Res<ButtonInput<KeyCode>>,
-    gamepads: Query<&Gamepad>,
-    time: Res<Time>,
-    mut pilot: ResMut<PilotInput>,
-) {
+pub(crate) fn flight_input(keys: Res<ButtonInput<KeyCode>>, time: Res<Time>, mut pilot: ResMut<PilotInput>) {
     let dt = time.delta_secs_f64();
 
     // Tastatur: Pfeil hoch = drücken (Nase runter), Pfeil runter = ziehen.
@@ -193,77 +187,22 @@ fn flight_input(
             pilot.weapons |= flag;
         }
     }
-
-    // Gamepad: übersteuert die Tastatur, sobald ein Stick ausgelenkt ist.
-    for pad in &gamepads {
-        let get = |a: GamepadAxis| pad.get(a).unwrap_or(0.0);
-        let dz = |v: f32| if v.abs() < DEADZONE { 0.0 } else { f64::from(v) };
-        let (lx, ly) = (dz(get(GamepadAxis::LeftStickX)), dz(get(GamepadAxis::LeftStickY)));
-        if lx != 0.0 || ly != 0.0 {
-            pilot.roll = lx;
-            pilot.pitch = -ly; // Stick nach vorn = drücken
-        }
-        let rt = f64::from(pad.get(GamepadButton::RightTrigger2).unwrap_or(0.0));
-        let lt = f64::from(pad.get(GamepadButton::LeftTrigger2).unwrap_or(0.0));
-        if rt > 0.05 || lt > 0.05 {
-            pilot.yaw = rt - lt;
-        }
-        let ry = dz(get(GamepadAxis::RightStickY));
-        pilot.throttle = (pilot.throttle + ry * THROTTLE_RATE * dt).clamp(0.0, 1.0);
-        if pad.just_pressed(GamepadButton::East) {
-            pilot.airbrake = !pilot.airbrake;
-        }
-        if pad.just_pressed(GamepadButton::South) {
-            pilot.next_steerpoint = true;
-        }
-        if pad.just_pressed(GamepadButton::North) {
-            pilot.gear = !pilot.gear;
-        }
-        if pad.just_pressed(GamepadButton::West) {
-            pilot.flaps = !pilot.flaps;
-        }
-        if pad.just_pressed(GamepadButton::RightThumb) {
-            pilot.radar_toggle = true;
-        }
-        for (button, flag) in [
-            (GamepadButton::RightTrigger, weapon_flags::RELEASE),
-            (GamepadButton::LeftThumb, weapon_flags::BAY_DOORS),
-            (GamepadButton::LeftTrigger, weapon_flags::NEXT_BAY),
-        ] {
-            if pad.just_pressed(button) {
-                pilot.weapons |= flag;
-            }
-        }
-        for (button, dir) in [
-            (GamepadButton::DPadUp, LookDir::Forward),
-            (GamepadButton::DPadRight, LookDir::Right),
-            (GamepadButton::DPadDown, LookDir::Aft),
-            (GamepadButton::DPadLeft, LookDir::Left),
-        ] {
-            if pad.just_pressed(button) {
-                pilot.look = dir.code();
-            }
-        }
-    }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn hotkeys(
     keys: Res<ButtonInput<KeyCode>>,
     logical: Res<ButtonInput<Key>>,
-    gamepads: Query<&Gamepad>,
     mut state: ResMut<SimState>,
     mut view: ResMut<ViewSettings>,
     mut mfd: ResMut<MfdView>,
     mut pilot: ResMut<PilotInput>,
     mut exit: MessageWriter<AppExit>,
 ) {
-    let pad = |b: GamepadButton| gamepads.iter().any(|g| g.just_pressed(b));
     if keys.just_pressed(KeyCode::Escape) {
         state.save_replay();
         exit.write(AppExit::Success);
     }
-    if keys.just_pressed(KeyCode::KeyP) || pad(GamepadButton::Start) {
+    if keys.just_pressed(KeyCode::KeyP) {
         state.paused = !state.paused;
     }
     if keys.just_pressed(KeyCode::KeyR) {
@@ -277,12 +216,6 @@ fn hotkeys(
     }
     if shift && keys.just_pressed(KeyCode::F2) {
         view.mode = ViewMode::Chase;
-    }
-    if pad(GamepadButton::Select) {
-        view.mode = match view.mode {
-            ViewMode::Cockpit => ViewMode::Chase,
-            ViewMode::Chase => ViewMode::Cockpit,
-        };
     }
     if shift && keys.just_pressed(KeyCode::F3) {
         view.retro = view.retro.next();

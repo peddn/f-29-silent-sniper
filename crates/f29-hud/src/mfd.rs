@@ -95,6 +95,12 @@ impl MfdState {
         self.map_zoom = (self.map_zoom + 1).min(MAP_RANGES_KM.len() - 1);
     }
 
+    /// Kartenmaßstab reihum (eine Taste): weiter, nach dem weitesten wieder
+    /// der nächste.
+    pub fn cycle_zoom(&mut self) {
+        self.map_zoom = (self.map_zoom + 1) % MAP_RANGES_KM.len();
+    }
+
     pub fn toggle_map_mode(&mut self) {
         self.map_mode = match self.map_mode {
             MapMode::Grid => MapMode::Satellite,
