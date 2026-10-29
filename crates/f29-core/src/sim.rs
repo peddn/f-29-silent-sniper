@@ -1,6 +1,6 @@
 //! Die Simulation: fester Zeitschritt, deterministisch, ohne Engine.
 
-use crate::controls::{ControlFrame, flags};
+use crate::controls::{ControlFrame, flags, weapon_flags};
 use crate::detmath;
 use crate::flight::{self, AeroData, AircraftState};
 use crate::math::DVec3;
@@ -8,6 +8,7 @@ use crate::nav::{self, Steerpoint};
 use crate::rng::Pcg32;
 use crate::sensors::{self, LookDir, Sensors};
 use crate::targets::{self, Target, TargetClass, TargetRole};
+use crate::weapons::{self, Bay, ImpactResult, Loadout, Stores, Weapon, WeaponEvent};
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_terrain::{AirfieldKind, Terrain};
 
@@ -75,6 +76,8 @@ pub struct Spawn {
     pub speed: f64,
     /// Schubhebel 0..1, auf den auch das Triebwerk initialisiert wird.
     pub throttle: f64,
+    /// Beladung der Waffenschächte (M-014).
+    pub loadout: Loadout,
 }
 
 impl Default for Spawn {
@@ -89,6 +92,7 @@ impl Default for Spawn {
             heading: std::f64::consts::FRAC_PI_4,
             speed: 210.0,
             throttle: 0.55,
+            loadout: Loadout::default(),
         }
     }
 }
@@ -217,6 +221,33 @@ pub struct TargetInfo {
     pub heading: f64,
 }
 
+/// Waffenbestand für die Anzeigen (M-014).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StoresInfo {
+    pub bays: [Bay; weapons::BAYS],
+    /// Gewählter Schacht (0-basiert).
+    pub selected: usize,
+    /// Schachtklappen 0 (zu) .. 1 (offen).
+    pub door: f64,
+    /// Eigene Waffen in der Luft.
+    pub in_flight: usize,
+    /// Masse der Waffen an Bord (kg).
+    pub mass_kg: f64,
+}
+
+/// Meldung zu einem Waffenereignis, z. B. „B-25 AWAY“.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WeaponMessage {
+    pub text: String,
+    /// Als Warnung zeigen (rot).
+    pub warning: bool,
+    /// Alter der Meldung (s).
+    pub age_s: f64,
+}
+
+/// So lange bleibt eine Waffenmeldung stehen (s).
+pub const WEAPON_MESSAGE_S: f64 = 4.0;
+
 /// Informationen zum aktiven Navigationspunkt.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SteerpointInfo {
@@ -298,6 +329,10 @@ pub struct FlightData {
     pub look: LookDir,
     /// Aufgeschaltetes Ziel.
     pub target: Option<TargetInfo>,
+    /// Waffenbestand, Schacht, Waffen in der Luft.
+    pub stores: StoresInfo,
+    /// Aktuelle Waffenmeldungen, neueste zuletzt (höchstens drei).
+    pub weapon_messages: Vec<WeaponMessage>,
     pub warnings: Warnings,
 }
 
@@ -320,6 +355,7 @@ pub struct Sim {
     touchdown: Option<Touchdown>,
     targets: Vec<Target>,
     sensors: Sensors,
+    stores: Stores,
 }
 
 impl Sim {
@@ -347,6 +383,8 @@ impl Sim {
         };
         aircraft.engine = sp.throttle.clamp(0.0, 1.0);
         aircraft.fuel_kg = spec.fuel_capacity_kg * sp.fuel.clamp(0.0, 1.0);
+        let stores = Stores::new(&sp.loadout, seed);
+        aircraft.stores_kg = stores.mass_kg();
         if !aircraft.on_ground {
             // Getrimmt starten: Nase um den Anstellwinkel anheben, bei dem der
             // Auftrieb das Gewicht trägt – sonst sackt das Flugzeug zuerst durch.
@@ -387,6 +425,7 @@ impl Sim {
             touchdown: None,
             targets,
             sensors,
+            stores,
         }
     }
 
@@ -397,9 +436,12 @@ impl Sim {
         if controls.has(flags::NEXT_STEERPOINT) && !self.route.is_empty() {
             self.active_steerpoint = (self.active_steerpoint + 1) % self.route.len();
         }
+        // Waffen im Flug fliegen auch nach einem Absturz weiter.
+        self.step_weapons();
         if self.status != Status::Flying {
             return;
         }
+        self.update_weapon_controls(&controls);
         self.update_sensors(&controls);
         self.update_turbulence();
         self.update_height_agl();
@@ -411,6 +453,47 @@ impl Sim {
         }
         self.update_height_agl();
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
+    }
+
+    /// Schacht öffnen/schließen, Schacht wählen, auslösen (M-014).
+    fn update_weapon_controls(&mut self, controls: &ControlFrame) {
+        if controls.has_weapon(weapon_flags::BAY_DOORS) {
+            self.stores.door_cmd = !self.stores.door_cmd;
+        }
+        if controls.has_weapon(weapon_flags::NEXT_BAY) {
+            self.stores.next_bay();
+        }
+        self.stores.update_door(DT);
+        if controls.has_weapon(weapon_flags::RELEASE) {
+            let a = &self.aircraft;
+            let lock = self.sensors.lock.map(|l| l.target);
+            let dropped = if a.on_ground {
+                0.0
+            } else {
+                self.stores.release(self.tick, a.position, a.velocity, a.attitude, lock)
+            };
+            self.aircraft.stores_kg = (self.aircraft.stores_kg - dropped).max(0.0);
+        }
+    }
+
+    fn step_weapons(&mut self) {
+        if self.stores.in_flight.is_empty() {
+            return;
+        }
+        let mut world = weapons::World {
+            terrain: &self.terrain,
+            targets: &mut self.targets,
+            tick: self.tick,
+            dt: DT,
+            aircraft: self.aircraft.position,
+        };
+        self.stores.step(&mut world);
+        // Ein zerstörtes Ziel verliert die Aufschaltung.
+        if let Some(l) = self.sensors.lock
+            && !self.targets[l.target].is_intact()
+        {
+            self.sensors.lock = None;
+        }
     }
 
     /// Bedienung der Zielerfassung und Aufschalten (M-013): Radar umschalten,
@@ -612,6 +695,21 @@ impl Sim {
         &self.sensors
     }
 
+    /// Waffenbestand, Schacht und Waffen im Flug (M-014).
+    pub fn stores(&self) -> &Stores {
+        &self.stores
+    }
+
+    /// Waffen im Flug (für die Darstellung).
+    pub fn weapons_in_flight(&self) -> &[Weapon] {
+        &self.stores.in_flight
+    }
+
+    /// Waffenereignisse mit Tick, neueste zuletzt.
+    pub fn weapon_events(&self) -> &[(u64, WeaponEvent)] {
+        &self.stores.events
+    }
+
     /// Anzeige- und Autopilot-Daten für den aktuellen Zustand.
     pub fn flight_data(&self) -> FlightData {
         let a = &self.aircraft;
@@ -753,8 +851,54 @@ impl Sim {
             radar_on: self.sensors.radar_on,
             look: self.sensors.look,
             target,
+            stores: StoresInfo {
+                bays: self.stores.bays,
+                selected: self.stores.selected,
+                door: self.stores.door,
+                in_flight: self.stores.in_flight.len(),
+                mass_kg: self.stores.mass_kg(),
+            },
+            weapon_messages: self.weapon_messages(),
             warnings,
         }
+    }
+
+    /// Meldungen der letzten [`WEAPON_MESSAGE_S`] Sekunden, neueste zuletzt.
+    fn weapon_messages(&self) -> Vec<WeaponMessage> {
+        let name = |i: usize| self.targets[i].name;
+        let mut out: Vec<WeaponMessage> = self
+            .stores
+            .events
+            .iter()
+            .filter_map(|&(tick, e)| {
+                let age_s = self.tick.saturating_sub(tick) as f64 * DT;
+                if age_s > WEAPON_MESSAGE_S {
+                    return None;
+                }
+                let (text, warning) = match e {
+                    WeaponEvent::Released { kind, .. } => (format!("{} AWAY", kind.label()), false),
+                    WeaponEvent::BayClosed => ("BAY CLOSED".to_string(), true),
+                    WeaponEvent::BayEmpty => ("BAY EMPTY".to_string(), true),
+                    WeaponEvent::BankLimit => ("BANK LIMIT".to_string(), true),
+                    WeaponEvent::Busy => ("WEAPONS BUSY".to_string(), true),
+                    WeaponEvent::FragWarning => ("FRAG WARNING".to_string(), true),
+                    WeaponEvent::Expired { kind, .. } => (format!("{} LOST", kind.label()), false),
+                    WeaponEvent::Impact { kind, result, .. } => match result {
+                        ImpactResult::Destroyed(i) if self.targets[i].civilian => {
+                            (format!("CIVILIAN {} DESTROYED", name(i)), true)
+                        }
+                        ImpactResult::Destroyed(i) => (format!("{} DESTROYED", name(i)), false),
+                        ImpactResult::Ineffective(i) => (format!("INEFFECTIVE ON {}", name(i)), true),
+                        ImpactResult::Survived(i) => (format!("NEAR MISS {}", name(i)), false),
+                        ImpactResult::Ground => (format!("{} MISSED", kind.label()), false),
+                    },
+                };
+                Some(WeaponMessage { text, warning, age_s })
+            })
+            .collect();
+        let skip = out.len().saturating_sub(3);
+        out.drain(..skip);
+        out
     }
 
     /// Hash über den vollständigen Simulationszustand (FNV-1a, 64 Bit).
@@ -799,6 +943,28 @@ impl Sim {
         h.u64(rs);
         h.u64(ri);
         h.u64(self.active_steerpoint as u64);
+        h.f64(a.stores_kg);
+        let st = &self.stores;
+        for b in &st.bays {
+            h.u64(b.kind.map_or(99, |k| k as u64));
+            h.u64(u64::from(b.count));
+        }
+        h.u64(st.selected as u64);
+        let (ws, wi) = st.rng_state();
+        h.u64(ws);
+        h.u64(wi);
+        h.f64(st.door);
+        h.u64(u64::from(st.door_cmd));
+        for w in &st.in_flight {
+            h.u64(u64::from(w.id));
+            for v in [w.position, w.velocity] {
+                h.f64(v.x);
+                h.f64(v.y);
+                h.f64(v.z);
+            }
+            h.f64(w.age_s);
+            h.u64(w.target.map_or(u64::MAX, |t| t as u64));
+        }
         h.u64(u64::from(self.sensors.radar_on));
         h.u64(u64::from(self.sensors.look.code()));
         if let Some(l) = self.sensors.lock {

@@ -87,6 +87,8 @@ fn landing_demo() -> Vec<f32> {
         heading: rw.heading_deg.to_radians(),
         speed: 85.0,
         throttle: 0.4,
+        // Nach der Mission: Schächte leer.
+        loadout: f29_core::weapons::Loadout::EMPTY,
     };
     let mut sim = Sim::new(SimConfig { seed: 0x0F29, spawn });
     let mut ap = Approach::new(rw);

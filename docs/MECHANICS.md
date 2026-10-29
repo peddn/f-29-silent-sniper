@@ -680,9 +680,12 @@ Format jedes Eintrags:
   flachem Land, Schiffe nur auf offenem Wasser, Abstand zu Flugplätzen und
   untereinander. Alle Ziele erscheinen auf der Karte mit einem Symbol je Klasse,
   Primär- und Sekundärziel markiert (P/S), zivile gedämpft.
-  Die Wirkungsmatrix Waffe × Zielklasse folgt mit den Waffen (Etappe 2).
+  Wirkungsmatrix Waffe × Zielklasse: `WeaponKind::effectiveness` (0 = wirkungslos,
+  1 = volle Wirkung); Radarjäger nur gegen Flugabwehr, Seezielrakete nur gegen
+  Schiffe, Luft-Boden-Rakete schwach gegen Gebäude, Brücken und große Schiffe.
 - **Unsere Werte:** `crates/f29-core/src/targets.rs`; je Seed etwa 30–50 Ziele.
-- **Status:** Ziele umgesetzt (v0.2.1), Wirkung geplant (Etappe 2)
+  Wirkung: `crates/f29-core/src/weapons.rs`.
+- **Status:** Ziele umgesetzt (v0.2.1), Wirkung umgesetzt (v0.2.4)
 
 ### M-011 Einschlagdistanz und Schwierigkeitsfaktor
 
@@ -697,8 +700,9 @@ Format jedes Eintrags:
   den eigenen Splittern getroffen.
 - **Unser Design (Entwurf):** Wirkradius je Waffe aus der Sprengladung; die
   Trefferwahrscheinlichkeit fällt mit dem Abstand stetig ab, statt an einer harten
-  Schwelle umzuschlagen. Der Schwierigkeitsgrad skaliert den Wirkradius.
-- **Status:** geplant (v0.2)
+  Schwelle umzuschlagen. Der Schwierigkeitsgrad skaliert den Wirkradius (folgt mit
+  den Schwierigkeitsstufen).
+- **Status:** umgesetzt ohne Schwierigkeitsstufen (v0.2.4)
 
 ### M-012 Gehärtete Ziele: Spezialmunition und Toss-Bombing
 
@@ -717,7 +721,9 @@ Format jedes Eintrags:
   Anflugrichtung ist eine **Eigenschaft des Ziels** in den Szenariodaten (z. B.
   Bunkereingang in eine Richtung), nicht global „Norden“. Die Bombenballistik ist echte
   Simulation im Kern, kein Würfelwurf.
-- **Status:** geplant (v0.2)
+  Umgesetzt: Eintreffwinkel ab 60° (Freifall- und Gleitbombe). Die Anflugrichtung
+  je Ziel folgt mit den Szenariodaten.
+- **Status:** Eintreffwinkel umgesetzt (v0.2.4), Anflugrichtung geplant
 
 ### M-013 Zielerfassung und Lenkung
 
@@ -789,6 +795,89 @@ Format jedes Eintrags:
   sofort), Sichtlinie in 60-m-Schritten. Reichweiten so gewählt, dass das Radar die
   Kartenstufe 20 NM füllt und die Optik etwa die Sichtweite bei klarem Wetter trifft.
 - **Status:** Erfassung umgesetzt (v0.2.1), Zielwechsel und Zielkamera (v0.2.2), Aufschaltung beim Überflug halten (v0.2.3)
+
+### M-014 Waffenschacht, Abwurf und Zielhilfe
+
+- **Verhalten:** Die Waffen hängen in vier internen Schächten. Der Spieler wählt
+  Waffenart und Station, öffnet den Schacht und löst aus; Bomben fallen, gelenkte
+  Waffen fliegen mit eigenem Suchkopf. Das HUD hilft beim Zielen.
+- **Referenzstelle:** f19re `src_en/egcombat.c` (Abschuss, Flugbahn und Lenkung,
+  Einschlag), `src_en/egframe.c` (Grundbeladung, Stationen), `src_en/egtarget.c`
+  (Zielhilfe im HUD).
+- **Lesephase Etappe 2 (eigene Worte, keine Werte):**
+  - Beladung: vier Stationen, jede mit einer Waffenart und einer Stückzahl; dazu
+    Kanonenmunition. Eine Station kann statt Waffen auch Zusatztreibstoff tragen,
+    der beim „Auslösen“ in den Tank wandert.
+  - Auslösen nur bei nicht zu großer Querlage, mit Munition an der Station und
+    offenem Schacht – sonst Meldung „Schacht zu“. Auslösen beendet die
+    Zeitraffung. Nur wenige eigene Waffen gleichzeitig in der Luft.
+  - Start: Die Waffe übernimmt Position (knapp unter dem Flugzeug), Kurs, Lage und
+    Fahrt des Flugzeugs; die Nase zeigt etwas nach unten. Flugkörper beschleunigen
+    danach auf ihre Höchstfahrt. Eine Lebensdauer (aus Reichweite und Fahrt)
+    begrenzt den Flug; Ungelenktes fliegt bis zum Boden.
+  - Lenkung: Bei Abschuss mit Aufschaltung übernimmt die Waffe das Ziel, wenn ihre
+    Art dazu passt (Radarjäger nur auf Stellungen mit aktivem Radar). Ohne
+    Aufschaltung sucht der Suchkopf selbst das nächste passende Ziel in seinem
+    Kegel (See- oder Landziel je nach Waffe). Kurs und Nicklage drehen mit einer
+    begrenzten Drehrate je Waffe auf das Ziel, die Nicklage zielt dabei etwas über
+    den direkten Weg (leichter Bogen). Ohne Ziel sinkt die Nase langsam ab.
+  - Bombenbahnen: die Freifallbombe neigt sich stetig nach unten bis zu einem beim
+    Abwurf festgelegten Grenzwinkel (Wurf aus dem Steigflug möglich); die gelenkte
+    Bombe hält mindestens einen flachen Gleitwinkel und lenkt; eine dritte Art fällt
+    langsam senkrecht (Lastabwurf).
+  - Einschlag einer Bombe: Das nächste Ziel am Einschlagpunkt wird zerstört, wenn
+    der Abstand kleiner ist als ein Wert aus Wirkung (M-010) und Schwierigkeit;
+    sonst Meldung „verfehlt“. Liegt der Einschlag zu nah am eigenen Flugzeug
+    (waagerecht plus Höhe), trifft der Splitterschaden das Flugzeug. Flugkörper,
+    die ihr Ziel erreichen, zerstören es mit einer Wahrscheinlichkeit aus dem
+    Wirkungswert, sonst „wirkungslos“. Ein Einschlag macht den Gegner auf diesen
+    Ort aufmerksam. Gelände beendet jeden Flug.
+  - Zielhilfe für die Freifallbombe: Bei geringer Querlage zeigt das HUD den
+    vorausberechneten Aufschlagpunkt auf dem Boden voraus, mit einer Linie vom
+    Flugbahnsymbol. Mit aufgeschaltetem Ziel kommt eine Raute über dem Ziel und
+    oben im HUD eine Klammer, die mit dem Abstand zwischen Aufschlagpunkt und Ziel
+    schrumpft – geschlossen heißt „jetzt auslösen“. Die Klammer blinkt, wenn das
+    Flugzeug zu tief für einen sicheren Abwurf ist. Für die gelenkte Bombe zeigt
+    die Klammer die Entfernung zum Ziel.
+- **Unser Design (Etappe 2, Spielerentscheidungen):** `f29_core::weapons`.
+  - Sechs eigene Waffenarten: Freifallbombe, Fallschirmbombe (Bremsschirm öffnet
+    kurz nach dem Abwurf), Gleitbombe mit optischem Suchkopf, optisch gelenkte
+    Luft-Boden-Rakete, Radarjäger (nur Flugabwehrstellungen), Seezielrakete (nur
+    Schiffe). Alle gelenkten Waffen sind Fire and Forget (M-013).
+  - Beladung: vier Schächte mit je einer Waffenart, **feste Standardbeladung**
+    (Freifall, Fallschirm, Gleitbombe, Luft-Boden-Rakete), änderbar mit
+    `--loadout`; ein Beladungsbildschirm kommt mit dem Missionsbriefing. Die
+    Waffen zählen zur Flugzeugmasse und werden beim Abwurf leichter.
+  - Bedienung: Schachtklappen mit **eigener Taste** (öffnen dauert gut eine
+    Sekunde, in Etappe 3 erhöht ein offener Schacht die Sichtbarkeit), Schacht
+    wählen, auslösen. Auslösen nur bei offenem Schacht, nicht am Boden, bis 60°
+    Querlage und mit höchstens acht eigenen Waffen in der Luft; sonst Meldung.
+  - Flugbahn: echte Ballistik im Kern statt Neigungsregel – Massenpunkt mit
+    Schwerkraft, Luftwiderstand aus der Normatmosphäre und Triebwerk (Flugkörper),
+    120 Hz. Start knapp unter dem Rumpf mit kleiner Ausstoßgeschwindigkeit.
+    Wurf aus dem Steigflug (Toss) ergibt sich daraus von selbst. Eine Vorhersage
+    mit derselben Rechnung liefert den Aufschlagpunkt (für die Zielhilfe).
+  - Einschlag: Alle Ziele im Wirkradius werden gewürfelt (eigener Zufallsstrom);
+    Wahrscheinlichkeit = Wirkung der Waffe gegen die Klasse × Abstandsabfall
+    (M-011). Gehärtete Ziele nur mit steil einfallender Bombe (M-012). Zerstörte
+    Ziele werden zum flachen, dunklen Wrack, die Aufschaltung fällt ab.
+  - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,
+    gibt es vorerst nur die Warnung „FRAG WARNING“ (Schaden kommt mit Etappe 4).
+    Die Fallschirmbombe ist genau dafür da: Sie bleibt im Tiefflug weit genug
+    zurück.
+  - Meldungen unter dem HUD-Glas (z. B. „B-25 AWAY“, „BAY CLOSED“, „… DESTROYED“,
+    „INEFFECTIVE ON …“, „CIVILIAN … DESTROYED“); die WPN-Seite zeigt Bestand je
+    Schacht, Klappenzustand (SAFE/DOORS/ARMED) und Bereitschaft.
+- **Unsere Werte:** Bomben 250 kg (Gleitbombe 270 kg), Cw·A 0,020 m²,
+  Fallschirm 0,9 m² nach 0,3 s, zwei je Schacht, Wirkradius 30 m, Splitterbereich
+  180 m. Luft-Boden-Rakete 210 kg, 9 kN für 6 s, Wirkradius 8 m; Radarjäger
+  360 kg, 20 kN für 8 s; Seezielrakete 520 kg, 3,5 kN Marschtriebwerk. Volle
+  Wirkung bis 40 % des Wirkradius (vom Zielrand gemessen), dann linear auf null.
+  Gehärtet ab 60° Eintreffwinkel. Größenordnungen aus öffentlichen Daten realer
+  250-kg-Bomben und leichter Luft-Boden-Flugkörper, Wirkung nach Spielbalance.
+  Volle Standardbeladung wiegt knapp 2 t; Landeanflüge in Tests fliegen leer.
+- **Status:** Abwurf, Ballistik und Wirkung umgesetzt (v0.2.4); Lenkung (v0.2.5) und
+  HUD-Zielhilfe (v0.2.6) folgen
 
 ### M-020 Radar-/Detektionsmodell (Stealth)
 

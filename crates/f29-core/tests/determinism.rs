@@ -64,6 +64,8 @@ fn scripted_landing(seed: u64) -> Replay {
         heading: rw.heading_deg * (std::f64::consts::PI / 180.0),
         speed: 95.0,
         throttle: 0.3,
+        // Nach der Mission: Schächte leer.
+        loadout: f29_core::weapons::Loadout::EMPTY,
     };
     let mut sim = Sim::new(SimConfig { seed, spawn });
     let mut replay = Replay::new(sim.config().clone());

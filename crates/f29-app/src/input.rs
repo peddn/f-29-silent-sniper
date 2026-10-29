@@ -7,7 +7,7 @@ use bevy::app::AppExit;
 use bevy::input::keyboard::Key;
 use bevy::prelude::*;
 use f29_core::ControlFrame;
-use f29_core::controls::flags;
+use f29_core::controls::{flags, weapon_flags};
 use f29_core::sensors::LookDir;
 
 pub struct InputPlugin;
@@ -36,6 +36,8 @@ pub struct PilotInput {
     radar_toggle: bool,
     /// Blickrichtung der Zielerfassung wählen (Kennung, einmalig; 0 = keine).
     look: u8,
+    /// Waffenbedienung (einmalig, siehe `weapon_flags`).
+    weapons: u8,
 }
 
 impl Default for PilotInput {
@@ -51,6 +53,7 @@ impl Default for PilotInput {
             next_steerpoint: false,
             radar_toggle: false,
             look: 0,
+            weapons: 0,
         }
     }
 }
@@ -81,6 +84,7 @@ impl PilotInput {
         }
         f |= ControlFrame::look_flags(std::mem::take(&mut self.look));
         ControlFrame::from_analog(self.pitch, self.roll, self.yaw, self.throttle, f)
+            .with_weapons(std::mem::take(&mut self.weapons))
     }
 }
 
@@ -165,6 +169,17 @@ fn flight_input(
         }
     }
 
+    // Waffen: Leertaste auslösen, O Schacht auf/zu, Tab nächster Schacht
+    for (key, flag) in [
+        (KeyCode::Space, weapon_flags::RELEASE),
+        (KeyCode::KeyO, weapon_flags::BAY_DOORS),
+        (KeyCode::Tab, weapon_flags::NEXT_BAY),
+    ] {
+        if keys.just_pressed(key) {
+            pilot.weapons |= flag;
+        }
+    }
+
     // Gamepad: übersteuert die Tastatur, sobald ein Stick ausgelenkt ist.
     for pad in &gamepads {
         let get = |a: GamepadAxis| pad.get(a).unwrap_or(0.0);
@@ -195,6 +210,15 @@ fn flight_input(
         }
         if pad.just_pressed(GamepadButton::RightThumb) {
             pilot.radar_toggle = true;
+        }
+        for (button, flag) in [
+            (GamepadButton::RightTrigger, weapon_flags::RELEASE),
+            (GamepadButton::LeftThumb, weapon_flags::BAY_DOORS),
+            (GamepadButton::LeftTrigger, weapon_flags::NEXT_BAY),
+        ] {
+            if pad.just_pressed(button) {
+                pilot.weapons |= flag;
+            }
         }
         for (button, dir) in [
             (GamepadButton::DPadUp, LookDir::Forward),

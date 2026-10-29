@@ -10,6 +10,7 @@
 //! ```text
 //! f29-silent-sniper [--seed N] [--view cockpit|chase] [--start runway|air]
 //!                   [--volume 0..100] [--no-sound]
+//!                   [--loadout fall,chute,glide,agm]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
 
@@ -25,6 +26,7 @@ mod targets;
 mod terrain;
 mod tgt_camera;
 mod view;
+mod weapons;
 
 use bevy::prelude::*;
 use bevy::window::PresentMode;
@@ -36,11 +38,20 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let seed = arg(&args, "--seed").and_then(|v| parse_u64(&v)).unwrap_or(sim::DEFAULT_SEED);
     // Standard: Start auf der Bahn der Heimatbasis; `--start air` für den Luftstart.
-    let config = if arg(&args, "--start").as_deref() == Some("air") {
+    let mut config = if arg(&args, "--start").as_deref() == Some("air") {
         f29_core::SimConfig::new(seed)
     } else {
         f29_core::SimConfig::runway(seed)
     };
+    // Beladung der vier Schächte: fall, chute, glide, agm, arm, ship oder `-`.
+    if let Some(text) = arg(&args, "--loadout") {
+        match f29_core::weapons::Loadout::parse(&text) {
+            Some(l) => config.spawn.loadout = l,
+            None => {
+                eprintln!("--loadout: vier Einträge aus fall, chute, glide, agm, arm, ship oder - erwartet")
+            }
+        }
+    }
     let mut view_settings = view::ViewSettings::default();
     if arg(&args, "--view").as_deref() == Some("chase") {
         view_settings.mode = view::ViewMode::Chase;
@@ -79,6 +90,7 @@ fn main() {
         sim::SimPlugin { config },
         airfield::AirfieldPlugin,
         targets::TargetsPlugin,
+        weapons::WeaponsPlugin,
         input::InputPlugin,
         view::ViewPlugin,
         terrain::TerrainPlugin,

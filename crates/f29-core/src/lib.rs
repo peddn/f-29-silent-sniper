@@ -25,11 +25,13 @@ pub mod sensors;
 pub mod sim;
 pub mod targets;
 pub mod units;
+pub mod weapons;
 
 pub use controls::ControlFrame;
 pub use math::{DQuat, DVec3};
 pub use sim::{
-    CrashCause, DT, FlightData, Sim, SimConfig, SpawnKind, Status, TICK_HZ, TargetInfo, Touchdown,
+    CrashCause, DT, FlightData, Sim, SimConfig, SpawnKind, Status, StoresInfo, TICK_HZ, TargetInfo,
+    Touchdown, WeaponMessage,
 };
 
 pub use f29_data as data;

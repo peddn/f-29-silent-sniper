@@ -4,24 +4,28 @@
 //! die Startbedingungen exakt erhalten bleiben):
 //!
 //! ```text
-//! F29REPLAY 2
+//! F29REPLAY 3
 //! seed 3881
 //! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
+//! loadout fall,chute,glide,agm
 //! frames <anzahl Zeilen>
-//! <wiederholungen> <pitch> <roll> <yaw> <throttle> <flags>
+//! <wiederholungen> <pitch> <roll> <yaw> <throttle> <flags> <waffen>
 //! ...
 //! hash <hex>
 //! ```
 //!
-//! Version 1 (ohne Startart und Tankfüllung) wird weiter gelesen: Luftstart,
-//! volle Tanks. Ihre Hashes passen aber nicht mehr, weil das Flugmodell seitdem
-//! Treibstoff verbraucht.
+//! Ältere Versionen werden weiter gelesen: Version 2 ohne Beladungszeile und
+//! Waffenspalte (Standardbeladung, keine Waffenbedienung), Version 1 zudem ohne
+//! Startart und Tankfüllung (Luftstart, volle Tanks). Ihre Hashes passen aber
+//! nicht mehr, weil sich das Modell seitdem geändert hat.
 
 use crate::controls::ControlFrame;
 use crate::sim::{Sim, SimConfig, Spawn, SpawnKind};
+use crate::weapons::Loadout;
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 2";
+pub const MAGIC: &str = "F29REPLAY 3";
+const MAGIC_V2: &str = "F29REPLAY 2";
 const MAGIC_V1: &str = "F29REPLAY 1";
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,9 +101,11 @@ impl Replay {
             hex(sp.throttle),
             hex(sp.fuel)
         );
+        let _ = writeln!(s, "loadout {}", sp.loadout.to_text());
         let _ = writeln!(s, "frames {}", self.frames.len());
         for (n, f) in &self.frames {
-            let _ = writeln!(s, "{n} {} {} {} {} {}", f.pitch, f.roll, f.yaw, f.throttle, f.flags);
+            let _ =
+                writeln!(s, "{n} {} {} {} {} {} {}", f.pitch, f.roll, f.yaw, f.throttle, f.flags, f.weapons);
         }
         if let Some(h) = self.final_hash {
             let _ = writeln!(s, "hash {h:016x}");
@@ -119,7 +125,8 @@ impl Replay {
 
         let (ln, magic) = next("Kopfzeile")?;
         let v1 = magic == MAGIC_V1;
-        if magic != MAGIC && !v1 {
+        let old = v1 || magic == MAGIC_V2;
+        if magic != MAGIC && !old {
             return Err(err(ln, format!("erwartet `{MAGIC}`")));
         }
 
@@ -154,6 +161,15 @@ impl Replay {
             _ => return Err(err(ln, format!("spawn hat {} Werte", vals.len()))),
         };
 
+        let loadout = if old {
+            Loadout::default()
+        } else {
+            let (ln, l) = next("loadout")?;
+            l.strip_prefix("loadout ")
+                .and_then(Loadout::parse)
+                .ok_or_else(|| err(ln, "erwartet `loadout a,b,c,d`".into()))?
+        };
+
         let (ln, frames_line) = next("frames")?;
         let count = frames_line
             .strip_prefix("frames ")
@@ -165,7 +181,8 @@ impl Replay {
             let (ln, l) = next("Eingabezeile")?;
             let t: Vec<&str> = l.split_whitespace().collect();
             let parse = || -> Option<(u32, ControlFrame)> {
-                if t.len() != 6 {
+                let columns = if old { 6 } else { 7 };
+                if t.len() != columns {
                     return None;
                 }
                 Some((
@@ -176,6 +193,7 @@ impl Replay {
                         yaw: t[3].parse().ok()?,
                         throttle: t[4].parse().ok()?,
                         flags: t[5].parse().ok()?,
+                        weapons: if old { 0 } else { t[6].parse().ok()? },
                     },
                 ))
             };
@@ -194,7 +212,18 @@ impl Replay {
         Ok(Self {
             config: SimConfig {
                 seed,
-                spawn: Spawn { kind, fuel, north, east, altitude, min_clearance, heading, speed, throttle },
+                spawn: Spawn {
+                    kind,
+                    fuel,
+                    north,
+                    east,
+                    altitude,
+                    min_clearance,
+                    heading,
+                    speed,
+                    throttle,
+                    loadout,
+                },
             },
             frames,
             final_hash,
@@ -220,6 +249,8 @@ mod tests {
         assert_eq!(parsed, r);
         let mut rw = Replay::new(SimConfig::runway(5));
         rw.config.spawn.fuel = 0.4;
+        rw.config.spawn.loadout = Loadout::parse("arm,-,ship,fall").unwrap();
+        rw.push(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.5, 0).with_weapons(3));
         assert_eq!(Replay::from_text(&rw.to_text()).expect("parse"), rw);
     }
 

@@ -11,6 +11,7 @@ use crate::map::MapData;
 use crate::mfd::{RightPage, WEAPON_STATIONS, fuel_bar};
 use f29_core::targets::TargetRole;
 use f29_core::units;
+use f29_core::weapons::{Seeker, WeaponKind};
 use f29_core::{DVec3, FlightData, TargetInfo};
 
 /// Anteil der Bildhöhe, den die Seitenleiste unten belegt.
@@ -60,17 +61,26 @@ pub(crate) fn page_bar(dl: &mut DisplayList, screen: Rect, active: RightPage) {
 
 /// Waffen: vier Waffenschächte (Platzhalter) als liegende Rechtecke, darunter
 /// Angaben zum gewählten Schacht. Waffen kommen mit v0.2.
-pub(crate) fn weapons(dl: &mut DisplayList, _fd: &FlightData, screen: Rect, selected: usize) {
+pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     let f = frame(screen);
+    let st = &fd.stores;
+    let selected = st.selected;
     title(dl, screen, &f, "WEAPONS");
-    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, "SAFE", Ink::MfdDim);
+    let (state, state_ink) = if st.door >= 1.0 {
+        ("ARMED", Ink::Warning)
+    } else if st.door > 0.0 {
+        ("DOORS", Ink::Mfd)
+    } else {
+        ("SAFE", Ink::MfdDim)
+    };
+    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, state, state_ink);
 
     // 2 × 2 Schächte, je etwa doppelt so breit wie hoch
     let top = screen.max[1] - f.h * 0.13;
     let gap = f.w * 0.04;
     let bay_w = (f.x1 - f.x0 - gap) * 0.5;
     let bay_h = bay_w * 0.42;
-    for k in 0..WEAPON_STATIONS {
+    for (k, bay) in st.bays.iter().enumerate().take(WEAPON_STATIONS) {
         let (col, rowi) = (k % 2, k / 2);
         let x = f.x0 + col as f32 * (bay_w + gap);
         let y = top - rowi as f32 * (bay_h + gap) - bay_h;
@@ -90,17 +100,70 @@ pub(crate) fn weapons(dl: &mut DisplayList, _fd: &FlightData, screen: Rect, sele
             &format!("BAY {}", k + 1),
             ink,
         );
-        dl.text_mid([c[0], c[1] - f.txt * 0.4], f.txt * 0.9, Align::Center, "EMPTY", Ink::MfdDim);
+        match bay.kind {
+            Some(kind) if bay.count > 0 => {
+                dl.text_mid([c[0], c[1] - f.txt * 0.4], f.txt * 0.9, Align::Center, kind.label(), ink);
+                // Ein Strich je Waffe am unteren Rand
+                let n = kind.spec().per_bay.max(1);
+                let pip = (r.max[0] - r.min[0]) * 0.6 / f32::from(n);
+                for p in 0..n {
+                    let px = c[0] + (f32::from(p) - f32::from(n - 1) * 0.5) * pip;
+                    let py = r.min[1] + f.txt * 0.45;
+                    let pink = if p < bay.count { ink } else { Ink::MfdGrid };
+                    dl.line([px - pip * 0.35, py], [px + pip * 0.35, py], pink);
+                }
+            }
+            Some(kind) => {
+                dl.text_mid(
+                    [c[0], c[1] - f.txt * 0.4],
+                    f.txt * 0.9,
+                    Align::Center,
+                    kind.label(),
+                    Ink::MfdGrid,
+                );
+            }
+            None => {
+                dl.text_mid([c[0], c[1] - f.txt * 0.4], f.txt * 0.9, Align::Center, "EMPTY", Ink::MfdDim);
+            }
+        }
     }
 
     // Angaben zum gewählten Schacht
     let info_top = top - 2.0 * bay_h - gap - f.h * 0.05;
     let step = f.txt * 1.35;
     dl.text_mid([f.x0, info_top], f.txt, Align::Left, &format!("SELECTED BAY {}", selected + 1), Ink::Mfd);
-    let rows: [(&str, &str); 5] =
-        [("STORE", "---"), ("QTY", "0"), ("WEIGHT", "0 LB"), ("GUIDANCE", "---"), ("RELEASE", "---")];
-    for (i, (name, value)) in rows.iter().enumerate() {
-        row(dl, &f, info_top - step * (i as f32 + 1.1), name, value, Ink::MfdDim);
+    let bay = st.bays[selected];
+    let release = if bay.count == 0 {
+        ("EMPTY", Ink::MfdDim)
+    } else if st.door >= 1.0 {
+        ("READY", Ink::Warning)
+    } else {
+        ("BAY CLOSED", Ink::Mfd)
+    };
+    let (store, qty, weight, guidance) = match bay.kind {
+        Some(k) => {
+            let s = k.spec();
+            let guidance = match s.seeker {
+                Seeker::None if k == WeaponKind::Retarded => "RETARDED",
+                Seeker::None => "NONE",
+                Seeker::Optical => "TV",
+                Seeker::Radiation => "ANTI-RADAR",
+                Seeker::Naval => "RADAR",
+            };
+            let lb = units::kg_to_lb(s.mass_kg * f64::from(bay.count));
+            (s.name.to_string(), bay.count.to_string(), format!("{lb:.0} LB"), guidance)
+        }
+        None => ("---".to_string(), "0".to_string(), "0 LB".to_string(), "---"),
+    };
+    let rows: [(&str, &str, Ink); 5] = [
+        ("STORE", &store, Ink::Mfd),
+        ("QTY", &qty, Ink::Mfd),
+        ("WEIGHT", &weight, Ink::Mfd),
+        ("GUIDANCE", guidance, Ink::Mfd),
+        ("RELEASE", release.0, release.1),
+    ];
+    for (i, (name, value, ink)) in rows.iter().enumerate() {
+        row(dl, &f, info_top - step * (i as f32 + 1.1), name, value, *ink);
     }
 }
 

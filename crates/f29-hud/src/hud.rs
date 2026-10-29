@@ -40,6 +40,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout)
     left_data(dl, fd, &glass);
     right_data(dl, fd, &glass);
     warnings(dl, fd, &glass);
+    weapon_messages(dl, fd, &glass);
 }
 
 /// Nicklage-Leiter: Sprossen alle 5°, konform zur Außenwelt.
@@ -360,6 +361,17 @@ fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
 }
 
 /// Warnungen in der unteren Glasmitte; blinken mit 2 Hz.
+/// Waffenmeldungen unter dem HUD-Glas in der Außensicht, neueste oben.
+fn weapon_messages(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
+    let c = glass.center();
+    let mut y = glass.min[1] - TXT * 1.6;
+    for m in fd.weapon_messages.iter().rev() {
+        let ink = if m.warning { Ink::Warning } else { Ink::Hud };
+        dl.text_mid([c[0], y], TXT, Align::Center, &m.text, ink);
+        y -= TXT * 1.8;
+    }
+}
+
 fn warnings(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let blink = (fd.time_s * 2.0).fract() < 0.6;
     let c = glass.center();

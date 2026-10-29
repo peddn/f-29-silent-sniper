@@ -39,6 +39,9 @@ cargo run --release -p f29-app -- --start air
 cargo run --release -p f29-app -- --volume 50
 cargo run --release -p f29-app -- --no-sound
 
+# andere Beladung der vier Schächte: fall, chute, glide, agm, arm, ship oder -
+cargo run --release -p f29-app -- --loadout fall,fall,agm,arm
+
 # nach 10 s automatisch einen Screenshot speichern und beenden
 cargo run --release -p f29-app -- --screenshot bild.png --after 10
 
@@ -66,6 +69,9 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | G | Y / Dreieck | Fahrwerk aus/ein (am Boden gesperrt) |
 | N | A / Kreuz | nächster Navigationspunkt |
 | V | rechter Stick drücken | Radar ein/aus (schaltet ohne Sichtlinie auf, erhöht später die eigene Sichtbarkeit) |
+| O | linker Stick drücken | Schachtklappen auf/zu |
+| Tab | linke Schultertaste | nächster Waffenschacht |
+| Leertaste | rechte Schultertaste | Waffe auslösen (nur bei offenem Schacht) |
 | I / L / K / J | Steuerkreuz | Blickrichtung der Zielerfassung: voraus / rechts / hinten / links (schaltet automatisch auf das nächste Ziel; dieselbe Richtung noch einmal = nächstweiteres Ziel; die Richtung folgt einem aufgeschalteten Ziel) |
 | Shift+F1 / Shift+F2 | Select | Cockpit / Verfolger |
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
@@ -164,8 +170,13 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Blickrichtung; HUD-Zielrahmen und MFD-Seite mit optischem Zielbild (v0.2.1)
 - [x] Ziele einer Richtung durchschalten; Zielbild als gezoomte, verrauschte
       Kamera (v0.2.2); Aufschaltung bleibt beim Überflug, Blickrichtung folgt (v0.2.3)
-- [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD
-- [ ] Wirkungsmatrix Waffe × Zielklasse, Wirkradius, gehärtete Ziele + Toss-Bombing
+- [x] Waffenschacht mit Klappen, Standardbeladung (`--loadout`), Bomben mit echter
+      Ballistik (Freifall, Fallschirm), Wirkungsmatrix Waffe × Zielklasse mit
+      Abstandsabfall, gehärtete Ziele nur bei steilem Eintreffen, Wracks,
+      Splitterwarnung, WPN-Seite mit Bestand, Meldungen (v0.2.4)
+- [ ] Gelenkte Waffen mit eigenem Suchkopf: Gleitbombe, Luft-Boden-Rakete,
+      Radarjäger, Seezielrakete (v0.2.5)
+- [ ] Zielhilfe im HUD: Aufschlagpunkt, Auslöseklammer, Warnung „zu tief“ (v0.2.6)
 - [ ] Bodenziele und Boden-Luft-Bedrohungen (Radar-SAM, Flak)
 - [ ] Radar-/Detektionsmodell: aspektabhängiger Radarquerschnitt, Geländemaskierung,
       Emissionen; Signaturanzeige im Cockpit

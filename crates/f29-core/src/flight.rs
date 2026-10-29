@@ -64,6 +64,8 @@ pub struct AircraftState {
     pub flaps: f64,
     /// Treibstoff in den Tanks, kg.
     pub fuel_kg: f64,
+    /// Masse der Waffen in den Schächten, kg (vom Sim gesetzt).
+    pub stores_kg: f64,
     /// Fahrwerk 0 = eingefahren … 1 = ausgefahren und verriegelt.
     pub gear: f64,
     /// Steht bzw. rollt auf dem Boden (Rollmodus statt Flugmodell).
@@ -87,15 +89,16 @@ impl AircraftState {
             stall: 0.0,
             flaps: 0.0,
             fuel_kg: f29_data::F29_SPEC.fuel_capacity_kg,
+            stores_kg: 0.0,
             gear: 0.0,
             on_ground: false,
             height_agl_m: f64::INFINITY,
         }
     }
 
-    /// Aktuelle Masse (Leermasse + Treibstoff).
+    /// Aktuelle Masse (Leermasse + Treibstoff + Waffen).
     pub fn mass(&self, spec: &AircraftSpec) -> f64 {
-        spec.empty_mass_kg + self.fuel_kg.max(0.0)
+        spec.empty_mass_kg + self.fuel_kg.max(0.0) + self.stores_kg.max(0.0)
     }
 
     /// Ob das Fahrwerk ganz ausgefahren und verriegelt ist.

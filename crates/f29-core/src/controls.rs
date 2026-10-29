@@ -23,6 +23,16 @@ pub mod flags {
     pub const LOOK_MASK: u8 = 0b111 << LOOK_SHIFT;
 }
 
+/// Bitflags der Waffenbedienung (eigenes Byte, alle als Flanke).
+pub mod weapon_flags {
+    /// Waffe des gewählten Schachts auslösen.
+    pub const RELEASE: u8 = 1 << 0;
+    /// Schachtklappen öffnen bzw. schließen.
+    pub const BAY_DOORS: u8 = 1 << 1;
+    /// Nächsten Schacht wählen.
+    pub const NEXT_BAY: u8 = 1 << 2;
+}
+
 /// Ein Tick Steuereingabe, quantisiert.
 ///
 /// Vorzeichen: `pitch` > 0 = ziehen (Nase hoch), `roll` > 0 = rechts rollen,
@@ -35,6 +45,8 @@ pub struct ControlFrame {
     /// 0 = Leerlauf, `u16::MAX` = Vollschub.
     pub throttle: u16,
     pub flags: u8,
+    /// Waffenbedienung, siehe [`weapon_flags`].
+    pub weapons: u8,
 }
 
 const AXIS_MAX: f64 = i16::MAX as f64;
@@ -60,7 +72,17 @@ impl ControlFrame {
             yaw: quantize_axis(yaw),
             throttle,
             flags,
+            weapons: 0,
         }
+    }
+
+    /// Dieselbe Eingabe mit Waffenbedienung.
+    pub fn with_weapons(self, weapons: u8) -> Self {
+        Self { weapons, ..self }
+    }
+
+    pub fn has_weapon(&self, flag: u8) -> bool {
+        self.weapons & flag != 0
     }
 
     pub fn pitch_f(&self) -> f64 {

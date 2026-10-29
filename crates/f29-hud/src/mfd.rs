@@ -78,13 +78,11 @@ pub struct MfdState {
     /// Index in [`MAP_RANGES_NM`].
     pub map_zoom: usize,
     pub right_page: RightPage,
-    /// Gewählter Waffenschacht (0-basiert; Auswahl folgt mit den Waffen in v0.2).
-    pub selected_bay: usize,
 }
 
 impl Default for MfdState {
     fn default() -> Self {
-        Self { map_mode: MapMode::Grid, map_zoom: 2, right_page: RightPage::Mission, selected_bay: 0 }
+        Self { map_mode: MapMode::Grid, map_zoom: 2, right_page: RightPage::Mission }
     }
 }
 
@@ -210,7 +208,7 @@ pub(crate) fn draw(
     match state.right_page {
         RightPage::Mission => crate::pages::mission(dl, fd, rs, map),
         RightPage::Target => crate::pages::target(dl, fd, rs, camera_feed),
-        RightPage::Weapons => crate::pages::weapons(dl, fd, rs, state.selected_bay),
+        RightPage::Weapons => crate::pages::weapons(dl, fd, rs),
         RightPage::Engine => crate::pages::engine(dl, fd, rs),
         RightPage::Attitude => crate::pages::attitude(dl, fd, rs),
         RightPage::Systems => crate::pages::systems(dl, fd, rs),
