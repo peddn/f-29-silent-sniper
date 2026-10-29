@@ -151,7 +151,7 @@ pub struct AircraftSpec {
 /// zwei Triebwerken ohne Nachbrenner.
 ///
 /// Die Werte sind bewusst eigenständig gewählt: ein schweres, untermotorisiertes
-/// Angriffsflugzeug (Schub/Gewicht ≈ 0,38) mit hohem induziertem Widerstand
+/// Angriffsflugzeug (Schub/Gewicht ≈ 0,52 bei vollen Tanks) mit hohem induziertem Widerstand
 /// der facettierten Zelle. Harte Kurven kosten viel Fahrt, das Steigvermögen
 /// ist begrenzt, und wer zu hart zieht, reißt die Strömung ab und sackt durch.
 pub const F29_SPEC: AircraftSpec = AircraftSpec {
@@ -160,7 +160,7 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     fuel_capacity_kg: 5_200.0,
     wing_area_m2: 70.0,
 
-    thrust_max_n: 92_000.0,
+    thrust_max_n: 110_000.0,
     thrust_density_exponent: 0.75,
     engine_spool_time_s: 1.2,
     idle_ram_drag: 200.0,
@@ -179,10 +179,10 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     flap_cl: 0.40,
     flap_cd: 0.016,
     flap_induced_factor: 0.6,
-    flap_stall_relief: 0.45,
+    flap_stall_relief: 0.3,
     flap_rate: 0.5,
 
-    sink_angle_max_rad: 0.15,
+    sink_angle_max_rad: 0.25,
     sink_onset_factor: 1.5,
 
     gear_cd: 0.045,
@@ -206,7 +206,7 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     g_limit_neg: 2.5,
     alpha_warning_rad: 0.27,
     stall_deficit_full: 0.18,
-    stall_stick_g: 3.5,
+    stall_stick_g: 2.8,
     stall_stick_level_factor: 0.4,
     stall_time_constant_s: 0.3,
     stall_recovery_factor: 1.2,
@@ -381,7 +381,7 @@ mod tests {
     #[test]
     fn thrust_to_weight_is_low() {
         let tw = F29_SPEC.thrust_max_n / (F29_SPEC.full_mass_kg() * 9.80665);
-        assert!((0.3..0.45).contains(&tw), "Schub/Gewicht {tw}");
+        assert!((0.4..0.6).contains(&tw), "Schub/Gewicht {tw}");
     }
 
     #[test]

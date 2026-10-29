@@ -72,10 +72,11 @@ pub fn report() -> Vec<Metric> {
     out.push(m(
         "stall_time_turn",
         "Zeit bis Abriss: 70°-Kurve, 185 kt, voll gezogen",
-        time_to_stall(1.22),
+        time_to_stall(1.22, 0.0),
         "s",
     ));
-    out.push(m("stall_time_level", "… waagerecht hochgezogen", time_to_stall(0.0), "s"));
+    out.push(m("stall_time_level", "… waagerecht hochgezogen", time_to_stall(0.0, 0.0), "s"));
+    out.push(m("stall_time_turn_flaps", "… 70°-Kurve mit Klappen", time_to_stall(1.22, 1.0), "s"));
     out.push(m("turn_speed_clean", "Fahrt nach 8 s am g-Begrenzer ab 450 kt", kt(hard_turn_speed(0)), "kt"));
     out.push(m("turn_speed_flaps", "… mit Klappen", kt(hard_turn_speed(flags::FLAPS)), "kt"));
     let release = takeoff(false, 0);
@@ -221,14 +222,15 @@ fn stall_height_loss(entry: StallEntry, with_flaps: bool) -> f64 {
 
 /// Zeit (s) bis zum merklichen Abriss bei vollem Zug in Querlage `bank` (rad),
 /// ab 95 m/s, Vollgas. Unendlich, wenn innerhalb von 20 s kein Abriss.
-fn time_to_stall(bank: f64) -> f64 {
+fn time_to_stall(bank: f64, flaps: f64) -> f64 {
     let spec = &F29_SPEC;
-    let mut st = trimmed(spec, 95.0, 0.0, 1.0);
+    let f = flap_flag(flaps);
+    let mut st = trimmed(spec, 95.0, flaps, 1.0);
     for i in 0..ticks(20.0) {
         let (_, _, roll) = st.attitude.to_euler();
         let aileron = ((bank - roll) * 3.0).clamp(-1.0, 1.0);
         let stick = if (bank - roll).abs() < 0.15 { 1.0 } else { 0.0 };
-        flight::step(spec, &mut st, &ControlFrame::from_analog(stick, aileron, 0.0, 1.0, 0), DVec3::ZERO, DT);
+        flight::step(spec, &mut st, &ControlFrame::from_analog(stick, aileron, 0.0, 1.0, f), DVec3::ZERO, DT);
         if st.stall > STALL_NOTICEABLE {
             return i as f64 * DT;
         }

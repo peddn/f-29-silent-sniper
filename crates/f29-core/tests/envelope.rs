@@ -49,6 +49,9 @@ fn stalls_cost_a_lot_of_height() {
 fn hard_turns_stall_sooner_than_level_pulls() {
     within("stall_time_turn", 0.0, 2.5);
     assert!(v("stall_time_level") > v("stall_time_turn") + 2.0, "Hochziehen reißt zu früh ab");
+    // Klappen machen nicht immun: Auch mit ihnen reißt eine langsame harte
+    // Kurve ab (v0.1.18).
+    within("stall_time_turn_flaps", 0.0, 4.0);
 }
 
 /// Harte Kurven kosten Fahrt, Manöverklappen weniger.

@@ -482,8 +482,15 @@ pub fn flap_relief(spec: &AircraftSpec, flaps: f64) -> f64 {
 }
 
 /// Abrissgeschwindigkeit bei Luftdichte `density` und g-Last `n` (m/s).
+///
+/// Klappen senken nur den 1-g-Anteil (Langsamflug, Landung); was unter Last
+/// dazukommt, zählt wie ohne Klappen: v² = Vs(Klappen)² + (n − 1)·Vs(ohne)².
+/// Sonst schöben die Klappen harte Kurven knapp unter die Abrissgrenze und
+/// machten einen Kurvenabriss praktisch unmöglich.
 pub fn stall_speed(spec: &AircraftSpec, mass_kg: f64, density: f64, n: f64, flaps: f64) -> f64 {
-    spec.stall_speed_1g(mass_kg, density, flaps) * n.max(1.0).sqrt()
+    let vs = spec.stall_speed_1g(mass_kg, density, flaps);
+    let vs_clean = spec.stall_speed_1g(mass_kg, density, 0.0);
+    (vs * vs + (n.max(1.0) - 1.0) * vs_clean * vs_clean).sqrt()
 }
 
 /// Flugbahnwinkel γ (rad, positiv = steigen).
@@ -577,7 +584,8 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
     let target = if aero.tas >= MIN_AERO_SPEED {
         let vs = spec.stall_speed_1g(mass, aero.density, s.flaps);
         let n = demanded_load_factor(spec, s, c, aero.tas, aero.qbar);
-        let target = stall_target(spec, vs * n.sqrt(), aero.tas, aero.wing_alpha);
+        let v_load = stall_speed(spec, mass, aero.density, n, s.flaps);
+        let target = stall_target(spec, v_load, aero.tas, aero.wing_alpha);
         // Erholung gegen die 1-g-Abrissfahrt: Wer schnell genug ist, fängt
         // sich, auch wenn er noch etwas zieht.
         if s.stall > STALL_NOTICEABLE && aero.tas < spec.stall_recovery_factor * vs {

@@ -118,6 +118,11 @@ Format jedes Eintrags:
   *v0.1.6:* Die Masse setzt sich jetzt aus Leermasse und Treibstoff zusammen
   (M-009). Die oben genannten Werte gelten für volle Tanks; gegen Ende eines
   Flugs ist das Flugzeug leichter, steigt besser und reißt später ab.
+
+  *v0.1.18 (Spieltest: mehr Beschleunigung):* Schub 92 → 110 kN, Schub/Gewicht
+  bei vollen Tanks ≈ 0,52. Von 200 auf 350 kt in 3000 m dauert es etwa 24 statt
+  31 s. Harte Kurven kosten etwas weniger Fahrt (nach 8 s am g-Begrenzer ab
+  450 kt ≈ 374 statt 361 kt).
 - **Status:** umgesetzt (v0.1)
 
 ### M-004 Strömungsabriss
@@ -285,8 +290,22 @@ Format jedes Eintrags:
   Folgen gegenüber v0.1.16: Mit Klappen kostet ein Abriss etwas mehr Höhe
   (horizontal ≈ 2800 statt 2200 ft, aus dem Steigflug ≈ 4300 statt 3500 ft).
   Ohne Klappen bleibt alles gleich.
+
+  *v0.1.18 (Spieltest):* Ohne Klappen riss das Flugzeug in Kurven zu schnell
+  ab, mit Klappen praktisch nie. Grund: Die Klappen senkten die Abrissfahrt
+  auch unter Last um 14 %, genau die Spanne, die harte Kurven knapp unter
+  die Abrissgrenze schob. Jetzt senken die Klappen nur den 1-g-Anteil:
+  v² = Vs(Klappen)² + (n − 1)·Vs(ohne)² (`flight::stall_speed`). Außerdem:
+  `stall_stick_g` 3,5 → 2,8 (späterer Kurvenabriss bei Kampffahrt),
+  `flap_stall_relief` 0,45 → 0,3, Schub 92 → 110 kN (siehe M-001) und zum
+  Ausgleich `sink_angle_max_rad` 0,15 → 0,25.
+  Gemessen (`flight_report`, 3000 m): 70°-Kurve bei 250 kt voll gezogen,
+  ohne Klappen Abriss erst nach etwa 7 s statt nach 1 s. Bei 185 kt
+  unverändert nach 1,6 s, mit Klappen jetzt nach 1,9 s (vorher nie, Nase
+  dann auf etwa −30°, gut 600 ft Verlust). Abriss aus dem Horizontalflug mit
+  Klappen ≈ 4200 ft, ohne ≈ 4900 ft.
 - **Status:** umgesetzt (v0.1.4, Durchsacken v0.1.15, Einrastung v0.1.16,
-  vereinfacht v0.1.17)
+  vereinfacht v0.1.17, Kurvenabriss v0.1.18)
 
 ### M-009 Treibstoff
 
@@ -474,6 +493,9 @@ Format jedes Eintrags:
     Manöverklappen (`flap_induced_factor`) und Milderung von Abriss und
     Durchsacken (`flap_stall_relief`). Die Ruderhilfe bei geringer Fahrt ist
     entfallen. Dazu halbieren sie weiterhin die Turbulenz (M-006).
+  - *v0.1.18:* Die Klappen senken die Abrissfahrt nur noch im 1-g-Anteil,
+    unter Last zählt die Abrissfahrt ohne Klappen (M-004). Ein Kurvenabriss ist
+    mit Klappen wieder möglich. `flap_stall_relief` 0,45 → 0,3.
   - Gemessen (bis v0.1.15): Bei 135 kt und halbem Zug kippt das Flugzeug ohne Klappen auf
     −78° ab; mit Klappen bleibt die Nase oben, die Nickrate ist doppelt so hoch,
     die Rollrate bei 140 kt steigt von 44°/s auf 126°/s. Bei 450 kt und 8 s am
