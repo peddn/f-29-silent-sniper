@@ -24,6 +24,7 @@ fn main() {
         throttle: 0.3,
         // Nach der Mission: Schächte leer.
         loadout: f29_core::weapons::Loadout::EMPTY,
+        night: false,
     };
     let mut sim = Sim::new(SimConfig { seed, spawn });
     let mut ap = Approach::new(rw.clone());

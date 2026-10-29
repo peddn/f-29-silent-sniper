@@ -4,17 +4,19 @@
 //! die Startbedingungen exakt erhalten bleiben):
 //!
 //! ```text
-//! F29REPLAY 3
+//! F29REPLAY 4
 //! seed 3881
 //! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
-//! loadout fall,chute,glide,agm
+//! loadout fall,chute,lgb,agm
+//! time <day|night>
 //! frames <anzahl Zeilen>
 //! <wiederholungen> <pitch> <roll> <yaw> <throttle> <flags> <waffen>
 //! ...
 //! hash <hex>
 //! ```
 //!
-//! Ältere Versionen werden weiter gelesen: Version 2 ohne Beladungszeile und
+//! Ältere Versionen werden weiter gelesen: Version 3 ohne Tageszeit (Tag),
+//! Version 2 zudem ohne Beladungszeile und
 //! Waffenspalte (Standardbeladung, keine Waffenbedienung), Version 1 zudem ohne
 //! Startart und Tankfüllung (Luftstart, volle Tanks). Ihre Hashes passen aber
 //! nicht mehr, weil sich das Modell seitdem geändert hat.
@@ -24,7 +26,8 @@ use crate::sim::{Sim, SimConfig, Spawn, SpawnKind};
 use crate::weapons::Loadout;
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 3";
+pub const MAGIC: &str = "F29REPLAY 4";
+const MAGIC_V3: &str = "F29REPLAY 3";
 const MAGIC_V2: &str = "F29REPLAY 2";
 const MAGIC_V1: &str = "F29REPLAY 1";
 
@@ -102,6 +105,7 @@ impl Replay {
             hex(sp.fuel)
         );
         let _ = writeln!(s, "loadout {}", sp.loadout.to_text());
+        let _ = writeln!(s, "time {}", if sp.night { "night" } else { "day" });
         let _ = writeln!(s, "frames {}", self.frames.len());
         for (n, f) in &self.frames {
             let _ =
@@ -126,7 +130,8 @@ impl Replay {
         let (ln, magic) = next("Kopfzeile")?;
         let v1 = magic == MAGIC_V1;
         let old = v1 || magic == MAGIC_V2;
-        if magic != MAGIC && !old {
+        let v3 = magic == MAGIC_V3;
+        if magic != MAGIC && !old && !v3 {
             return Err(err(ln, format!("erwartet `{MAGIC}`")));
         }
 
@@ -168,6 +173,17 @@ impl Replay {
             l.strip_prefix("loadout ")
                 .and_then(Loadout::parse)
                 .ok_or_else(|| err(ln, "erwartet `loadout a,b,c,d`".into()))?
+        };
+
+        let night = if old || v3 {
+            false
+        } else {
+            let (ln, l) = next("time")?;
+            match l.strip_prefix("time ") {
+                Some("day") => false,
+                Some("night") => true,
+                _ => return Err(err(ln, "erwartet `time day|night`".into())),
+            }
         };
 
         let (ln, frames_line) = next("frames")?;
@@ -223,6 +239,7 @@ impl Replay {
                     speed,
                     throttle,
                     loadout,
+                    night,
                 },
             },
             frames,
@@ -250,6 +267,7 @@ mod tests {
         let mut rw = Replay::new(SimConfig::runway(5));
         rw.config.spawn.fuel = 0.4;
         rw.config.spawn.loadout = Loadout::parse("arm,-,ship,fall").unwrap();
+        rw.config.spawn.night = true;
         rw.push(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.5, 0).with_weapons(3));
         assert_eq!(Replay::from_text(&rw.to_text()).expect("parse"), rw);
     }

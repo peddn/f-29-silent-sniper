@@ -79,6 +79,8 @@ pub struct Spawn {
     pub throttle: f64,
     /// Beladung der Waffenschächte (M-014).
     pub loadout: Loadout,
+    /// Nachtflug: Sensorreichweiten stark verringert (M-013).
+    pub night: bool,
 }
 
 impl Default for Spawn {
@@ -94,6 +96,7 @@ impl Default for Spawn {
             speed: 210.0,
             throttle: 0.55,
             loadout: Loadout::default(),
+            night: false,
         }
     }
 }
@@ -446,7 +449,7 @@ impl Sim {
             .max(0.0);
         let route = build_route(&terrain, config.seed, sp);
         let targets = targets::generate(&terrain, seed, &route);
-        let mut sensors = Sensors::default();
+        let mut sensors = Sensors { night: sp.night, ..Sensors::default() };
         sensors.update(&targets, &terrain, aircraft.position, aircraft.attitude.to_euler().0);
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
@@ -1119,7 +1122,7 @@ impl Sim {
             h.f64(w.aim_offset.y);
             h.f64(w.aim_offset.z);
         }
-        h.u64(u64::from(self.sensors.radar_on));
+        h.u64(u64::from(self.sensors.radar_on) | u64::from(self.sensors.night) << 1);
         h.u64(u64::from(self.sensors.look.code()));
         if let Some(l) = self.sensors.lock {
             h.u64(l.target as u64);

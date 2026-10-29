@@ -106,7 +106,8 @@ fn optical_lock_needs_line_of_sight_and_is_shorter_ranged() {
         // fernere (reine Radar-)Ziele drankommen.
         let cycle = i % (sensors::UPDATE_TICKS as usize * 4) == 1;
         step(&mut sim, if cycle { ControlFrame::look_flags(LookDir::Forward.code()) } else { 0 });
-        if i % sensors::UPDATE_TICKS as usize != 0 {
+        // Genau im Erfassungstakt prüfen (dazwischen ist die Aufschaltung alt).
+        if !sim.flight_data().tick.is_multiple_of(sensors::UPDATE_TICKS) {
             continue;
         }
         let Some(t) = sim.flight_data().target else { continue };
@@ -197,4 +198,19 @@ fn lock_is_kept_when_overflying_and_look_follows() {
     assert_eq!(sim.sensors().look, LookDir::Aft, "Blickrichtung folgt nach hinten: {looks:?}");
     let t = sim.flight_data().target.unwrap();
     assert!(t.range > 4_000.0, "Ziel liegt hinter uns ({:.0} m)", t.range);
+}
+
+/// Nachts schrumpfen beide Reichweiten stark (optisch 16 km, Radar 40 km).
+#[test]
+fn night_cuts_both_sensor_ranges() {
+    let day = near_primary();
+    let mut night_cfg = day.config().clone();
+    night_cfg.spawn.night = true;
+    let night = Sim::new(night_cfg);
+    let (d, n) = (day.sensors(), night.sensors());
+    assert_eq!(d.optical_range(), OPTICAL_RANGE_M);
+    assert_eq!(d.radar_range(), RADAR_RANGE_M);
+    assert!((n.optical_range() - 16_000.0).abs() < 1.0, "{}", n.optical_range());
+    assert!((n.radar_range() - 40_000.0).abs() < 1.0, "{}", n.radar_range());
+    const { assert!(RADAR_RANGE_M >= 2.0 * OPTICAL_RANGE_M && OPTICAL_RANGE_M >= 80_000.0) };
 }

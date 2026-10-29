@@ -21,6 +21,11 @@ struct RetroEffect {
     palette: f32,
     // 1 = auf das virtuelle Raster pixelieren.
     pixelate: f32,
+    // 1 = Nacht: abgedunkelt und bläulich.
+    night: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 }
 @group(0) @binding(2) var<uniform> settings: RetroEffect;
 
@@ -88,7 +93,10 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     if (settings.pixelate > 0.5) {
         uv = (cell + 0.5) * block / size;
     }
-    let linear = textureSample(screen_texture, texture_sampler, uv).rgb;
+    var linear = textureSample(screen_texture, texture_sampler, uv).rgb;
+    if (settings.night > 0.5) {
+        linear = linear * vec3<f32>(0.22, 0.25, 0.38);
+    }
     if (settings.palette < 0.5) {
         return vec4<f32>(linear, 1.0);
     }

@@ -90,6 +90,17 @@ fn haze_color() -> Color {
     Color::srgb(r, g, b)
 }
 
+/// Nachthimmel und Nachtdunst (dunkelste Palettenfarbe bzw. ein dunkles Blau).
+pub fn night_sky_color() -> Color {
+    let [r, g, b] = palette::srgb(0);
+    Color::srgb(r, g, b)
+}
+
+/// Himmel passend zur Tageszeit des Flugs.
+pub fn sky_for(night: bool) -> Color {
+    if night { night_sky_color() } else { sky_color() }
+}
+
 pub fn layout_for(window: &Window) -> ScreenLayout {
     let aspect = window.width() / window.height().max(1.0);
     ScreenLayout::cockpit(aspect)
@@ -173,16 +184,27 @@ fn update_viewport(
     }
 }
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_camera_and_aircraft(
     time: Res<Time>,
     state: Res<SimState>,
     view: Res<ViewSettings>,
     mut origin: ResMut<WorldOrigin>,
     mut chase: ResMut<ChaseCamera>,
-    mut camera: Single<(&mut Transform, &mut RetroEffect), (With<MainCamera>, Without<PlayerAircraft>)>,
+    mut camera: Single<
+        (&mut Transform, &mut RetroEffect, &mut DistanceFog),
+        (With<MainCamera>, Without<PlayerAircraft>),
+    >,
     mut aircraft: Single<(&mut Transform, &mut Visibility), (With<PlayerAircraft>, Without<MainCamera>)>,
+    mut clear: ResMut<ClearColor>,
 ) {
+    // Tageszeit: Himmel, Dunst und Nachbearbeitung (M-013: nachts kürzere
+    // Sensorreichweiten).
+    let night = state.sim.config().spawn.night;
+    let sky = sky_for(night);
+    if clear.0 != sky {
+        clear.0 = sky;
+    }
     let pose = state.render_pose();
     origin.0 = pose.position;
     let [x, y, z, w] = coords::quat_ned_to_yup(pose.attitude);
@@ -192,7 +214,8 @@ pub fn update_camera_and_aircraft(
     ac_transform.translation = Vec3::ZERO;
     ac_transform.rotation = rot;
 
-    let (cam, retro) = &mut *camera;
+    let (cam, retro, fog) = &mut *camera;
+    fog.color = if night { night_sky_color() } else { haze_color() };
     match view.mode {
         ViewMode::Cockpit => {
             **ac_visibility = Visibility::Hidden;
@@ -211,7 +234,7 @@ pub fn update_camera_and_aircraft(
             cam.look_at(fwd * model::LENGTH_M, Vec3::Y);
         }
     }
-    **retro = RetroEffect::from_mode(view.retro);
+    **retro = RetroEffect::from_mode(view.retro).with_night(night);
 }
 
 /// Fahrwerk zeigen, sobald es halb draußen ist.

@@ -307,6 +307,7 @@ fn autopilot_landing() -> (f64, f64) {
         throttle: 0.3,
         // Nach der Mission: Schächte leer.
         loadout: crate::weapons::Loadout::EMPTY,
+        night: false,
     };
     let mut sim = Sim::new(SimConfig { seed: SEED, spawn });
     let mut ap = Approach::new(rw);

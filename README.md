@@ -35,6 +35,9 @@ cargo run --release -p f29-app -- --seed 1234 --view chase
 # Luftstart statt Start auf der Bahn
 cargo run --release -p f29-app -- --start air
 
+# Nachtflug: dunkle Darstellung, Sensoren mit stark verkürzter Reichweite
+cargo run --release -p f29-app -- --night
+
 # Lautstärke in Prozent (Standard 80) bzw. ganz ohne Ton
 cargo run --release -p f29-app -- --volume 50
 cargo run --release -p f29-app -- --no-sound

@@ -38,6 +38,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout)
     target_marker(dl, fd, layout, &glass, vh);
     bomb_aim(dl, fd, layout, &glass, vh);
     launch_circle(dl, fd, layout, c);
+    shoot_cue(dl, fd, &glass);
     heading_tape(dl, fd, &glass);
     bank_scale(dl, fd, &glass);
     left_data(dl, fd, &glass);
@@ -182,6 +183,32 @@ fn launch_circle(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, c
     }
     let r = layout.focal() * (f29_core::weapons::LAUNCH_CIRCLE_RAD as f32).tan();
     dl.circle(center, r, 40, Ink::HudDim);
+}
+
+/// Feuersignal der Lenkwaffen unten mittig im Glas: „IN RANGE“ in
+/// Reichweite, „SHOOT“ (rot umrahmt) im Sweet Spot – bei Raketen nur, wenn
+/// das Ziel zusätzlich im Abschusskreis liegt (sonst „IN RANGE“).
+fn shoot_cue(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
+    let Some(t) = &fd.target else {
+        return;
+    };
+    let st = &fd.stores;
+    let Some(kind) = st.bays[st.selected].kind.filter(|k| k.is_guided() && st.bays[st.selected].count > 0)
+    else {
+        return;
+    };
+    let in_circle = !kind.uses_launch_circle()
+        || t.direction_body.x >= f29_core::weapons::LAUNCH_CIRCLE_RAD.cos() * t.direction_body.length();
+    let pos = [glass.center()[0], glass.min[1] + TXT * 1.4];
+    match t.zone {
+        Some(LaunchZone::Good) if in_circle => {
+            dl.boxed_text(pos, TXT, Align::Center, "SHOOT", Ink::Warning);
+        }
+        Some(LaunchZone::Good | LaunchZone::InRange) => {
+            dl.text_mid(pos, TXT_SMALL, Align::Center, "IN RANGE", Ink::Hud);
+        }
+        _ => {}
+    }
 }
 
 /// Raute über dem aktiven Navigationspunkt bzw. Pfeil am Glasrand.

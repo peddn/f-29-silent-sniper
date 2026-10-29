@@ -10,7 +10,7 @@
 //! ```text
 //! f29-silent-sniper [--seed N] [--view cockpit|chase] [--start runway|air]
 //!                   [--volume 0..100] [--no-sound]
-//!                   [--loadout fall,chute,lgb,agm]
+//!                   [--loadout fall,chute,lgb,agm] [--night]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
 
@@ -43,6 +43,8 @@ fn main() {
     } else {
         f29_core::SimConfig::runway(seed)
     };
+    // Nachtflug: dunkle Darstellung, stark verkürzte Sensorreichweiten.
+    config.spawn.night = args.iter().any(|a| a == "--night");
     // Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship oder `-`.
     if let Some(text) = arg(&args, "--loadout") {
         match f29_core::weapons::Loadout::parse(&text) {

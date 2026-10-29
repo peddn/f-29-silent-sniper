@@ -40,7 +40,8 @@ impl RetroMode {
     }
 }
 
-/// Uniform-Daten des Shaders (16 Byte – keine WebGL2-Polsterung nötig).
+/// Uniform-Daten des Shaders (32 Byte – Vielfaches von 16, keine
+/// WebGL2-Polsterung nötig).
 #[derive(Component, ExtractComponent, Clone, Copy, ShaderType, Default, Debug, PartialEq)]
 #[extract_app(RenderApp)]
 pub struct RetroEffect {
@@ -48,6 +49,11 @@ pub struct RetroEffect {
     pub dither: f32,
     pub palette: f32,
     pub pixelate: f32,
+    /// 1 = Nacht: Bild stark abgedunkelt und bläulich.
+    pub night: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
 }
 
 impl RetroEffect {
@@ -56,10 +62,25 @@ impl RetroEffect {
 
     pub fn from_mode(mode: RetroMode) -> Self {
         match mode {
-            RetroMode::Full => Self { virtual_lines: Self::LINES, dither: 1.0, palette: 1.0, pixelate: 1.0 },
-            RetroMode::Palette => Self { virtual_lines: 100_000.0, dither: 1.0, palette: 1.0, pixelate: 0.0 },
-            RetroMode::Off => Self { virtual_lines: 100_000.0, dither: 0.0, palette: 0.0, pixelate: 0.0 },
+            RetroMode::Full => Self {
+                virtual_lines: Self::LINES,
+                dither: 1.0,
+                palette: 1.0,
+                pixelate: 1.0,
+                ..Self::default()
+            },
+            RetroMode::Palette => {
+                Self { virtual_lines: 100_000.0, dither: 1.0, palette: 1.0, pixelate: 0.0, ..Self::default() }
+            }
+            RetroMode::Off => {
+                Self { virtual_lines: 100_000.0, dither: 0.0, palette: 0.0, pixelate: 0.0, ..Self::default() }
+            }
         }
+    }
+
+    /// Mit Nachtdarstellung.
+    pub fn with_night(self, night: bool) -> Self {
+        Self { night: if night { 1.0 } else { 0.0 }, ..self }
     }
 }
 

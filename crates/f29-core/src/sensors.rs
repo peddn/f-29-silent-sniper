@@ -21,10 +21,15 @@ use crate::math::DVec3;
 use crate::targets::Target;
 use f29_terrain::Terrain;
 
-/// Reichweite des Radars (m, 20 NM).
-pub const RADAR_RANGE_M: f64 = 37_040.0;
-/// Reichweite des optischen Systems (m, 8 NM).
-pub const OPTICAL_RANGE_M: f64 = 14_816.0;
+/// Reichweite des Radars bei Tag (m, Spielerentscheidung v0.2.7: das
+/// Doppelte der optischen).
+pub const RADAR_RANGE_M: f64 = 160_000.0;
+/// Reichweite des optischen Systems bei Tag (m, Spielerentscheidung v0.2.7).
+pub const OPTICAL_RANGE_M: f64 = 80_000.0;
+/// Nachts schrumpft die optische Reichweite auf diesen Anteil (16 km) …
+pub const NIGHT_OPTICAL_FACTOR: f64 = 0.2;
+/// … und die des Radars auf diesen (40 km).
+pub const NIGHT_RADAR_FACTOR: f64 = 0.25;
 /// Halber Öffnungswinkel des Erfassungskegels um die Blickrichtung (rad, 45°).
 pub const CONE_HALF_RAD: f64 = std::f64::consts::FRAC_PI_4;
 /// Erfassung alle so viele Ticks (4 Hz).
@@ -124,6 +129,8 @@ pub struct Sensors {
     pub radar_capability: f64,
     /// Leistung des optischen Systems 0..1, wie oben.
     pub optics_capability: f64,
+    /// Nachtflug: beide Reichweiten stark verringert.
+    pub night: bool,
 }
 
 impl Default for Sensors {
@@ -134,6 +141,7 @@ impl Default for Sensors {
             lock: None,
             radar_capability: 1.0,
             optics_capability: 1.0,
+            night: false,
         }
     }
 }
@@ -162,12 +170,14 @@ pub fn line_of_sight(height: impl Fn(f64, f64) -> f64, from: [f64; 3], to: [f64;
 impl Sensors {
     /// Radarreichweite unter Berücksichtigung von Schäden (m).
     pub fn radar_range(&self) -> f64 {
-        RADAR_RANGE_M * self.radar_capability.clamp(0.0, 1.0)
+        let night = if self.night { NIGHT_RADAR_FACTOR } else { 1.0 };
+        RADAR_RANGE_M * night * self.radar_capability.clamp(0.0, 1.0)
     }
 
     /// Optische Reichweite unter Berücksichtigung von Schäden (m).
     pub fn optical_range(&self) -> f64 {
-        OPTICAL_RANGE_M * self.optics_capability.clamp(0.0, 1.0)
+        let night = if self.night { NIGHT_OPTICAL_FACTOR } else { 1.0 };
+        OPTICAL_RANGE_M * night * self.optics_capability.clamp(0.0, 1.0)
     }
 
     /// Kandidaten im Kegel der Blickrichtung und in Reichweite des größeren

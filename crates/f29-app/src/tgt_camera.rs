@@ -175,7 +175,9 @@ fn update(
     }
     // Mit der Entfernung wird das Bild unruhiger.
     effect.time = time.elapsed_secs_wrapped();
-    effect.noise = 0.6 + 0.8 * (t.range / f29_core::sensors::OPTICAL_RANGE_M) as f32;
+    let optical = state.sim.sensors().optical_range().max(1.0);
+    effect.noise = 0.6 + 0.8 * (t.range / optical) as f32;
+    cam.clear_color = ClearColorConfig::Custom(crate::view::sky_for(state.sim.config().spawn.night));
     cam.is_active = true;
     **visibility = Visibility::Inherited;
 }

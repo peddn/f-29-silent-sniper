@@ -798,11 +798,16 @@ Format jedes Eintrags:
     Original – sie tragen ihren eigenen optischen oder Radar-Suchkopf und brauchen
     nach dem Abschuss keine Verbindung zum Flugzeug. Erste Waffen: Freifallbomben,
     gelenkte Bomben, Fallschirmbomben (verzögerter Fall) und gelenkte Raketen.
-- **Unsere Werte:** Radar 20 NM, optisch 8 NM, Kegel ±45° um die Blickrichtung,
-  Erfassung 4-mal pro Sekunde (ein Wechsel von Radar oder Blickrichtung wirkt
-  sofort), Sichtlinie in 60-m-Schritten. Reichweiten so gewählt, dass das Radar die
-  Kartenstufe 20 NM füllt und die Optik etwa die Sichtweite bei klarem Wetter trifft.
-- **Status:** Erfassung umgesetzt (v0.2.1), Zielwechsel und Zielkamera (v0.2.2), Aufschaltung beim Überflug halten (v0.2.3), Suchkopf und Lenkung der Waffen (v0.2.5, Details M-014)
+- **Tag und Nacht (v0.2.7, Spielerentscheidung):** Wie im Original gibt es
+  Nachtflüge (`--night`, im Replay als Tageszeit). Nachts schrumpfen beide
+  Reichweiten stark; die Außensicht ist abgedunkelt und bläulich.
+- **Unsere Werte:** bei Tag optisch 80 km, Radar 160 km (Spielerentscheidung v0.2.7:
+  „stark erhöhen“, Radar das Doppelte); nachts optisch 16 km (× 0,2), Radar 40 km
+  (× 0,25). Kegel ±45° um die Blickrichtung, Erfassung 4-mal pro Sekunde (ein
+  Wechsel von Radar oder Blickrichtung wirkt sofort), Sichtlinie in 60-m-Schritten
+  (höchstens 1000 Prüfpunkte, auf 80 km also alle 80 m). Bis v0.2.6 waren es
+  14,8 km bzw. 37 km.
+- **Status:** Erfassung umgesetzt (v0.2.1), Zielwechsel und Zielkamera (v0.2.2), Aufschaltung beim Überflug halten (v0.2.3), Suchkopf und Lenkung der Waffen (v0.2.5, Details M-014), große Reichweiten und Nacht (v0.2.7)
 
 ### M-014 Waffenschacht, Abwurf und Zielhilfe
 
@@ -937,6 +942,10 @@ Format jedes Eintrags:
     zeitbasierter Anzeige (Sekunden bis zum Auslösen) und nichtlinearem
     Maßstab; die Längs- und Querablage liefert der Kern schon
     (`BombAim::target_offset`).
+  - **Feuersignal** der Lenkwaffen unten mittig im HUD-Glas: „IN RANGE“ in
+    Reichweite, „SHOOT“ (rot umrahmt) im Sweet Spot – bei Raketen nur, wenn das
+    Ziel zusätzlich im Abschusskreis liegt; bei der Laserbombe, wenn sie im
+    Sweet Spot des Gleitkorridors ist (Spielerwunsch v0.2.7).
   - **HUD unten links:** gewählte Waffe mit Anzahl (z. B. „MK-82 X2“) und
     Schacht mit Klappenzustand („BAY 1 SAFE/DOORS/OPEN“, offen rot).
   - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,
@@ -951,7 +960,7 @@ Format jedes Eintrags:
   Fallschirm 0,9 m² nach 0,3 s, zwei je Schacht, Wirkradius 30 m, Splitterbereich
   180 m. GBU-12 227 kg, Cw·A 0,022 m², Steuerung 6°/s. Abschusskreis ±8°.
   Maverick 210 kg, 320 m/s, 25°/s, 16 km (Sweet Spot um 8 km), Suchkegel ±25°,
-  Wirkradius 8 m (wirksam bis zur optischen Erfassungsreichweite von 14,8 km);
+  Wirkradius 8 m (nachts begrenzt die optische Reichweite von 16 km);
   HARM 360 kg, 650 m/s, 20°/s, 30 km, ±35°; Harpoon 520 kg, 270 m/s,
   10°/s, 30 km, ±40°. Startgüte an der Reichweitengrenze 0,25, im Sweet Spot
   (40–60 % der Reichweite) 1, direkt am Ziel 0,3.

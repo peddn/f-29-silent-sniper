@@ -432,3 +432,37 @@ fn launch_circle_only_for_missiles() {
     assert!(lines(WeaponKind::AirToGround) >= bomb + 30, "kein Kreis bei der Maverick");
     assert_eq!(lines(WeaponKind::AntiRadar), lines(WeaponKind::AirToGround));
 }
+
+/// Feuersignal: „SHOOT“ im Sweet Spot (rot), „IN RANGE“ sonst; bei Raketen
+/// nur „SHOOT“, wenn das Ziel im Abschusskreis liegt.
+#[test]
+fn shoot_cue_follows_zone_and_circle() {
+    use f29_core::weapons::{Bay, LaunchZone, WeaponKind};
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let mut sim = Sim::new(SimConfig::new(0x0F29));
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.55, f29_core::controls::flags::RADAR_TOGGLE));
+    let base = sim.flight_data();
+    let t0 = base.target.expect("Ziel");
+    let red = |kind: WeaponKind, zone: LaunchZone, off_deg: f64| {
+        let mut fd = base.clone();
+        fd.stores.selected = 0;
+        fd.stores.bays[0] = Bay { kind: Some(kind), count: 1 };
+        fd.bomb_aim = None;
+        let a = off_deg.to_radians();
+        fd.target = Some(f29_core::TargetInfo {
+            zone: Some(zone),
+            civilian: false,
+            direction_body: f29_core::DVec3::new(a.cos(), 0.0, a.sin()),
+            ..t0
+        });
+        let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
+        dl.lines.iter().filter(|l| l.ink == Ink::Warning).count()
+    };
+    let lgb_good = red(WeaponKind::GuidedBomb, LaunchZone::Good, 25.0);
+    let lgb_in = red(WeaponKind::GuidedBomb, LaunchZone::InRange, 25.0);
+    assert!(lgb_good > lgb_in + 10, "kein SHOOT für die Laserbombe");
+    // Rakete: Ziel 4° unter der Nase (im Kreis) vs. 15° (außerhalb).
+    let in_circle = red(WeaponKind::AirToGround, LaunchZone::Good, 4.0);
+    let outside = red(WeaponKind::AirToGround, LaunchZone::Good, 15.0);
+    assert!(in_circle > outside + 10, "SHOOT trotz Ziel außerhalb des Kreises");
+}
