@@ -165,3 +165,36 @@ fn same_direction_cycles_through_targets_by_range() {
     unique.dedup();
     assert_eq!(unique.len(), seen.len(), "ein Ziel doppelt vor dem Umlauf");
 }
+
+/// Überflug: Ein voraus aufgeschaltetes Ziel bleibt aufgeschaltet, die
+/// Blickrichtung folgt ihm nach hinten.
+#[test]
+fn lock_is_kept_when_overflying_and_look_follows() {
+    let mut sim = near_primary();
+    let primary =
+        sim.targets().iter().position(|t| t.role == f29_core::targets::TargetRole::Primary).unwrap();
+    step(&mut sim, flags::RADAR_TOGGLE);
+    step(&mut sim, ControlFrame::look_flags(LookDir::Right.code()));
+    step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()));
+    // Bis zum Primärziel weiterschalten.
+    for _ in 0..40 {
+        if sim.sensors().lock.map(|l| l.target) == Some(primary) {
+            break;
+        }
+        step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()));
+    }
+    assert_eq!(sim.sensors().lock.map(|l| l.target), Some(primary), "Primärziel voraus aufschaltbar");
+    // 12 km voraus bei 180 m/s: nach 100 s liegt es rund 6 km hinter uns.
+    let mut looks = vec![LookDir::Forward];
+    for _ in 0..(120 * 100) {
+        step(&mut sim, 0);
+        let lock = sim.sensors().lock.expect("Aufschaltung bleibt beim Überflug");
+        assert_eq!(lock.target, primary, "Ziel gewechselt");
+        if looks.last() != Some(&sim.sensors().look) {
+            looks.push(sim.sensors().look);
+        }
+    }
+    assert_eq!(sim.sensors().look, LookDir::Aft, "Blickrichtung folgt nach hinten: {looks:?}");
+    let t = sim.flight_data().target.unwrap();
+    assert!(t.range > 4_000.0, "Ziel liegt hinter uns ({:.0} m)", t.range);
+}

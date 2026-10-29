@@ -1,9 +1,11 @@
 //! Zielerfassung (M-013): optisches System und Radar.
 //!
 //! Beide schalten automatisch auf das **nächste** intakte Ziel in einem
-//! Kegel um die gewählte Blickrichtung auf (voraus, rechts, hinten, links)
-//! und halten es, solange es erfasst bleibt. Erneutes Wählen derselben
-//! Richtung schaltet zum nächstweiteren Ziel weiter.
+//! Kegel um die gewählte Blickrichtung auf (voraus, rechts, hinten, links).
+//! Eine Aufschaltung bleibt bestehen, solange irgendein System das Ziel
+//! erfasst – auch wenn es den Kegel verlässt: Die Blickrichtung folgt dem
+//! Ziel (etwa beim Überflug von voraus nach hinten). Erneutes Wählen der
+//! aktuellen Richtung schaltet zum nächstweiteren Ziel weiter.
 //! - **Radar:** große Reichweite, ohne Sichtlinie – es „sieht“ durch Berge.
 //!   Abschaltbar; eingeschaltet erhöht es später die eigene Sichtbarkeit
 //!   (M-020).
@@ -72,6 +74,20 @@ impl LookDir {
             LookDir::Right => 2,
             LookDir::Aft => 3,
             LookDir::Left => 4,
+        }
+    }
+
+    /// Richtung, deren Kegel die relative Peilung `rel` (rad, zum Kurs) enthält.
+    pub fn from_relative_bearing(rel: f64) -> Self {
+        let deg = detmath::wrap_pi(rel).to_degrees();
+        if deg.abs() <= 45.0 {
+            LookDir::Forward
+        } else if deg.abs() >= 135.0 {
+            LookDir::Aft
+        } else if deg > 0.0 {
+            LookDir::Right
+        } else {
+            LookDir::Left
         }
     }
 
@@ -164,18 +180,24 @@ impl Sensors {
         (optical || radar).then_some(Lock { target: i, optical, radar })
     }
 
-    /// Hält die Aufschaltung, solange das Ziel im Kegel liegt und erfasst
-    /// wird; sonst automatisch auf das nächste Ziel der Blickrichtung. `pos`
-    /// ist die eigene Position (NED), `heading` der Kurs.
+    /// Hält die Aufschaltung, solange ein System das Ziel erfasst, und dreht
+    /// die Blickrichtung mit dem Ziel mit; sonst automatisch auf das nächste
+    /// Ziel der Blickrichtung. `pos` ist die eigene Position (NED), `heading`
+    /// der Kurs.
     pub fn update(&mut self, targets: &[Target], terrain: &Terrain, pos: DVec3, heading: f64) {
-        let candidates = self.candidates(targets, pos, heading);
         if let Some(cur) = self.lock
-            && let Some(&(range, i)) = candidates.iter().find(|(_, i)| *i == cur.target)
-            && let Some(lock) = self.detect(targets, terrain, pos, range, i)
+            && targets.get(cur.target).is_some_and(Target::is_intact)
         {
-            self.lock = Some(lock);
-            return;
+            let c = targets[cur.target].center_ned();
+            let (dn, de, dd) = (c[0] - pos.x, c[1] - pos.y, c[2] - pos.z);
+            let range = (dn * dn + de * de + dd * dd).sqrt();
+            if let Some(lock) = self.detect(targets, terrain, pos, range, cur.target) {
+                self.look = LookDir::from_relative_bearing(detmath::atan2(de, dn) - heading);
+                self.lock = Some(lock);
+                return;
+            }
         }
+        let candidates = self.candidates(targets, pos, heading);
         self.lock = candidates.iter().find_map(|&(range, i)| self.detect(targets, terrain, pos, range, i));
     }
 

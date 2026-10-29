@@ -760,10 +760,14 @@ Format jedes Eintrags:
   - Das Aufschalten ist **immer automatisch**: das nächste intakte Ziel in einem
     Kegel um die gewählte Blickrichtung (I voraus, L rechts, K hinten, J links), wie
     im Original. Zivile Ziele werden mit aufgeschaltet, aber gekennzeichnet.
-  - **Zielwechsel (v0.2.2):** Die Aufschaltung bleibt, solange das Ziel im Kegel
-    liegt und von einem System erfasst wird. Dieselbe Richtungstaste noch einmal
-    schaltet zum nächstweiteren erfassten Ziel dieser Richtung; nach dem weitesten
-    geht es zurück zum nächsten. Eine andere Richtung setzt auf deren nächstes Ziel.
+  - **Zielwechsel (v0.2.2):** Dieselbe Richtungstaste noch einmal schaltet zum
+    nächstweiteren erfassten Ziel dieser Richtung; nach dem weitesten geht es zurück
+    zum nächsten. Eine andere Richtung setzt auf deren nächstes Ziel.
+  - **Aufschaltung halten (v0.2.3):** Der Kegel gilt nur für das Aufschalten. Eine
+    bestehende Aufschaltung bleibt, solange ein System das Ziel erfasst (Reichweite,
+    beim optischen System auch Sichtlinie), und die Blickrichtung dreht mit dem Ziel
+    mit – beim Überflug etwa von voraus über die Seite nach hinten. Die Taste der
+    Richtung, in der das Ziel gerade liegt, schaltet dort zum nächsten weiter.
   - Anzeige: Zielrahmen im HUD (durchgekreuzt bei zivilen Zielen, Pfeil am Rand
     außerhalb des Sichtfelds) mit „OPT“ oder „RDR“; Zeile mit Radar, Blickrichtung
     und Entfernung; neue MFD-Seite TGT mit optischem Zielbild, Name, Klasse, Rolle,
@@ -784,7 +788,7 @@ Format jedes Eintrags:
   Erfassung 4-mal pro Sekunde (ein Wechsel von Radar oder Blickrichtung wirkt
   sofort), Sichtlinie in 60-m-Schritten. Reichweiten so gewählt, dass das Radar die
   Kartenstufe 20 NM füllt und die Optik etwa die Sichtweite bei klarem Wetter trifft.
-- **Status:** Erfassung umgesetzt (v0.2.1), Zielwechsel und Zielkamera (v0.2.2)
+- **Status:** Erfassung umgesetzt (v0.2.1), Zielwechsel und Zielkamera (v0.2.2), Aufschaltung beim Überflug halten (v0.2.3)
 
 ### M-020 Radar-/Detektionsmodell (Stealth)
 

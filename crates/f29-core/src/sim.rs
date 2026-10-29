@@ -424,6 +424,11 @@ impl Sim {
             done = true;
         }
         if let Some(look) = LookDir::from_code(controls.look_code()) {
+            // Erst die mitgeführte Blickrichtung auf den Stand bringen: Die
+            // Taste der Richtung, in der das Ziel gerade liegt, schaltet weiter.
+            if !done {
+                self.sensors.update(&self.targets, &self.terrain, pos, heading);
+            }
             if look == self.sensors.look {
                 self.sensors.next_target(&self.targets, &self.terrain, pos, heading);
             } else {
