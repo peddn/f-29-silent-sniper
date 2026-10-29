@@ -37,6 +37,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout)
     steerpoint_marker(dl, fd, layout, &glass, vh);
     target_marker(dl, fd, layout, &glass, vh);
     bomb_aim(dl, fd, layout, &glass, vh);
+    launch_circle(dl, fd, layout, c);
     heading_tape(dl, fd, &glass);
     bank_scale(dl, fd, &glass);
     left_data(dl, fd, &glass);
@@ -139,10 +140,9 @@ fn flight_path_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayo
 }
 
 /// Zielhilfe für ungelenkte Bomben (M-014): Aufschlagpunkt mit Fall-Linie
-/// vom Flugbahnsymbol; mit aufgeschaltetem Ziel oben eine Auslöseklammer, die
-/// sich mit der Längsablage schließt (geschlossen = auslösen), darüber eine
-/// Marke für die Querablage. Rot, wenn der Einschlag im eigenen
-/// Splitterbereich läge.
+/// vom Flugbahnsymbol; liegt der Kreis auf dem Ziel, auslösen. Rot, wenn der
+/// Einschlag im eigenen Splitterbereich läge. (Die Auslöseklammer des
+/// Originals ist für später vorgemerkt, M-014.)
 fn bomb_aim(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
     let Some(aim) = &fd.bomb_aim else {
         return;
@@ -168,32 +168,20 @@ fn bomb_aim(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass:
         dl.line([p[0] - r * 0.2, p[1]], [p[0] + r * 0.2, p[1]], ink);
         dl.set_clip(None);
     }
-    // Auslöseklammer unter dem Kursband
-    let Some((along, cross)) = aim.target_offset else {
+}
+
+/// Abschusskreis der Raketen um die Flugzeugnase (M-014): Liegt das
+/// aufgeschaltete Ziel darin, übernimmt die Rakete es beim Abschuss.
+fn launch_circle(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, center: [f32; 2]) {
+    let st = &fd.stores;
+    let Some(kind) = st.bays[st.selected].kind.filter(|_| st.bays[st.selected].count > 0) else {
         return;
     };
-    let c = glass.center();
-    let half_max = (glass.max[0] - glass.min[0]) * 0.22;
-    let y = glass.max[1] - (glass.max[1] - glass.min[1]) * 0.31;
-    let tick = vh * 0.012;
-    let scale = |m: f64| (m / 2_000.0).clamp(-1.0, 1.0) as f32 * half_max;
-    let w = scale(along.abs()).max(vh * 0.004);
-    dl.line([c[0] - w, y], [c[0] + w, y], ink);
-    dl.line([c[0] - w, y], [c[0] - w, y - tick], ink);
-    dl.line([c[0] + w, y], [c[0] + w, y - tick], ink);
-    // Querablage: kleines Dreieck über der Klammer
-    let x = c[0] + scale(cross);
-    dl.polyline(
-        &[[x, y + tick * 0.3], [x - tick * 0.5, y + tick * 1.1], [x + tick * 0.5, y + tick * 1.1]],
-        true,
-        ink,
-    );
-    let lethal = aim.lethal_radius_m;
-    if along.abs() < lethal * 0.5 && cross.abs() < lethal {
-        dl.boxed_text([c[0], y - tick * 2.4], TXT_SMALL, Align::Center, "RELEASE", ink);
-    } else if along < -lethal {
-        dl.text_mid([c[0], y - tick * 2.4], TXT_SMALL, Align::Center, "PAST", Ink::HudDim);
+    if !kind.uses_launch_circle() {
+        return;
     }
+    let r = layout.focal() * (f29_core::weapons::LAUNCH_CIRCLE_RAD as f32).tan();
+    dl.circle(center, r, 40, Ink::HudDim);
 }
 
 /// Raute über dem aktiven Navigationspunkt bzw. Pfeil am Glasrand.

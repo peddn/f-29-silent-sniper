@@ -851,14 +851,14 @@ Format jedes Eintrags:
   - Sechs Waffenarten mit den Bezeichnungen der realen Vorbilder
     (Spielerentscheidung; öffentliche Typbezeichnungen, nicht aus dem Original
     übernommen): Mk 82 (Freifallbombe), Mk 82 Snakeye (Fallschirmbombe,
-    Bremsschirm öffnet kurz nach dem Abwurf), AGM-62 Walleye (Gleitbombe mit
-    optischem Suchkopf), AGM-65 Maverick (optisch gelenkte Luft-Boden-Rakete),
+    Bremsschirm öffnet kurz nach dem Abwurf), GBU-12 Paveway II (lasergelenkte
+    Bombe, bis v0.2.6 AGM-62 Walleye), AGM-65 Maverick (optisch gelenkte Luft-Boden-Rakete),
     AGM-88 HARM (Radarjäger, nur Flugabwehrstellungen), AGM-84 Harpoon
     (Seezielrakete, nur Schiffe). Alle gelenkten Waffen sind Fire and Forget
     (M-013). Masse und Größenordnungen folgen den Vorbildern, Lenk- und
     Wirkungswerte sind Spielwerte.
   - Beladung: vier Schächte mit je einer Waffenart, **feste Standardbeladung**
-    (Freifall, Fallschirm, Gleitbombe, Luft-Boden-Rakete), änderbar mit
+    (Mk 82, Snakeye, GBU-12, Maverick), änderbar mit
     `--loadout`; ein Beladungsbildschirm kommt mit dem Missionsbriefing. Die
     Waffen zählen zur Flugzeugmasse und werden beim Abwurf leichter.
   - Bedienung: Schachtklappen mit **eigener Taste** (öffnen dauert gut eine
@@ -874,32 +874,43 @@ Format jedes Eintrags:
   - Bombeneinschlag: Alle Ziele im Wirkradius erhalten Schaden nach Abstand
     (M-011), gehärtete Ziele nur bei steilem Eintreffen (M-012). Zerstörte Ziele
     werden zum flachen, dunklen Wrack, die Aufschaltung fällt ab.
-  - **Lenkwaffen (v0.2.5), einfach wie im Original:** Sie fallen kurz frei aus dem
-    Schacht, beschleunigen dann auf ihre **Marschfahrt und halten sie** bis zum
-    Ende der Flugzeit (kein Brennschluss) und drehen mit **begrenzter Drehrate**
-    auf ihr Ziel. Die Gleitbombe gleitet mit fester Fahrt und muss mindestens mit
-    Gleitzahl 6 sinken: Aus zu großer Entfernung oder zu geringer Höhe fällt sie zu
-    kurz (ihre Reichweite hängt von der Höhe über dem Ziel ab).
-  - **Übergabe beim Abschuss:** Sieht der Suchkopf das aufgeschaltete Ziel (Klasse
-    passt, im Kegel um die Flugzeugnase, in Reichweite, optisch mit Sichtlinie),
-    übernimmt er es. Optische Suchköpfe (Maverick, Walleye) übernehmen nur eine
-    **optische** Aufschaltung, keine reine Radaraufschaltung (Spielerentscheidung).
-    Ohne (passende) Aufschaltung fliegt die Waffe nach dem Herausfallen **in ihrer
-    Abschusslage geradeaus** weiter; erkennt ihr Suchkopf dabei ein Ziel, schaltet
-    sie es auf und versucht es zu treffen – **auch zivile Ziele**
-    (Spielerentscheidung); HARM nur Flugabwehr, Harpoon nur Schiffe. Verliert sie
-    ein Ziel, fliegt sie in der letzten Richtung geradeaus weiter.
-  - **Gewürfelter Endanflug (Spielerentscheidung):** Beim Erfassen wird aus der
-    **Startgüte** gewürfelt: Miss (30–80 m daneben, keine Wirkung), Near Miss
-    (knapp daneben, halber Treffer-Schaden), Hit (voller Schaden nach Matrix, 1 %
-    kritisch). Startgüte = Entfernung (**Sweet Spot**: an der Reichweitengrenze
-    niedrig, ansteigend bis zum Sweet Spot bei 30–50 % der Reichweite, dort am
-    höchsten, bei weiterer Annäherung wieder abfallend) × Ablage vom Suchkopfkegel (Ziel nahe der Flugrichtung – Nase aufs
-    Ziel – ist besser) × Leistung der Bordoptik bei optischen Suchköpfen
-    (Schadensmodell). Die Waffe fliegt sichtbar auf den gewürfelten Punkt, Bild
-    und Meldung passen also zusammen. Verliert der Suchkopf das Ziel (Kegel,
-    Sichtlinie), verfällt der Wurf und die Waffe fliegt blind weiter, die Nase
-    sinkt langsam; ein Einschlag zählt dann physikalisch wie bei Bomben.
+  - **Lenkwaffen – vereinfacht in v0.2.7: Der Abschuss entscheidet, der Flug
+    zeigt es nur.**
+    - Raketen (Maverick, HARM, Harpoon) fallen kurz frei aus dem Schacht, gehen
+      auf ihre **Marschfahrt und halten sie** (kein Brennschluss, wie im
+      Original) und drehen mit begrenzter Drehrate sichtbar auf ihren
+      gewürfelten Zielpunkt. Unterwegs prüfen sie nichts mehr; nur Gelände im
+      Weg kann den Wurf noch verderben (dann physikalischer Einschlag).
+    - **Abschusskreis** (Spielerentscheidung): ein fester Kreis von ±8° um die
+      Flugzeugnase im HUD, gleich für alle Raketen. Übergabe beim Abschuss nur,
+      wenn das aufgeschaltete Ziel im Kreis liegt, in Reichweite ist und der
+      Suchkopf es sieht (Klasse passt, optisch mit Sichtlinie). Optische
+      Suchköpfe übernehmen nur eine **optische** Aufschaltung.
+    - Ohne Übergabe fliegt die Rakete nach dem Herausfallen **in ihrer
+      Abschusslage geradeaus**; erkennt ihr Suchkopf (Kegel um die Flugrichtung)
+      dabei ein Ziel, schaltet sie es auf und versucht es zu treffen – **auch
+      zivile Ziele**; HARM nur Flugabwehr, Harpoon nur Schiffe.
+    - **Laserbombe GBU-12 Paveway II** (ersetzt die Walleye, Spielerentscheidung):
+      aufschaltbar, wenn das Ziel optisch aufgeschaltet ist und die Bombe genug
+      Energie hat, um es mit ihren Steuerflächen zu erreichen – das Ziel liegt in
+      einem **Gleitkorridor** um den ballistischen Aufschlagpunkt (längs 60–140 %
+      der ballistischen Wurfweite, quer 20 % plus 100 m). Kein Abschusskreis,
+      sonst ginge nur der Sturzflug. Sie fällt physikalisch und dreht ihre
+      Flugbahn mit begrenzter Rate zum Laserfleck. Das Flugzeug muss das Ziel
+      **bis zum Einschlag optisch aufgeschaltet halten** (Laserbeleuchtung,
+      Spielerentscheidung); reißt die Sicht ab oder wechselt der Pilot das
+      Ziel, meldet das HUD „LASER LOST“ und die Bombe fällt ungelenkt weiter.
+  - **Gewürfelter Endanflug (Spielerentscheidung):** Bei der Übergabe bzw. beim
+    Erfassen wird aus der **Startgüte** gewürfelt: Miss (30–80 m daneben, keine
+    Wirkung), Near Miss (knapp daneben, halber Treffer-Schaden), Hit (voller
+    Schaden nach Matrix, 1 % kritisch). Startgüte der Raketen = Entfernung
+    (**Sweet Spot**: an der Reichweitengrenze niedrig, ansteigend bis zum Sweet
+    Spot bei 40–60 % der Reichweite – Maverick um 8 von 16 km –, bei weiterer
+    Annäherung wieder abfallend) × Leistung der Bordoptik bei optischen
+    Suchköpfen. Bei der Laserbombe ersetzt die Lage im Gleitkorridor die
+    Entfernung (nahe am ballistischen Punkt = Sweet Spot). Die Ablage von der
+    Nase zählt nicht mehr (v0.2.7). Die Waffe fliegt sichtbar auf den
+    gewürfelten Punkt, Bild und Meldung passen also zusammen.
   - **Zielrahmen** (wie im Original: erfasst, näher dran Farbwechsel; keine
     Mindestreichweite): außer Reichweite einfacher Rahmen, in Reichweite der
     gewählten Lenkwaffe kräftige Ecken, im Sweet Spot rot (näher dran wieder nur
@@ -913,15 +924,19 @@ Format jedes Eintrags:
   - **Zielhilfe für Bomben (v0.2.6)** nach der Lesephase oben, eigene Gestaltung:
     Bei gewählter Mk 82 / Snakeye und höchstens 60° Querlage zeigt das HUD den
     vorausberechneten Aufschlagpunkt (Kreis mit Punkt) und eine Fall-Linie vom
-    Flugbahnsymbol dorthin. Mit aufgeschaltetem, intaktem Ziel steht unter dem
-    Kursband eine **Auslöseklammer**, deren Breite die Längsablage zwischen
-    Aufschlagpunkt und Ziel zeigt (bis 2 km); ein Dreieck darüber zeigt die
-    Querablage. Ist die Längsablage kleiner als der halbe Wirkradius und die
-    Querablage kleiner als der Wirkradius, erscheint „RELEASE“; ist das Ziel
-    schon überflogen, „PAST“. Läge der Einschlag im Splitterbereich des
-    weiterfliegenden Flugzeugs, wird alles rot und „TOO LOW“ blinkt. Die
-    Vorhersage nutzt dieselbe Flugbahnrechnung wie die echte Bombe (20-mal pro
-    Sekunde, grobe Schritte mit gemittelter Geschwindigkeit).
+    Flugbahnsymbol dorthin – liegt der Kreis auf dem Ziel, auslösen. Läge der
+    Einschlag im Splitterbereich des weiterfliegenden Flugzeugs, wird alles rot
+    und „TOO LOW“ blinkt. Die Vorhersage nutzt dieselbe Flugbahnrechnung wie
+    die echte Bombe (20-mal pro Sekunde, grobe Schritte mit gemittelter
+    Geschwindigkeit).
+  - **Für später vorgemerkt: Auslöseklammer** (Spielerwunsch, im Original
+    vorhanden). Eine erste Fassung (v0.2.6: Klammerbreite = Längsablage bis 2 km,
+    „RELEASE“-Fenster ±15 m) war im Spiel nicht nutzbar – im groben Maßstab
+    wirkte sie geschlossen, lange bevor die Bombe getroffen hätte, und das
+    Auslösefenster war kürzer als eine Rechenperiode. Neu entwerfen mit
+    zeitbasierter Anzeige (Sekunden bis zum Auslösen) und nichtlinearem
+    Maßstab; die Längs- und Querablage liefert der Kern schon
+    (`BombAim::target_offset`).
   - **HUD unten links:** gewählte Waffe mit Anzahl (z. B. „MK-82 X2“) und
     Schacht mit Klappenzustand („BAY 1 SAFE/DOORS/OPEN“, offen rot).
   - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,
@@ -929,28 +944,31 @@ Format jedes Eintrags:
     Die Fallschirmbombe ist genau dafür da: Sie bleibt im Tiefflug weit genug
     zurück.
   - Meldungen unter dem HUD-Glas (z. B. „MK-82 AWAY“, „BAY CLOSED“, „AGM-65 LOCK …“,
-    „AGM-65 LOST LOCK“, „… DAMAGED“, „… DESTROYED“, „CRITICAL HIT … DESTROYED“,
+    „GBU-12 LASER LOST“, „… DAMAGED“, „… DESTROYED“, „CRITICAL HIT … DESTROYED“,
     „INEFFECTIVE ON …“, „CIVILIAN … DESTROYED“); die WPN-Seite zeigt Bestand je
     Schacht, Klappenzustand (SAFE/DOORS/ARMED) und Bereitschaft.
-- **Unsere Werte:** Mk 82 241 kg (Walleye 510 kg), Cw·A 0,020 m²,
+- **Unsere Werte:** Mk 82 241 kg, Cw·A 0,020 m²,
   Fallschirm 0,9 m² nach 0,3 s, zwei je Schacht, Wirkradius 30 m, Splitterbereich
-  180 m. Walleye 220 m/s, 12°/s, bis 10 km (Gleitzahl 6), Kegel ±30°.
-  Maverick 210 kg, 320 m/s, 25°/s, 12 km, ±25°, Wirkradius 8 m;
+  180 m. GBU-12 227 kg, Cw·A 0,022 m², Steuerung 6°/s. Abschusskreis ±8°.
+  Maverick 210 kg, 320 m/s, 25°/s, 16 km (Sweet Spot um 8 km), Suchkegel ±25°,
+  Wirkradius 8 m (wirksam bis zur optischen Erfassungsreichweite von 14,8 km);
   HARM 360 kg, 650 m/s, 20°/s, 30 km, ±35°; Harpoon 520 kg, 270 m/s,
   10°/s, 30 km, ±40°. Startgüte an der Reichweitengrenze 0,25, im Sweet Spot
-  (30–50 % der Reichweite) 1, direkt am Ziel 0,3; am Kegelrand × 0,6.
+  (40–60 % der Reichweite) 1, direkt am Ziel 0,3.
   Ausgang bei Güte 1: 5 % Miss, 15 % Near Miss, 80 % Hit; bei Güte 0: 55 %, 30 %,
-  15 %. Gemessen (Luft-Boden-Rakete gegen weiche Ziele, je bis zu 80 flache
-  Anflüge): aus dem Sweet Spot 82 % zerstört, 6 % daneben; an der
-  Reichweitengrenze 54 % zerstört, 21 % daneben; zu nah (1,5 km) 58 % zerstört,
-  24 % daneben. Volle
+  15 %. Gemessen (Maverick gegen weiche Ziele, flache Anflüge über bis zu 120
+  Karten): aus dem Sweet Spot (8 km) 83 % zerstört, 5 % daneben; nahe der
+  Grenze (14 km) 51 % zerstört, 27 % daneben; zu nah (2,5 km) 56 % zerstört,
+  26 % daneben. GBU-12 aus 900 m im Sweet Spot ausgelöst und beleuchtet: 31 von
+  35 Zielen zerstört. Volle
   Wirkung bis 40 % des Wirkradius (vom Zielrand gemessen), dann linear auf null.
   Gehärtet ab 60° Eintreffwinkel. Größenordnungen aus öffentlichen Daten realer
   250-kg-Bomben und leichter Luft-Boden-Flugkörper, Wirkung nach Spielbalance.
   Volle Standardbeladung wiegt knapp 2 t; Landeanflüge in Tests fliegen leer.
 - **Status:** Abwurf, Ballistik und Wirkung umgesetzt (v0.2.4); Lenkwaffen,
   gewürfelter Endanflug und Zielrahmen nach Reichweite (v0.2.5); HUD-Zielhilfe für
-  Bomben (v0.2.6)
+  Bomben (v0.2.6); vereinfachte Lenkwaffen mit Abschusskreis, Laserbombe,
+  Auslöseklammer vorgemerkt (v0.2.7)
 
 ### M-015 Bordsysteme und Schadensmodell (Gerüst)
 

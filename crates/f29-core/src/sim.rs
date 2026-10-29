@@ -529,7 +529,9 @@ impl Sim {
     fn update_bomb_prediction(&mut self) {
         let a = &self.aircraft;
         self.bomb_prediction = match self.stores.selected_weapon() {
-            Some(kind) if !kind.is_guided() && !a.on_ground => {
+            // Ungelenkte Bomben und die Laserbombe (ihr ballistischer Punkt ist
+            // die Mitte des Gleitkorridors).
+            Some(kind) if (!kind.is_guided() || !kind.uses_launch_circle()) && !a.on_ground => {
                 weapons::predict_release(kind, a.position, a.velocity, a.attitude, &self.terrain, DT)
             }
             _ => None,
@@ -560,6 +562,7 @@ impl Sim {
                 terrain: &self.terrain,
                 bay_ok,
                 optics: self.systems.capability(System::Optics),
+                ballistic: self.bomb_prediction.map(|(p, _)| p),
             };
             let dropped = if a.on_ground { 0.0 } else { self.stores.release(&launch) };
             self.aircraft.stores_kg = (self.aircraft.stores_kg - dropped).max(0.0);
@@ -576,6 +579,7 @@ impl Sim {
             tick: self.tick,
             dt: DT,
             aircraft: self.aircraft.position,
+            designated: self.sensors.lock.filter(|l| l.optical).map(|l| l.target),
         };
         // Die Aufschaltung bleibt auch auf einem zerstörten Ziel, bis der
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
@@ -833,11 +837,19 @@ impl Sim {
                     -t.elevation - a.position.z,
                 ),
                 heading: t.heading,
-                zone: self
-                    .stores
-                    .selected_weapon()
-                    .filter(|k| k.is_guided() && t.is_intact())
-                    .map(|k| weapons::launch_zone(k, a.position, t, lock.optical)),
+                zone: self.stores.selected_weapon().filter(|k| k.is_guided() && t.is_intact()).map(|k| {
+                    if k.uses_launch_circle() {
+                        weapons::launch_zone(k, a.position, t, lock.optical)
+                    } else {
+                        weapons::laser_zone(
+                            a.position,
+                            a.velocity,
+                            self.bomb_prediction.map(|(p, _)| p),
+                            t,
+                            lock.optical,
+                        )
+                    }
+                }),
                 damage: t.damage,
                 destroyed: !t.is_intact(),
             })
@@ -1010,7 +1022,7 @@ impl Sim {
                     WeaponEvent::Acquired { kind, target, .. } => {
                         (format!("{} LOCK {}", kind.label(), name(target)), self.targets[target].civilian)
                     }
-                    WeaponEvent::LockLost { kind, .. } => (format!("{} LOST LOCK", kind.label()), false),
+                    WeaponEvent::LaserLost { kind, .. } => (format!("{} LASER LOST", kind.label()), true),
                     WeaponEvent::Impact { kind, result, .. } => match result {
                         ImpactResult::Destroyed { target: i, .. } if self.targets[i].civilian => {
                             (format!("CIVILIAN {} DESTROYED", name(i)), true)

@@ -3,7 +3,7 @@
 //! ```text
 //! f29-headless demo     [--seed N] [--seconds S] [--record DATEI]
 //! f29-headless replay   DATEI
-//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--out DATEI]
+//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--bay N] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N]
 //! f29-headless sound    [--out VERZEICHNIS]
@@ -27,12 +27,13 @@ f29-headless – F-29 Silent Sniper ohne Grafik
 Befehle:
   demo     [--seed N] [--seconds S] [--record DATEI]   Autopilot fliegt die Route ab
   replay   DATEI                                       Replay abspielen und Hash prüfen
-  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--out DATEI]
+  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--bay N] [--out DATEI]
                                                        HUD nach S Sekunden Demo als SVG
                                                        (SEITE des rechten MFDs: msn, tgt, wpn, eng, adi, sys;
                                                        --radar 1 schaltet am Ende das Radar ein,
                                                        --drop 1 öffnet den Schacht und löst eine Waffe aus,
-                                                       --damage 1 beschädigt Beispielsysteme)
+                                                       --damage 1 beschädigt Beispielsysteme,
+                                                       --bay N wählt Waffenschacht N)
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N]                                 Flugplätze und Route auflisten
@@ -254,6 +255,9 @@ fn hud_svg(args: &Args) -> Result<(), String> {
     let mut sim = run_demo(seed, seconds, |_, c| last = c);
     if args.get("radar", 0_u8)? != 0 {
         sim.step(f29_core::ControlFrame { flags: last.flags | flags::RADAR_TOGGLE, ..last });
+    }
+    for _ in 1..args.get("bay", 1_usize)? {
+        sim.step(last.with_weapons(f29_core::controls::weapon_flags::NEXT_BAY));
     }
     // Schacht öffnen, eine Waffe auslösen und kurz weiterfliegen (Meldung, Bestand).
     if args.get("drop", 0_u8)? != 0 {

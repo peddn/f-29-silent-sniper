@@ -385,10 +385,9 @@ fn target_box_shows_the_launch_zone() {
     assert_ne!(none, plain, "ohne Wirkung gestrichelt");
 }
 
-/// Bomben-Zielhilfe: Aufschlagpunkt mit Fall-Linie; mit Zielablage die
-/// Auslöseklammer; zu tief rot.
+/// Bomben-Zielhilfe: Aufschlagpunkt mit Fall-Linie; zu tief rot.
 #[test]
-fn bomb_aim_draws_pipper_and_release_bracket() {
+fn bomb_aim_draws_the_pipper() {
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
     let base = sample();
     let count = |aim: Option<f29_core::BombAim>| {
@@ -406,13 +405,30 @@ fn bomb_aim_draws_pipper_and_release_bracket() {
         target_offset: None,
         lethal_radius_m: 30.0,
     };
-    let (none, _) = count(None);
+    let (none, none_red) = count(None);
     let (pipper, _) = count(Some(aim));
-    let (bracket, _) = count(Some(f29_core::BombAim { target_offset: Some((800.0, 50.0)), ..aim }));
-    let (release, _) = count(Some(f29_core::BombAim { target_offset: Some((5.0, 5.0)), ..aim }));
     let (_, low_red) = count(Some(f29_core::BombAim { too_low: true, ..aim }));
     assert!(pipper > none, "kein Aufschlagpunkt");
-    assert!(bracket > pipper, "keine Klammer");
-    assert!(release > bracket, "keine Auslösemarke");
-    assert!(low_red > 0, "zu tief nicht rot");
+    assert!(low_red > none_red, "zu tief nicht rot");
+}
+
+/// Abschusskreis nur bei gewählter Rakete (nicht bei Bomben oder Laserbombe).
+#[test]
+fn launch_circle_only_for_missiles() {
+    use f29_core::weapons::{Bay, WeaponKind};
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let base = sample();
+    let lines = |kind: WeaponKind| {
+        let mut fd = base.clone();
+        fd.stores.selected = 0;
+        fd.stores.bays[0] = Bay { kind: Some(kind), count: 1 };
+        fd.bomb_aim = None;
+        // Nur gedämpfte Linien zählen (der Kreis); Waffennamen sind hell.
+        let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
+        dl.lines.iter().filter(|l| l.ink == Ink::HudDim).count()
+    };
+    let bomb = lines(WeaponKind::FreeFall);
+    assert_eq!(lines(WeaponKind::GuidedBomb), bomb);
+    assert!(lines(WeaponKind::AirToGround) >= bomb + 30, "kein Kreis bei der Maverick");
+    assert_eq!(lines(WeaponKind::AntiRadar), lines(WeaponKind::AirToGround));
 }

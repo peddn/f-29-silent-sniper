@@ -10,7 +10,7 @@
 //! ```text
 //! f29-silent-sniper [--seed N] [--view cockpit|chase] [--start runway|air]
 //!                   [--volume 0..100] [--no-sound]
-//!                   [--loadout fall,chute,glide,agm]
+//!                   [--loadout fall,chute,lgb,agm]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
 
@@ -43,12 +43,12 @@ fn main() {
     } else {
         f29_core::SimConfig::runway(seed)
     };
-    // Beladung der vier Schächte: fall, chute, glide, agm, arm, ship oder `-`.
+    // Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship oder `-`.
     if let Some(text) = arg(&args, "--loadout") {
         match f29_core::weapons::Loadout::parse(&text) {
             Some(l) => config.spawn.loadout = l,
             None => {
-                eprintln!("--loadout: vier Einträge aus fall, chute, glide, agm, arm, ship oder - erwartet")
+                eprintln!("--loadout: vier Einträge aus fall, chute, lgb, agm, arm, ship oder - erwartet")
             }
         }
     }

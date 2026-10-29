@@ -5,14 +5,19 @@
 //!
 //! - **Bomben** sind rein physikalisch: Massenpunkt mit Schwerkraft und
 //!   Luftwiderstand. Der Schaden folgt aus dem Abstand des Einschlags zum Ziel.
-//! - **Lenkwaffen** (Fire and Forget, M-013) fliegen mit konstanter Marschfahrt
-//!   und begrenzter Drehrate auf ihr Ziel, wie im Original. Erfasst ihr
-//!   Suchkopf ein Ziel, wird der Endanflug **gewürfelt** (Miss, Near Miss, Hit),
-//!   abhängig von der Startgüte (Entfernung, Ablage, Zustand der Optik). Die
-//!   Waffe fliegt dann sichtbar auf ihren Zielpunkt – bei Miss daneben.
-//!   Verliert der Suchkopf das Ziel (Kegel, Sichtlinie), fliegt sie blind weiter.
-//!   Ohne Aufschaltung abgefeuert, schaltet sie auf, was ihr vor den Suchkopf
-//!   kommt – auch zivile Ziele.
+//! - **Lenkwaffen** (Fire and Forget, M-013): **Der Abschuss entscheidet, der
+//!   Flug zeigt es nur.** Eine Rakete übernimmt das aufgeschaltete Ziel, wenn
+//!   es im **Abschusskreis** um die Flugzeugnase liegt, in Reichweite ist und
+//!   ihr Suchkopf es sieht. Dann wird der Endanflug gewürfelt (Miss, Near
+//!   Miss, Hit) – die Startgüte hängt nur von der Entfernung ab (Sweet Spot)
+//!   und vom Zustand der Bordoptik. Die Rakete fliegt sichtbar mit Marschfahrt
+//!   auf den gewürfelten Punkt; nur Gelände im Weg kann das noch verderben.
+//!   Ohne Übergabe fliegt sie geradeaus in Abschusslage und schaltet auf, was
+//!   ihr vor den Suchkopf kommt – auch zivile Ziele.
+//! - **Laserbombe** (GBU-12): aufschaltbar, wenn sie genug Energie hat, um das
+//!   Ziel im Gleitflug zu erreichen (Korridor um den ballistischen
+//!   Aufschlagpunkt). Das Flugzeug muss das Ziel bis zum Einschlag optisch
+//!   aufgeschaltet halten (Laser); reißt die Sicht ab, fällt sie ungelenkt.
 //! - **Schaden** sammelt sich am Ziel: Die Wirkungsmatrix gibt den Schaden pro
 //!   Treffer (1 = ein Treffer zerstört, 0,5 = zwei Treffer). Jeder Treffer
 //!   würfelt unabhängig einen kritischen Treffer (1 %), der sicher zerstört.
@@ -52,6 +57,8 @@ const FULL_EFFECT_FRACTION: f64 = 0.4;
 const MIN_DAMAGE: f64 = 0.05;
 /// Wahrscheinlichkeit eines kritischen Treffers je Treffer.
 pub const CRITICAL_CHANCE: f64 = 0.01;
+/// Vorbeiflug am Zielpunkt näher als das zählt als Ankunft (m).
+const ARRIVAL_PASS_M: f64 = 60.0;
 /// Längste Flugzeit einer ungelenkten Waffe (s), Schutz gegen Endlosflug.
 const MAX_FALL_S: f64 = 180.0;
 /// Sicherheitsabstand über dem Boden, ab dem die Vorhersage das Gelände nur
@@ -61,21 +68,30 @@ const PREDICT_MARGIN_M: f64 = 300.0;
 const EVENT_LOG: usize = 16;
 /// Lenkwaffen fallen erst frei aus dem Schacht, dann setzt die Lenkung ein (s).
 const GUIDANCE_DELAY_S: f64 = 0.4;
-/// Sichtlinie des optischen Suchkopfs alle so viele Ticks prüfen.
-const SEEKER_LOS_TICKS: u64 = 12;
+/// Suchkopf und Laser alle so viele Ticks prüfen (Sichtlinie ist teuer).
+const SEEKER_TICKS: u64 = 12;
+/// Abschusskreis um die Flugzeugnase (halber Öffnungswinkel, rad, 8°): Nur ein
+/// Ziel darin übernimmt eine Rakete (Spielerentscheidung v0.2.7).
+pub const LAUNCH_CIRCLE_RAD: f64 = 8.0 * std::f64::consts::PI / 180.0;
 /// Sweet Spot: volle Startgüte zwischen diesen Anteilen der Reichweite. Von
 /// der Reichweitengrenze steigt die Güte bis dorthin an und fällt bei weiterer
-/// Annäherung wieder ab (Spielerentscheidung v0.2.5).
-pub const SWEET_SPOT_FAR: f64 = 0.5;
-pub const SWEET_SPOT_NEAR: f64 = 0.3;
+/// Annäherung wieder ab (Spielerentscheidung v0.2.5, Maverick 8 von 16 km).
+pub const SWEET_SPOT_FAR: f64 = 0.6;
+pub const SWEET_SPOT_NEAR: f64 = 0.4;
 /// Startgüte an der Reichweitengrenze.
 const QUALITY_AT_MAX_RANGE: f64 = 0.25;
 /// Startgüte direkt am Ziel (zu nah: kaum Zeit zum Eindrehen).
 const QUALITY_AT_ZERO_RANGE: f64 = 0.3;
-/// Startgüte am Rand des Suchkopfkegels.
-const QUALITY_AT_CONE_EDGE: f64 = 0.6;
-/// Ablage, bis zu der die volle Güte gilt (rad, 5°).
-const BORESIGHT_FREE_RAD: f64 = 0.087;
+/// Laserbombe: Gleitkorridor um den ballistischen Aufschlagpunkt als Anteil
+/// der ballistischen Wurfweite – kürzer (steiler fallen) und weiter (gleiten)
+/// längs, und quer.
+const LASER_SHORT: f64 = 0.6;
+const LASER_LONG: f64 = 1.4;
+const LASER_CROSS: f64 = 0.2;
+/// Quer zusätzlich so viel (m), damit auch kurze Würfe etwas seitlich lenken.
+const LASER_CROSS_MIN_M: f64 = 100.0;
+/// Bis zu diesem Anteil des Korridors gilt die volle Güte (Sweet Spot).
+const LASER_SWEET: f64 = 0.3;
 /// Ausgang-Wahrscheinlichkeiten bei Startgüte 0 bzw. 1: (Miss, Near Miss);
 /// der Rest ist Hit.
 const ODDS_POOR: (f64, f64) = (0.55, 0.30);
@@ -91,7 +107,7 @@ pub enum WeaponKind {
     /// Fallschirmbombe: bremst kurz nach dem Abwurf stark ab, fällt steil und
     /// lässt dem Flugzeug Zeit, sich aus dem Splitterbereich zu entfernen.
     Retarded,
-    /// Gelenkte Gleitbombe mit optischem Suchkopf.
+    /// Lasergelenkte Bombe: das Flugzeug beleuchtet das Ziel bis zum Einschlag.
     GuidedBomb,
     /// Optisch gelenkte Luft-Boden-Rakete.
     AirToGround,
@@ -108,6 +124,8 @@ pub enum Seeker {
     None,
     /// Optisch: braucht freie Sicht, alle Bodenziele.
     Optical,
+    /// Laser: das Flugzeug muss das Ziel optisch aufgeschaltet halten.
+    Laser,
     /// Passiv auf Radarstrahlung: nur Flugabwehrstellungen, ohne Sichtlinie.
     Radiation,
     /// Aktives Radar gegen Schiffe, ohne Sichtlinie.
@@ -119,7 +137,7 @@ impl Seeker {
     pub fn sees(self, class: TargetClass) -> bool {
         match self {
             Seeker::None => false,
-            Seeker::Optical => true,
+            Seeker::Optical | Seeker::Laser => true,
             Seeker::Radiation => class == TargetClass::AirDefense,
             Seeker::Naval => class.is_naval(),
         }
@@ -144,19 +162,17 @@ pub struct WeaponSpec {
     /// Stück je Schacht.
     pub per_bay: u8,
     pub seeker: Seeker,
-    /// Marschfahrt der Lenkwaffe (m/s), die sie bis zum Ende hält.
+    /// Marschfahrt der Rakete (m/s), die sie bis zum Ende hält (0 = Bombe).
     pub cruise_mps: f64,
     /// Beschleunigung auf Marschfahrt (m/s²).
     pub accel_mps2: f64,
     /// Größte Drehrate der Flugrichtung (rad/s).
     pub turn_rate_rad: f64,
-    /// Aufschaltreichweite (m): größte Reichweite für Abschuss und Suchkopf.
+    /// Aufschaltreichweite (m): größte Reichweite für Abschuss und Suchkopf
+    /// (Laserbombe: Gleitkorridor statt fester Reichweite).
     pub max_range_m: f64,
-    /// Halber Öffnungswinkel des Suchkopfs (rad).
+    /// Halber Öffnungswinkel des Suchkopfs bei der Selbstsuche (rad).
     pub seeker_cone_rad: f64,
-    /// Kleinster Sinkwinkel (rad): Die Gleitbombe kann nicht steigen und nicht
-    /// flacher gleiten – aus zu großer Entfernung fällt sie zu kurz.
-    pub min_glide_rad: f64,
     /// Wirkradius der Ladung (m).
     pub lethal_radius_m: f64,
     /// Splitterbereich (m): Einschlag näher am Flugzeug löst die Warnung aus.
@@ -185,7 +201,6 @@ const BOMB: WeaponSpec = WeaponSpec {
     turn_rate_rad: 0.0,
     max_range_m: 0.0,
     seeker_cone_rad: 0.0,
-    min_glide_rad: 0.0,
     lethal_radius_m: 30.0,
     frag_radius_m: 180.0,
     life_s: MAX_FALL_S,
@@ -205,12 +220,11 @@ const MISSILE: WeaponSpec = WeaponSpec {
     cruise_mps: 320.0,
     accel_mps2: 120.0,
     turn_rate_rad: deg(25.0),
-    max_range_m: 12_000.0,
+    max_range_m: 16_000.0,
     seeker_cone_rad: deg(25.0),
-    min_glide_rad: 0.0,
     lethal_radius_m: 8.0,
     frag_radius_m: 90.0,
-    life_s: 55.0,
+    life_s: 70.0,
 };
 
 const SPECS: [WeaponSpec; 6] = [
@@ -225,21 +239,14 @@ const SPECS: [WeaponSpec; 6] = [
     },
     WeaponSpec {
         kind: WeaponKind::GuidedBomb,
-        label: "AGM-62",
-        name: "AGM-62 WALLEYE",
-        mass_kg: 510.0,
-        drag_area_m2: 0.025,
-        deployed_drag_area_m2: 0.025,
-        seeker: Seeker::Optical,
-        cruise_mps: 220.0,
-        accel_mps2: 15.0,
-        turn_rate_rad: deg(12.0),
-        max_range_m: 10_000.0,
-        seeker_cone_rad: deg(30.0),
-        // Gleitzahl 6: je 6 m Strecke mindestens 1 m Höhe.
-        min_glide_rad: 0.165,
-        lethal_radius_m: 28.0,
-        life_s: 120.0,
+        label: "GBU-12",
+        name: "GBU-12 PAVEWAY II",
+        mass_kg: 227.0,
+        drag_area_m2: 0.022,
+        deployed_drag_area_m2: 0.022,
+        seeker: Seeker::Laser,
+        // Steuerflächen: lenkt die Flugbahn mit bis zu 6°/s auf den Laserfleck.
+        turn_rate_rad: deg(6.0),
         ..BOMB
     },
     MISSILE,
@@ -305,7 +312,7 @@ impl WeaponKind {
         match self {
             WeaponKind::FreeFall => "fall",
             WeaponKind::Retarded => "chute",
-            WeaponKind::GuidedBomb => "glide",
+            WeaponKind::GuidedBomb => "lgb",
             WeaponKind::AirToGround => "agm",
             WeaponKind::AntiRadar => "arm",
             WeaponKind::AntiShip => "ship",
@@ -313,7 +320,16 @@ impl WeaponKind {
     }
 
     pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|k| k.code() == code)
+        match code {
+            // Ältere Replays (bis v0.2.6: Gleitbombe)
+            "glide" => Some(WeaponKind::GuidedBomb),
+            _ => Self::ALL.into_iter().find(|k| k.code() == code),
+        }
+    }
+
+    /// Rakete mit Abschusskreis (alle Lenkwaffen außer der Laserbombe).
+    pub fn uses_launch_circle(self) -> bool {
+        self.is_guided() && self.spec().seeker != Seeker::Laser
     }
 
     /// Schaden pro Treffer gegen eine Zielklasse (M-010): 1 = ein Treffer
@@ -349,18 +365,6 @@ impl WeaponKind {
             (_, C::Armored | C::Building | C::Bridge) => 0.5,
         }
     }
-
-    /// Größte Reichweite für Abschuss bzw. Aufschalten (m). Die Gleitbombe
-    /// kommt außerdem nur so weit, wie ihre Höhe über dem Ziel trägt.
-    pub fn max_range(self, height_above_target_m: f64) -> f64 {
-        let s = self.spec();
-        if s.min_glide_rad > 0.0 {
-            let glide = height_above_target_m.max(0.0) / detmath::tan(s.min_glide_rad);
-            s.max_range_m.min(glide)
-        } else {
-            s.max_range_m
-        }
-    }
 }
 
 /// Reichweitenzone einer Lenkwaffe gegen das aufgeschaltete Ziel (Zielrahmen
@@ -377,35 +381,82 @@ pub enum LaunchZone {
     Good,
 }
 
-/// Zone für die Waffe `kind` gegen `target` von `position` (NED) aus.
-/// `visible` = das Ziel ist optisch erfasst (für optische Suchköpfe).
+/// Zone einer Rakete gegen `target` von `position` (NED) aus. `visible` =
+/// das Ziel ist optisch aufgeschaltet (für optische Suchköpfe).
 pub fn launch_zone(kind: WeaponKind, position: DVec3, target: &Target, visible: bool) -> LaunchZone {
     let s = kind.spec();
     if !s.seeker.sees(target.class) || kind.effectiveness(target.class, std::f64::consts::FRAC_PI_2) <= 0.0 {
         return LaunchZone::NoEffect;
     }
     let c = target.center_ned();
-    let d = DVec3::new(c[0], c[1], c[2]) - position;
-    let range = d.length();
-    let max = kind.max_range(-position.z - target.elevation);
-    if (s.seeker == Seeker::Optical && !visible) || range > max {
+    let range = (DVec3::new(c[0], c[1], c[2]) - position).length();
+    let r = range / s.max_range_m.max(1.0);
+    if (s.seeker == Seeker::Optical && !visible) || r > 1.0 {
         LaunchZone::OutOfRange
-    } else if (SWEET_SPOT_NEAR..=SWEET_SPOT_FAR).contains(&(range / max.max(1.0))) {
+    } else if (SWEET_SPOT_NEAR..=SWEET_SPOT_FAR).contains(&r) {
         LaunchZone::Good
     } else {
         LaunchZone::InRange
     }
 }
 
-/// Startgüte 0..1 aus Entfernung, Ablage vom Suchkopfkegel und `sensor`
+/// Laserbombe: Lage des Ziels im Gleitkorridor um den ballistischen
+/// Aufschlagpunkt `ballistic`. Liefert die normierte Abweichung 0..1 (0 =
+/// genau am ballistischen Punkt), `None` außerhalb des Korridors – dann reicht
+/// die Energie der Bombe nicht.
+pub fn laser_corridor(position: DVec3, velocity: DVec3, ballistic: DVec3, target: &Target) -> Option<f64> {
+    let h = DVec3::new(velocity.x, velocity.y, 0.0).normalize_or_zero();
+    let right = DVec3::new(-h.y, h.x, 0.0);
+    let throw = (DVec3::new(ballistic.x - position.x, ballistic.y - position.y, 0.0)).dot(h).max(1.0);
+    let d = DVec3::new(target.north - position.x, target.east - position.y, 0.0);
+    let (along, cross) = (d.dot(h), d.dot(right));
+    let cross_max = LASER_CROSS * throw + LASER_CROSS_MIN_M;
+    if along < LASER_SHORT * throw || along > LASER_LONG * throw || cross.abs() > cross_max {
+        return None;
+    }
+    let along_dev = if along < throw {
+        (throw - along) / ((1.0 - LASER_SHORT) * throw)
+    } else {
+        (along - throw) / ((LASER_LONG - 1.0) * throw)
+    };
+    Some(along_dev.max(cross.abs() / cross_max).clamp(0.0, 1.0))
+}
+
+/// Zone der Laserbombe: im Korridor in Reichweite, nahe am ballistischen Punkt
+/// Sweet Spot; das Ziel muss optisch aufgeschaltet sein.
+pub fn laser_zone(
+    position: DVec3,
+    velocity: DVec3,
+    ballistic: Option<DVec3>,
+    target: &Target,
+    visible: bool,
+) -> LaunchZone {
+    let kind = WeaponKind::GuidedBomb;
+    if kind.effectiveness(target.class, std::f64::consts::FRAC_PI_2) <= 0.0 {
+        return LaunchZone::NoEffect;
+    }
+    match ballistic.and_then(|b| laser_corridor(position, velocity, b, target)) {
+        Some(dev) if visible && dev <= LASER_SWEET => LaunchZone::Good,
+        Some(_) if visible => LaunchZone::InRange,
+        _ => LaunchZone::OutOfRange,
+    }
+}
+
+/// Startgüte der Laserbombe aus der Korridor-Abweichung: im Sweet Spot 1, am
+/// Rand des Korridors so niedrig wie eine Rakete an ihrer Reichweitengrenze.
+fn laser_quality(dev: f64) -> f64 {
+    if dev <= LASER_SWEET {
+        1.0
+    } else {
+        1.0 - (1.0 - QUALITY_AT_MAX_RANGE) * ((dev - LASER_SWEET) / (1.0 - LASER_SWEET)).min(1.0)
+    }
+}
+
+/// Startgüte 0..1 einer Rakete: Entfernungskurve (Sweet Spot) mal `sensor`
 /// (Leistung der Bordoptik bei optischen Suchköpfen, sonst 1).
-pub fn launch_quality(kind: WeaponKind, range: f64, off_angle: f64, sensor: f64, max_range: f64) -> f64 {
-    let s = kind.spec();
-    let f_range = range_quality(range / max_range.max(1.0));
-    let span = (s.seeker_cone_rad - BORESIGHT_FREE_RAD).max(1e-6);
-    let a = ((off_angle - BORESIGHT_FREE_RAD) / span).clamp(0.0, 1.0);
-    let f_angle = 1.0 - (1.0 - QUALITY_AT_CONE_EDGE) * a;
-    (f_range * f_angle * sensor.clamp(0.0, 1.0)).clamp(0.0, 1.0)
+pub fn launch_quality(kind: WeaponKind, range: f64, sensor: f64) -> f64 {
+    let r = range / kind.spec().max_range_m.max(1.0);
+    (range_quality(r) * sensor.clamp(0.0, 1.0)).clamp(0.0, 1.0)
 }
 
 /// Entfernungsanteil der Startgüte über `r` = Entfernung / Reichweite: niedrig
@@ -445,7 +496,7 @@ pub enum Outcome {
 pub struct Loadout(pub [Option<WeaponKind>; BAYS]);
 
 impl Default for Loadout {
-    /// Standardbeladung: Freifall, Fallschirm, Gleitbombe, Luft-Boden-Rakete.
+    /// Standardbeladung: Mk 82, Snakeye, GBU-12, Maverick.
     fn default() -> Self {
         Self([
             Some(WeaponKind::FreeFall),
@@ -460,7 +511,7 @@ impl Loadout {
     /// Leere Schächte (z. B. für Landeanflüge nach der Mission).
     pub const EMPTY: Loadout = Loadout([None; BAYS]);
 
-    /// `fall,chute,glide,agm` – `-` für einen leeren Schacht.
+    /// `fall,chute,lgb,agm` – `-` für einen leeren Schacht.
     pub fn parse(text: &str) -> Option<Self> {
         let parts: Vec<&str> = text.split(',').map(str::trim).collect();
         if parts.len() != BAYS {
@@ -515,9 +566,11 @@ pub struct Weapon {
     pub aim_offset: DVec3,
     /// Ohne Aufschaltung abgefeuert: sucht selbst.
     pub searching: bool,
-    /// Richtung, in der die Lenkwaffe ohne Ziel weiterfliegt: die
-    /// Abschusslage (Flugzeugnase), nach Zielverlust die letzte Flugrichtung.
+    /// Richtung, in der die Rakete ohne Ziel weiterfliegt: die Abschusslage
+    /// (Flugzeugnase).
     pub boresight: DVec3,
+    /// Abstand zum Zielpunkt im letzten Tick (Erkennung des Vorbeiflugs).
+    pub last_aim_dist: f64,
 }
 
 impl Weapon {
@@ -534,6 +587,7 @@ impl Weapon {
             aim_offset: DVec3::ZERO,
             searching: false,
             boresight: velocity.normalize_or_zero(),
+            last_aim_dist: f64::INFINITY,
         }
     }
 
@@ -607,8 +661,9 @@ pub enum WeaponEvent {
         id: u32,
         target: usize,
     },
-    /// Suchkopf hat sein Ziel verloren (Kegel, Sichtlinie).
-    LockLost {
+    /// Laserbombe: Das Flugzeug beleuchtet das Ziel nicht mehr (keine
+    /// optische Aufschaltung mehr) – sie fällt ungelenkt weiter.
+    LaserLost {
         kind: WeaponKind,
         id: u32,
     },
@@ -653,6 +708,8 @@ pub struct World<'a> {
     pub dt: f64,
     /// Position des eigenen Flugzeugs (NED).
     pub aircraft: DVec3,
+    /// Optisch aufgeschaltetes Ziel des Flugzeugs (Laserbeleuchtung).
+    pub designated: Option<usize>,
 }
 
 /// Was der Abschuss über Flugzeug und Ziel wissen muss.
@@ -673,6 +730,8 @@ pub struct Launch<'a> {
     pub bay_ok: bool,
     /// Leistung der Bordoptik 0..1 (Schadensmodell).
     pub optics: f64,
+    /// Ballistischer Aufschlagpunkt der gewählten Bombe (für die Laserbombe).
+    pub ballistic: Option<DVec3>,
 }
 
 /// Winkel zwischen zwei Richtungen (rad).
@@ -684,15 +743,17 @@ fn angle_between(a: DVec3, b: DVec3) -> f64 {
     detmath::acos((a.dot(b) / (la * lb)).clamp(-1.0, 1.0))
 }
 
-/// Sieht der Suchkopf in `pos` mit Flugrichtung `dir` das Ziel? Prüft Klasse,
-/// Kegel, Reichweite und – optisch – die Sichtlinie.
+/// Sieht der Suchkopf in `pos` mit Blickrichtung `dir` das Ziel innerhalb des
+/// Kegels `cone`? Prüft Klasse, Kegel, Reichweite und – optisch – die
+/// Sichtlinie. Liefert die Entfernung.
 fn seeker_sees(
     kind: WeaponKind,
     pos: DVec3,
     dir: DVec3,
+    cone: f64,
     t: &Target,
     terrain: &Terrain,
-) -> Option<(f64, f64)> {
+) -> Option<f64> {
     let s = kind.spec();
     if !t.is_intact() || !s.seeker.sees(t.class) {
         return None;
@@ -700,8 +761,7 @@ fn seeker_sees(
     let c = t.center_ned();
     let to = DVec3::new(c[0], c[1], c[2]) - pos;
     let range = to.length();
-    let off = angle_between(dir, to);
-    if off > s.seeker_cone_rad || range > kind.max_range(-pos.z - t.elevation) {
+    if angle_between(dir, to) > cone || range > s.max_range_m {
         return None;
     }
     if s.seeker == Seeker::Optical
@@ -709,7 +769,7 @@ fn seeker_sees(
     {
         return None;
     }
-    Some((range, off))
+    Some(range)
 }
 
 impl Stores {
@@ -820,28 +880,39 @@ impl Stores {
         let mut w =
             Weapon::new(id, kind, l.position + down * EJECT_OFFSET_M, l.velocity + down * EJECT_SPEED_MPS);
         self.log(l.tick, WeaponEvent::Released { kind, bay: self.selected, id });
-        if kind.is_guided() {
-            // Ohne Ziel fliegt die Waffe in ihrer Abschusslage weiter.
-            let nose = l.attitude.rotate(DVec3::new(1.0, 0.0, 0.0));
-            w.boresight = nose;
-            // Übergabe: Der Suchkopf muss das Ziel selbst sehen (Kegel um die
-            // Nase, Reichweite, optisch mit Sichtlinie); ein optischer Suchkopf
-            // übernimmt nur eine optische Aufschaltung, keine reine Radar-
-            // Aufschaltung.
-            let optical_ok = kind.spec().seeker != Seeker::Optical || l.lock_optical;
-            let seen = l.lock.filter(|_| optical_ok).and_then(|i| {
-                let t = l.targets.get(i)?;
-                seeker_sees(kind, l.position, nose, t, l.terrain).map(|(r, off)| (i, r, off, t))
-            });
-            match seen {
-                Some((i, range, off, t)) => {
-                    let sensor = if kind.spec().seeker == Seeker::Optical { l.optics } else { 1.0 };
-                    let max = kind.max_range(-l.position.z - t.elevation);
-                    let q = launch_quality(kind, range, off, sensor, max);
+        let lock = l.lock.and_then(|i| l.targets.get(i).map(|t| (i, t)));
+        match kind.spec().seeker {
+            Seeker::None => {}
+            Seeker::Laser => {
+                // Laserbombe: optisch aufgeschaltetes Ziel im Gleitkorridor.
+                let corridor = lock.filter(|(_, t)| l.lock_optical && t.is_intact()).and_then(|(i, t)| {
+                    laser_corridor(l.position, l.velocity, l.ballistic?, t).map(|dev| (i, dev))
+                });
+                if let Some((i, dev)) = corridor {
+                    let q = laser_quality(dev) * l.optics.clamp(0.0, 1.0);
                     self.roll_outcome(&mut w, i, l.targets, q);
                     self.log(l.tick, WeaponEvent::Acquired { kind, id, target: i });
                 }
-                None => w.searching = true,
+            }
+            seeker => {
+                // Rakete: Übergabe, wenn das Ziel im Abschusskreis um die Nase
+                // liegt, in Reichweite ist und der Suchkopf es sieht; ein
+                // optischer Suchkopf nur bei optischer Aufschaltung. Sonst
+                // fliegt sie in ihrer Abschusslage geradeaus und sucht selbst.
+                let nose = l.attitude.rotate(DVec3::new(1.0, 0.0, 0.0));
+                w.boresight = nose;
+                let optical_ok = seeker != Seeker::Optical || l.lock_optical;
+                let seen = lock.filter(|_| optical_ok).and_then(|(i, t)| {
+                    seeker_sees(kind, l.position, nose, LAUNCH_CIRCLE_RAD, t, l.terrain).map(|r| (i, r))
+                });
+                match seen {
+                    Some((i, range)) => {
+                        let sensor = if seeker == Seeker::Optical { l.optics } else { 1.0 };
+                        self.roll_outcome(&mut w, i, l.targets, launch_quality(kind, range, sensor));
+                        self.log(l.tick, WeaponEvent::Acquired { kind, id, target: i });
+                    }
+                    None => w.searching = true,
+                }
             }
         }
         self.in_flight.push(w);
@@ -856,14 +927,22 @@ impl Stores {
             let mut w = before;
             if w.kind.is_guided() {
                 self.seek(&mut w, world);
-                guide(&mut w, world);
-                // Lenkwaffe am Zielpunkt angekommen?
-                if let Some(aim) = w.aim_point(world.targets)
-                    && (w.position - aim).length() < (w.velocity.length() * world.dt * 1.5).max(4.0)
-                {
-                    self.in_flight.remove(i);
-                    self.impact(world, &w, aim, true);
-                    continue;
+                if w.kind.spec().seeker == Seeker::Laser {
+                    steer_bomb(&mut w, world);
+                } else {
+                    guide(&mut w, world);
+                }
+                // Am Zielpunkt angekommen – oder gerade daran vorbei (Drehrate)?
+                if let Some(aim) = w.aim_point(world.targets) {
+                    let dist = (w.position - aim).length();
+                    let close = (w.velocity.length() * world.dt * 1.5).max(4.0);
+                    let passing = dist > w.last_aim_dist && w.last_aim_dist < ARRIVAL_PASS_M;
+                    w.last_aim_dist = dist;
+                    if dist < close || passing {
+                        self.in_flight.remove(i);
+                        self.impact(world, &w, aim, true);
+                        continue;
+                    }
                 }
             } else {
                 fly(&mut w, world);
@@ -892,50 +971,39 @@ impl Stores {
         }
     }
 
-    /// Suchkopf: Ziel halten oder (ohne Aufschaltung abgefeuert) selbst suchen.
+    /// Laser prüfen (Laserbombe) bzw. selbst suchen (Rakete ohne Übergabe).
+    /// Raketen mit Ziel prüfen nichts mehr: der Abschuss hat entschieden.
     fn seek(&mut self, w: &mut Weapon, world: &World<'_>) {
-        if w.age_s < GUIDANCE_DELAY_S {
+        if w.age_s < GUIDANCE_DELAY_S || !(world.tick + u64::from(w.id)).is_multiple_of(SEEKER_TICKS) {
             return;
         }
-        let los_tick = (world.tick + u64::from(w.id)).is_multiple_of(SEEKER_LOS_TICKS);
-        if let Some(i) = w.target {
-            let t = &world.targets[i];
-            let c = t.center_ned();
-            let to = DVec3::new(c[0], c[1], c[2]) - w.position;
-            // Kegel jeden Tick, Sichtlinie seltener (teuer).
-            let in_cone = t.is_intact()
-                && (angle_between(w.velocity, to) <= w.kind.spec().seeker_cone_rad
-                    || to.length() < w.velocity.length() * 0.5);
-            let visible = !los_tick
-                || w.kind.spec().seeker != Seeker::Optical
-                || to.length() < 200.0
-                || seeker_sees(w.kind, w.position, w.velocity, t, world.terrain).is_some();
-            if !(in_cone && visible) {
+        if w.kind.spec().seeker == Seeker::Laser {
+            // Das Flugzeug muss das Ziel bis zum Einschlag optisch halten.
+            if let Some(i) = w.target
+                && world.designated != Some(i)
+            {
                 w.target = None;
                 w.outcome = None;
                 w.critical = false;
-                w.boresight = w.velocity.normalize_or_zero();
-                self.log(world.tick, WeaponEvent::LockLost { kind: w.kind, id: w.id });
+                self.log(world.tick, WeaponEvent::LaserLost { kind: w.kind, id: w.id });
             }
             return;
         }
-        if !w.searching || !los_tick {
+        if w.target.is_some() || !w.searching {
             return;
         }
         // Selbstsuche: das nächste passende Ziel vor dem Suchkopf, auch zivile.
+        let cone = w.kind.spec().seeker_cone_rad;
         let best = world
             .targets
             .iter()
             .enumerate()
             .filter_map(|(i, t)| {
-                seeker_sees(w.kind, w.position, w.velocity, t, world.terrain).map(|(r, off)| (r, off, i))
+                seeker_sees(w.kind, w.position, w.velocity, cone, t, world.terrain).map(|r| (r, i))
             })
-            .min_by(|a, b| a.0.total_cmp(&b.0).then(a.2.cmp(&b.2)));
-        if let Some((range, off, i)) = best {
-            let t = &world.targets[i];
-            let max = w.kind.max_range(-w.position.z - t.elevation);
-            let q = launch_quality(w.kind, range, off, 1.0, max);
-            self.roll_outcome(w, i, world.targets, q);
+            .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        if let Some((range, i)) = best {
+            self.roll_outcome(w, i, world.targets, launch_quality(w.kind, range, 1.0));
             self.log(world.tick, WeaponEvent::Acquired { kind: w.kind, id: w.id, target: i });
         }
     }
@@ -1036,7 +1104,7 @@ pub fn predict_release(
     let down = attitude.rotate(DVec3::new(0.0, 0.0, 1.0));
     let mut w = Weapon::new(0, kind, position + down * EJECT_OFFSET_M, velocity + down * EJECT_SPEED_MPS);
     let mut targets: [Target; 0] = [];
-    let world = World { terrain, targets: &mut targets, tick: 0, dt, aircraft: position };
+    let world = World { terrain, targets: &mut targets, tick: 0, dt, aircraft: position, designated: None };
     // Grobe Schritte reichen für die Anzeige: 8 Simulationsschritte auf einmal,
     // mit gemittelter Geschwindigkeit (exakt für die Schwerkraft).
     let coarse = World { dt: dt * 8.0, ..world };
@@ -1111,7 +1179,23 @@ fn turn_towards(from: DVec3, to: DVec3, max_angle: f64) -> DVec3 {
     DQuat::from_axis_angle(axis.normalize_or_zero(), max_angle).rotate(from).normalize_or_zero()
 }
 
-/// Ein Zeitschritt Lenkwaffe: erst frei aus dem Schacht fallen, dann mit
+/// Laserbombe: fällt physikalisch (Schwerkraft, Widerstand) und dreht mit
+/// ihren Steuerflächen die Flugbahn mit begrenzter Rate zum Laserfleck; ohne
+/// Laser fällt sie wie eine normale Bombe.
+fn steer_bomb(w: &mut Weapon, world: &World<'_>) {
+    fly(w, world);
+    if w.age_s < GUIDANCE_DELAY_S {
+        return;
+    }
+    if let Some(aim) = w.aim_point(world.targets) {
+        let speed = w.velocity.length();
+        let dir = w.velocity / speed.max(1.0);
+        let wanted = (aim - w.position).normalize_or_zero();
+        w.velocity = turn_towards(dir, wanted, w.kind.spec().turn_rate_rad * world.dt) * speed;
+    }
+}
+
+/// Ein Zeitschritt Rakete: erst frei aus dem Schacht fallen, dann mit
 /// begrenzter Drehrate auf den Zielpunkt drehen und auf Marschfahrt gehen.
 /// Ohne Ziel fliegt sie geradeaus in ihrer Abschusslage (`boresight`).
 fn guide(w: &mut Weapon, world: &World<'_>) {
@@ -1127,16 +1211,7 @@ fn guide(w: &mut Weapon, world: &World<'_>) {
         Some(aim) => (aim - w.position).normalize_or_zero(),
         None => w.boresight,
     };
-    let mut new_dir = turn_towards(dir, wanted, s.turn_rate_rad * dt);
-    if s.min_glide_rad > 0.0 {
-        // Gleitbombe: mindestens den Gleitwinkel sinken, nie steigen.
-        let min_down = detmath::sin(s.min_glide_rad);
-        if new_dir.z < min_down {
-            let horiz = DVec3::new(new_dir.x, new_dir.y, 0.0).normalize_or_zero();
-            let c = detmath::cos(s.min_glide_rad);
-            new_dir = DVec3::new(horiz.x * c, horiz.y * c, min_down);
-        }
-    }
+    let new_dir = turn_towards(dir, wanted, s.turn_rate_rad * dt);
     let new_speed = speed + (s.cruise_mps - speed).clamp(-s.accel_mps2 * dt, s.accel_mps2 * dt);
     w.velocity = new_dir * new_speed;
     w.position += w.velocity * dt;
@@ -1150,7 +1225,8 @@ mod tests {
     #[test]
     fn loadout_text_roundtrip() {
         let l = Loadout::default();
-        assert_eq!(l.to_text(), "fall,chute,glide,agm");
+        assert_eq!(l.to_text(), "fall,chute,lgb,agm");
+        assert_eq!(Loadout::parse("fall,chute,glide,agm"), Some(l), "alte Kennung");
         assert_eq!(Loadout::parse(&l.to_text()), Some(l));
         let e = Loadout::parse("arm,-,ship,fall").unwrap();
         assert_eq!(e.0[1], None);
@@ -1179,24 +1255,42 @@ mod tests {
     fn quality_and_odds() {
         let k = WeaponKind::AirToGround;
         let max = k.spec().max_range_m;
-        assert_eq!(launch_quality(k, max * 0.4, 0.0, 1.0, max), 1.0);
-        let far = launch_quality(k, max, 0.0, 1.0, max);
+        assert_eq!(max, 16_000.0);
+        // Sweet Spot um 8 km.
+        assert_eq!(launch_quality(k, 8_000.0, 1.0), 1.0);
+        let far = launch_quality(k, max, 1.0);
         assert!((far - QUALITY_AT_MAX_RANGE).abs() < 1e-9);
-        let edge = launch_quality(k, max * 0.4, k.spec().seeker_cone_rad, 1.0, max);
-        assert!((edge - QUALITY_AT_CONE_EDGE).abs() < 1e-9);
-        assert_eq!(launch_quality(k, max * 0.4, 0.0, 0.5, max), 0.5);
-        // Sweet Spot: von der Reichweitengrenze ansteigend, danach wieder fallend.
+        assert_eq!(launch_quality(k, 8_000.0, 0.5), 0.5);
         let curve: Vec<f64> = (0..=20).map(|i| range_quality(f64::from(i) / 20.0)).collect();
-        let peak = curve.iter().cloned().fold(0.0, f64::max);
-        assert_eq!(peak, 1.0);
-        assert!(range_quality(0.95) < range_quality(0.75) && range_quality(0.75) < range_quality(0.5));
-        assert!(range_quality(0.05) < range_quality(0.2) && range_quality(0.2) < range_quality(0.3));
+        assert_eq!(curve.iter().cloned().fold(0.0, f64::max), 1.0);
+        assert!(range_quality(0.95) < range_quality(0.75) && range_quality(0.75) < range_quality(0.6));
+        assert!(range_quality(0.05) < range_quality(0.2) && range_quality(0.2) < range_quality(0.4));
         assert!(range_quality(0.0) < 0.5 && range_quality(1.0) < 0.5);
         for q in [0.0, 0.4, 1.0] {
             let (m, n, h) = outcome_odds(q);
             assert!((m + n + h - 1.0).abs() < 1e-12 && m >= 0.0 && n >= 0.0 && h >= 0.0);
         }
         assert!(outcome_odds(1.0).2 > 0.75 && outcome_odds(0.0).0 > 0.5);
+    }
+
+    #[test]
+    fn laser_corridor_around_the_ballistic_point() {
+        let pos = DVec3::new(0.0, 0.0, -1_000.0);
+        let vel = DVec3::new(200.0, 0.0, 0.0);
+        let ballistic = DVec3::new(2_800.0, 0.0, 0.0);
+        let at = |n: f64, e: f64| {
+            let mut t = bridge();
+            t.north = n;
+            t.east = e;
+            laser_corridor(pos, vel, ballistic, &t)
+        };
+        assert_eq!(at(2_800.0, 0.0), Some(0.0), "genau ballistisch");
+        assert!(at(3_600.0, 0.0).is_some(), "etwas weiter: gleitet");
+        assert!(at(2_000.0, 0.0).is_some(), "etwas kürzer: fällt steiler");
+        assert_eq!(at(4_200.0, 0.0), None, "zu weit: Energie reicht nicht");
+        assert_eq!(at(1_000.0, 0.0), None, "zu kurz");
+        assert_eq!(at(2_800.0, 900.0), None, "zu weit seitlich");
+        assert!(laser_quality(0.1) == 1.0 && laser_quality(1.0) < 0.3);
     }
 
     fn bridge() -> Target {
@@ -1266,6 +1360,7 @@ mod tests {
             terrain: &terrain,
             bay_ok: true,
             optics: 1.0,
+            ballistic: None,
         };
         assert!(stores.release(&launch) > 0.0);
         (stores.in_flight[0], targets, terrain)
@@ -1286,8 +1381,14 @@ mod tests {
         let (mut w, _, terrain) = launch_at_target(false);
         // Ohne Ziele in der Welt: nichts zu finden, nur geradeaus.
         let mut none: Vec<Target> = Vec::new();
-        let world =
-            World { terrain: &terrain, targets: &mut none, tick: 0, dt: 1.0 / 120.0, aircraft: DVec3::ZERO };
+        let world = World {
+            terrain: &terrain,
+            targets: &mut none,
+            tick: 0,
+            dt: 1.0 / 120.0,
+            aircraft: DVec3::ZERO,
+            designated: None,
+        };
         let nose = w.boresight;
         for _ in 0..(120 * 4) {
             guide(&mut w, &world);
@@ -1295,14 +1396,6 @@ mod tests {
         let dir = w.velocity.normalize_or_zero();
         assert!(angle_between(dir, nose) < 0.01, "weicht {:.3} rad ab", angle_between(dir, nose));
         assert!((w.velocity.length() - w.kind.spec().cruise_mps).abs() < 1.0);
-    }
-
-    #[test]
-    fn glide_bomb_range_depends_on_height() {
-        let k = WeaponKind::GuidedBomb;
-        assert!(k.max_range(300.0) < 2_000.0);
-        assert_eq!(k.max_range(5_000.0), k.spec().max_range_m);
-        assert_eq!(WeaponKind::AirToGround.max_range(10.0), MISSILE.max_range_m);
     }
 
     #[test]
@@ -1324,6 +1417,7 @@ mod tests {
             tick: 0,
             dt: 1.0 / 120.0,
             aircraft: DVec3::ZERO,
+            designated: None,
         };
         let start = |kind| Weapon::new(0, kind, DVec3::new(0.0, 0.0, -3_000.0), DVec3::new(250.0, 0.0, 0.0));
         let (mut a, mut b) = (start(WeaponKind::FreeFall), start(WeaponKind::Retarded));

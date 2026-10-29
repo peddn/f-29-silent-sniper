@@ -39,7 +39,7 @@ cargo run --release -p f29-app -- --start air
 cargo run --release -p f29-app -- --volume 50
 cargo run --release -p f29-app -- --no-sound
 
-# andere Beladung der vier Schächte: fall, chute, glide, agm, arm, ship oder -
+# andere Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship oder -
 cargo run --release -p f29-app -- --loadout fall,fall,agm,arm
 
 # nach 10 s automatisch einen Screenshot speichern und beenden
@@ -180,14 +180,20 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Luft-Boden-Rakete, Radarjäger, Seezielrakete; gewürfelter Endanflug nach
       Startgüte (Miss, Near Miss, Hit, 1 % kritisch), Schaden pro Treffer sammelt
       sich am Ziel, Zielrahmen zeigt Reichweite und Sweet Spot (v0.2.5)
-- [x] Waffen mit realen Bezeichnungen (Mk 82, Mk 82 Snakeye, AGM-62 Walleye,
+- [x] Waffen mit realen Bezeichnungen (Mk 82, Mk 82 Snakeye, GBU-12 Paveway II,
       AGM-65 Maverick, AGM-88 HARM, AGM-84 Harpoon); Aufschaltung bleibt auf dem
       Wrack, zerstörte Ziele verschwinden von der Karte; gewählte Waffe unten
       links im HUD; Maverick nur mit optischer Aufschaltung, ohne Aufschaltung
       geradeaus in Abschusslage (v0.2.5)
-- [x] Zielhilfe für Bomben im HUD: Aufschlagpunkt mit Fall-Linie, Auslöseklammer
-      mit Längs- und Querablage, „RELEASE“, Warnung „TOO LOW“ (v0.2.6)
-- [ ] Bordkanone als eigenes Waffensystem (v0.2.7)
+- [x] Zielhilfe für Bomben im HUD: Aufschlagpunkt mit Fall-Linie, Warnung
+      „TOO LOW“ (v0.2.6)
+- [x] Lenkwaffen vereinfacht: Abschusskreis ±8° für Raketen, Startgüte nur aus
+      der Entfernung (Maverick 16 km, Sweet Spot 8 km), Flug zeigt den Wurf;
+      lasergelenkte GBU-12 mit Gleitkorridor und Beleuchtung bis zum Einschlag
+      (v0.2.7)
+- [ ] Auslöseklammer für Bomben, neu entworfen (vorgemerkt)
+- [ ] Bordkanone als eigenes Waffensystem: 600 Schuss, Backspace, 2 % Schaden pro
+      Treffer (v0.2.8)
 - [ ] Bodenziele und Boden-Luft-Bedrohungen (Radar-SAM, Flak)
 - [ ] Radar-/Detektionsmodell: aspektabhängiger Radarquerschnitt, Geländemaskierung,
       Emissionen; Signaturanzeige im Cockpit

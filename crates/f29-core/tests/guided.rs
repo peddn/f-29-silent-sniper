@@ -1,5 +1,6 @@
-//! Lenkwaffen (M-013, M-014): Übergabe der Aufschaltung, gewürfelter
-//! Endanflug abhängig von der Startgüte, Selbstsuche, Reichweitenzonen.
+//! Lenkwaffen (M-013, M-014): Abschusskreis und Übergabe, gewürfelter
+//! Endanflug abhängig von der Startgüte (Sweet Spot), Selbstsuche,
+//! Reichweitenzonen, Laserbombe mit Gleitkorridor und Dauerbeleuchtung.
 
 use f29_core::controls::{flags, weapon_flags};
 use f29_core::sensors::LookDir;
@@ -99,7 +100,7 @@ struct Tally {
 
 fn tally(dist: f64, height: f64) -> Tally {
     let mut t = Tally::default();
-    for seed in 1..=80_u64 {
+    for seed in 1..=120_u64 {
         let Some((mut sim, target)) = lined_up_at(seed, TargetClass::Soft, dist, height, agm()) else {
             continue;
         };
@@ -123,21 +124,20 @@ fn tally(dist: f64, height: f64) -> Tally {
     t
 }
 
-/// Sweet Spot: Von der Reichweitengrenze steigt die Trefferchance bis zum
-/// Sweet Spot an und fällt bei weiterer Annäherung wieder ab. Flache Anflüge,
-/// damit das Ziel nahe der Flugrichtung liegt (Ablage spielt kaum mit).
+/// Sweet Spot: Von der Reichweitengrenze (16 km) steigt die Trefferchance bis
+/// zum Sweet Spot (8 km) an und fällt bei weiterer Annäherung wieder ab. Flache
+/// Anflüge, damit das Ziel im Abschusskreis liegt.
 #[test]
 fn sweet_spot_hits_more_often_than_too_far_or_too_close() {
-    let max = WeaponKind::AirToGround.spec().max_range_m;
-    let sweet = tally(max * 0.4, 500.0);
-    let far = tally(max * 0.92, 800.0);
-    let close = tally(1_500.0, 250.0);
+    let sweet = tally(8_000.0, 300.0);
+    let far = tally(14_000.0, 500.0);
+    let close = tally(2_500.0, 150.0);
     for t in [&sweet, &far, &close] {
         assert!(t.shots >= 30, "zu wenige Schüsse: {sweet:?} {far:?} {close:?}");
     }
     let rate = |n: u32, t: &Tally| f64::from(n) / f64::from(t.shots);
     let report = format!("Sweet Spot {sweet:?}, Grenze {far:?}, zu nah {close:?}");
-    assert!(rate(sweet.destroyed, &sweet) > 0.65, "{report}");
+    assert!(rate(sweet.destroyed, &sweet) > 0.7, "{report}");
     assert!(rate(far.destroyed, &far) < rate(sweet.destroyed, &sweet) - 0.2, "{report}");
     assert!(rate(close.destroyed, &close) < rate(sweet.destroyed, &sweet) - 0.1, "{report}");
     assert!(rate(far.missed, &far) > rate(sweet.missed, &sweet), "{report}");
@@ -145,11 +145,26 @@ fn sweet_spot_hits_more_often_than_too_far_or_too_close() {
     eprintln!("{report}");
 }
 
-/// Zielrahmen-Zonen: außer Reichweite, in Reichweite, gute Zone; der
+/// Liegt das Ziel außerhalb des Abschusskreises, übernimmt die Rakete es
+/// nicht: Sie fliegt in Abschusslage geradeaus und sucht selbst.
+#[test]
+fn target_outside_the_launch_circle_is_not_handed_over() {
+    // 3 km voraus, 1500 m tiefer: rund 27° unter der Nase.
+    let (mut sim, _) =
+        (1..=20_u64).find_map(|s| lined_up(s, TargetClass::Soft, 3_000.0, agm())).expect("Anflug");
+    step(&mut sim, 0, weapon_flags::BAY_DOORS);
+    for _ in 0..ticks(weapons::DOOR_TIME_S + 0.1) {
+        step(&mut sim, 0, 0);
+    }
+    step(&mut sim, 0, weapon_flags::RELEASE);
+    let w = sim.weapons_in_flight()[0];
+    assert!(w.searching && w.target.is_none(), "{w:?}");
+}
+
+/// Zielrahmen-Zonen: außer Reichweite, in Reichweite, Sweet Spot; der
 /// Radarjäger wirkt nicht gegen weiche Ziele.
 #[test]
 fn launch_zones_follow_the_range() {
-    let max = WeaponKind::AirToGround.spec().max_range_m;
     // Erster Anflug mit (bei `optical`) optischer Erfassung.
     let zone = |dist: f64, loadout, optical: bool| {
         (1..=30_u64)
@@ -157,16 +172,16 @@ fn launch_zones_follow_the_range() {
             .find_map(|(sim, _)| sim.flight_data().target.filter(|t| t.optical || !optical).map(|t| t.zone))
             .flatten()
     };
-    assert_eq!(zone(max * 0.35, agm(), true), Some(LaunchZone::Good));
+    assert_eq!(zone(8_000.0, agm(), true), Some(LaunchZone::Good));
     // Näher als der Sweet Spot: wieder nur „in Reichweite“.
-    assert_eq!(zone(max * 0.1, agm(), true), Some(LaunchZone::InRange));
-    assert_eq!(zone(max * 0.8, agm(), true), Some(LaunchZone::InRange));
-    assert_eq!(zone(max * 1.3, agm(), false), Some(LaunchZone::OutOfRange));
+    assert_eq!(zone(2_000.0, agm(), true), Some(LaunchZone::InRange));
+    assert_eq!(zone(13_500.0, agm(), true), Some(LaunchZone::InRange));
+    assert_eq!(zone(20_000.0, agm(), false), Some(LaunchZone::OutOfRange));
     let arm = Loadout([Some(WeaponKind::AntiRadar), None, None, None]);
-    assert_eq!(zone(max * 0.3, arm, false), Some(LaunchZone::NoEffect));
+    assert_eq!(zone(5_000.0, arm, false), Some(LaunchZone::NoEffect));
     // Ungelenkte Waffe gewählt: keine Zone.
     let bombs = Loadout([Some(WeaponKind::FreeFall), None, None, None]);
-    assert_eq!(zone(max * 0.3, bombs, false), None);
+    assert_eq!(zone(5_000.0, bombs, false), None);
 }
 
 /// Ohne passende Aufschaltung abgefeuert, sucht der Radarjäger selbst – und
@@ -188,17 +203,90 @@ fn unlocked_weapon_searches_for_its_own_kind() {
     assert!(checked > 3);
 }
 
-/// Die Gleitbombe kommt nur so weit, wie ihre Höhe trägt: aus 1500 m über dem
-/// Ziel und 12 km Entfernung ist sie außer Reichweite und fällt zu kurz.
+/// Nur GBU-12 an Bord.
+fn lgb() -> Loadout {
+    Loadout([Some(WeaponKind::GuidedBomb), None, None, None])
+}
+
+/// Auf das Ziel zufliegen, bis die Laserbombe im Sweet Spot ist (Zielrahmen
+/// rot), dann auslösen. `after` läuft nach dem Auslösen jeden Tick (z. B.
+/// Ziel wechseln). Liefert die Ereignisse oder `None`, wenn es nicht klappt.
+fn laser_run(seed: u64, mut after: impl FnMut(&mut Sim, u64)) -> Option<(Sim, usize, Vec<WeaponEvent>)> {
+    let (mut sim, target) = lined_up_at(seed, TargetClass::Soft, 6_000.0, 900.0, lgb())?;
+    step(&mut sim, 0, weapon_flags::BAY_DOORS);
+    for _ in 0..ticks(30.0) {
+        if sim.stores().door_open() && sim.flight_data().target.and_then(|t| t.zone) == Some(LaunchZone::Good)
+        {
+            let t0 = sim.flight_data().tick;
+            step(&mut sim, 0, weapon_flags::RELEASE);
+            for k in 0..ticks(60.0) {
+                after(&mut sim, k as u64);
+                if sim.weapons_in_flight().is_empty() {
+                    break;
+                }
+            }
+            let events = sim.weapon_events().iter().filter(|(t, _)| *t > t0).map(|(_, e)| *e).collect();
+            return Some((sim, target, events));
+        }
+        step(&mut sim, 0, 0);
+    }
+    None
+}
+
+/// Laserbombe im Sweet Spot ausgelöst, Ziel bis zum Einschlag beleuchtet:
+/// meist zerstört.
 #[test]
-fn glide_bomb_falls_short_from_too_far() {
-    let glide = Loadout([Some(WeaponKind::GuidedBomb), None, None, None]);
-    let (mut sim, target) =
-        (1..=20_u64).find_map(|s| lined_up(s, TargetClass::Soft, 12_000.0, glide)).expect("Anflug");
+fn laser_bomb_hits_while_the_target_stays_designated() {
+    let (mut shots, mut destroyed) = (0, 0);
+    for seed in 1..=40_u64 {
+        let Some((_, target, events)) = laser_run(seed, |sim, _| step(sim, 0, 0)) else { continue };
+        if !events.iter().any(|e| matches!(e, WeaponEvent::Acquired { target: t, .. } if *t == target)) {
+            continue;
+        }
+        shots += 1;
+        if matches!(impact(&events), Some(ImpactResult::Destroyed { target: t, .. }) if t == target) {
+            destroyed += 1;
+        }
+        assert!(
+            !events.iter().any(|e| matches!(e, WeaponEvent::LaserLost { .. })),
+            "Seed {seed}: {events:?}"
+        );
+    }
+    assert!(shots >= 15, "zu wenige Würfe: {shots}");
+    eprintln!("GBU-12: {destroyed} von {shots} zerstört");
+    assert!(f64::from(destroyed) / f64::from(shots) > 0.6, "{destroyed} von {shots} zerstört");
+}
+
+/// Wechselt der Pilot nach dem Abwurf das Ziel, endet die Beleuchtung: Die
+/// Bombe fällt ungelenkt und verfehlt.
+#[test]
+fn laser_bomb_falls_ballistic_when_the_designation_ends() {
+    let (sim, target, events) = (1..=40_u64)
+        .find_map(|seed| {
+            laser_run(seed, |sim, k| {
+                // Nach 2 s Blickrichtung nach rechts: anderes Ziel oder keins.
+                let look =
+                    if k == ticks(2.0) as u64 { ControlFrame::look_flags(LookDir::Right.code()) } else { 0 };
+                step(sim, look, 0);
+            })
+            .filter(|(_, t, ev)| {
+                ev.iter().any(|e| matches!(e, WeaponEvent::Acquired { target: x, .. } if x == t))
+            })
+        })
+        .expect("ein Wurf mit Übergabe");
+    assert!(events.iter().any(|e| matches!(e, WeaponEvent::LaserLost { .. })), "{events:?}");
+    assert!(sim.targets()[target].is_intact() || sim.targets()[target].damage < 1.0);
+}
+
+/// Außerhalb des Gleitkorridors reicht die Energie der Laserbombe nicht: keine
+/// Übergabe.
+#[test]
+fn laser_bomb_needs_energy_to_reach_the_target() {
+    let (mut sim, _) =
+        (1..=20_u64).find_map(|s| lined_up_at(s, TargetClass::Soft, 8_000.0, 900.0, lgb())).expect("Anflug");
     assert_eq!(sim.flight_data().target.and_then(|t| t.zone), Some(LaunchZone::OutOfRange));
     let events = shoot(&mut sim);
-    assert!(sim.targets()[target].is_intact());
-    assert!(!matches!(impact(&events), Some(ImpactResult::Destroyed { target: t, .. }) if t == target));
+    assert!(!events.iter().any(|e| matches!(e, WeaponEvent::Acquired { .. })), "{events:?}");
 }
 
 /// Nach der Zerstörung bleibt die Aufschaltung auf dem Wrack; das Wrack
@@ -206,10 +294,9 @@ fn glide_bomb_falls_short_from_too_far() {
 /// Zielwechsel nicht mehr anwählbar.
 #[test]
 fn lock_stays_on_the_wreck_until_a_new_target_is_chosen() {
-    let max = WeaponKind::AirToGround.spec().max_range_m;
     let (mut sim, target) = (1..=40_u64)
         .find_map(|seed| {
-            let (mut sim, target) = lined_up_at(seed, TargetClass::Soft, max * 0.4, 500.0, agm())?;
+            let (mut sim, target) = lined_up_at(seed, TargetClass::Soft, 8_000.0, 300.0, agm())?;
             let events = shoot(&mut sim);
             matches!(impact(&events), Some(ImpactResult::Destroyed { target: t, .. }) if t == target)
                 .then_some((sim, target))

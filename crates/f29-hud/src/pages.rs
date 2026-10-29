@@ -148,6 +148,7 @@ pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
                 Seeker::None if k == WeaponKind::Retarded => "RETARDED",
                 Seeker::None => "NONE",
                 Seeker::Optical => "TV",
+                Seeker::Laser => "LASER",
                 Seeker::Radiation => "ANTI-RADAR",
                 Seeker::Naval => "RADAR",
             };
