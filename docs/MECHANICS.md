@@ -463,7 +463,8 @@ Format jedes Eintrags:
   - *v0.1.11:* Fahrwerk, Klappen und Bremse stehen wieder im HUD, unten links
     unter den Flugdaten, und nur solange sie ausgefahren sind. Das Fahrwerk
     blinkt, während es fährt, und bei Überfahrt; am Boden heißt die Bremse
-    „BRAKES“.
+    „BRAKES“. Jede Anzeige hat eine feste Zeile (Fahrwerk, Klappen, Bremse),
+    damit Blinken oder Ausblenden die anderen nicht verschiebt (v0.1.15).
   - Die bisherigen Rundinstrumente (Drehzahl, HSI, Horizont) entfallen und kommen
     später als eigene MFD-Seiten zurück.
   - Ansichtstasten liegen auf Shift + F-Taste (Cockpit, Verfolger, Retro-Look,

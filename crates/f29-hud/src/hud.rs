@@ -266,32 +266,31 @@ fn left_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
 
 /// Konfiguration unten links: Fahrwerk, Klappen, Bremse – nur, wenn
 /// ausgefahren; das Fahrwerk blinkt, solange es fährt oder zu schnell ist.
+/// Jede Anzeige hat eine feste Zeile, damit Ausblenden oder Blinken die
+/// anderen nicht verschiebt.
 fn configuration(dl: &mut DisplayList, fd: &FlightData, top_left: [f32; 2]) {
     let blink = (fd.time_s * 2.0).fract() < 0.5;
-    let mut y = top_left[1];
-    let mut row = |dl: &mut DisplayList, txt: &str, ink: Ink| {
-        dl.text_mid([top_left[0], y], TXT_SMALL, Align::Left, txt, ink);
-        y -= TXT_SMALL * 1.7;
-    };
-    if fd.gear >= 0.999 {
-        let ink = if fd.warnings.gear_overspeed { Ink::Warning } else { Ink::Hud };
-        if !fd.warnings.gear_overspeed || blink {
-            row(dl, "GEAR", ink);
-        }
-    } else if fd.gear > 0.001 {
-        if blink {
-            row(dl, "GEAR", Ink::Hud);
-        } else {
-            row(dl, "", Ink::Hud);
-        }
+    let at = |slot: usize| [top_left[0], top_left[1] - slot as f32 * TXT_SMALL * 1.7];
+    let gear_moving = fd.gear > 0.001 && fd.gear < 0.999;
+    let gear_down = fd.gear >= 0.999;
+    if (gear_down && (!fd.warnings.gear_overspeed || blink)) || (gear_moving && blink) {
+        let ink = if gear_down && fd.warnings.gear_overspeed { Ink::Warning } else { Ink::Hud };
+        dl.text_mid(at(CONFIG_GEAR), TXT_SMALL, Align::Left, "GEAR", ink);
     }
     if fd.flaps > 0.05 {
-        row(dl, if fd.flaps < 0.999 { "FLAPS ." } else { "FLAPS" }, Ink::Hud);
+        let txt = if fd.flaps < 0.999 { "FLAPS ." } else { "FLAPS" };
+        dl.text_mid(at(CONFIG_FLAPS), TXT_SMALL, Align::Left, txt, Ink::Hud);
     }
     if fd.airbrake > 0.05 {
-        row(dl, if fd.on_ground { "BRAKES" } else { "AIRBRAKE" }, Ink::Hud);
+        let txt = if fd.on_ground { "BRAKES" } else { "AIRBRAKE" };
+        dl.text_mid(at(CONFIG_BRAKE), TXT_SMALL, Align::Left, txt, Ink::Hud);
     }
 }
+
+/// Feste Zeilen der Konfigurationsanzeige.
+const CONFIG_GEAR: usize = 0;
+const CONFIG_FLAPS: usize = 1;
+const CONFIG_BRAKE: usize = 2;
 
 /// Rechts: Höhe, Radarhöhe, Steigrate, Steerpoint.
 fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {

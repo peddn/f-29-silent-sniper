@@ -247,3 +247,42 @@ fn fuel_bar_shrinks_with_fuel() {
     let half = fill_len(0.5);
     assert!(full > 0.1 && (half / full - 0.5).abs() < 0.02, "voll {full}, halb {half}");
 }
+
+/// Fahrwerk, Klappen und Bremse haben feste Zeilen: Blinken oder Ausblenden
+/// einer Anzeige verschiebt die anderen nicht.
+#[test]
+fn configuration_rows_do_not_move() {
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let mut fd = sample();
+    fd.flaps = 1.0;
+    fd.airbrake = 1.0;
+    fd.on_ground = false;
+    // Unterkante der Textzeilen einer Tinte im linken unteren Bereich des Glases
+    let row_y = |fd: &FlightData, ink: Ink, len: usize| {
+        let mut dl = DisplayList::new();
+        hud::draw(&mut dl, fd, &layout);
+        let mut ys: Vec<f32> = dl
+            .lines
+            .iter()
+            .filter(|l| l.ink == ink && l.a[0] < -0.17 && l.a[1] < layout.view_rect().center()[1] - 0.1)
+            .map(|l| l.a[1].min(l.b[1]))
+            .collect();
+        ys.sort_by(f32::total_cmp);
+        ys.dedup_by(|a, b| (*a - *b).abs() < 0.004);
+        assert!(ys.len() >= len, "{ys:?}");
+        ys
+    };
+    let lowest = |fd: &FlightData| row_y(fd, Ink::Hud, 1)[0];
+    // Fahrwerk unten, zu schnell: blinkt rot – in beiden Phasen gleiche Bremszeile
+    fd.gear = 1.0;
+    fd.warnings.gear_overspeed = true;
+    fd.time_s = 0.1; // sichtbar
+    let with_gear = lowest(&fd);
+    fd.time_s = 0.3; // ausgeblendet
+    let without_gear = lowest(&fd);
+    assert!((with_gear - without_gear).abs() < 1e-6, "AIRBRAKE rutscht: {with_gear} vs {without_gear}");
+    // Fahrwerk eingefahren: Zeilen bleiben ebenfalls
+    fd.gear = 0.0;
+    fd.warnings.gear_overspeed = false;
+    assert!((lowest(&fd) - with_gear).abs() < 1e-6, "AIRBRAKE rutscht bei eingefahrenem Fahrwerk");
+}
