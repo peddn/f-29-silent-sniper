@@ -38,6 +38,9 @@ cargo run --release -p f29-app -- --start air
 # Nachtflug: dunkle Darstellung, optische Erfassung nur noch 20 km
 cargo run --release -p f29-app -- --night
 
+# ohne freundliches AWACS: ferne Ziele fehlen auf der Karte
+cargo run --release -p f29-app -- --no-awacs
+
 # Lautstärke in Prozent (Standard 80) bzw. ganz ohne Ton
 cargo run --release -p f29-app -- --volume 50
 cargo run --release -p f29-app -- --no-sound

@@ -81,6 +81,9 @@ pub struct Spawn {
     pub loadout: Loadout,
     /// Nachtflug: Sensorreichweiten stark verringert (M-013).
     pub night: bool,
+    /// Ein freundliches AWACS ist in der Luft: Datalink-Daten zu Zielen
+    /// außerhalb der eigenen Erfassung (pseudosimuliert, M-013).
+    pub awacs: bool,
 }
 
 impl Default for Spawn {
@@ -97,6 +100,7 @@ impl Default for Spawn {
             throttle: 0.55,
             loadout: Loadout::default(),
             night: false,
+            awacs: true,
         }
     }
 }
@@ -376,8 +380,11 @@ pub struct FlightData {
     pub destroyed_targets: Vec<usize>,
     /// Indizes der Ziele, die die eigenen Sensoren erfassen, aufsteigend. Alle
     /// anderen kennt das Flugzeug nur über den AWACS-Datalink (verminderte
-    /// Information: Lage, aber keine Klasse und keine Kennung „zivil“).
+    /// Information: Lage und Zieltyp, aber keine Kennung „zivil“) – und nur,
+    /// wenn ein AWACS in der Luft ist.
     pub own_contacts: Vec<usize>,
+    /// Ein freundliches AWACS ist in der Luft (Datalink).
+    pub awacs: bool,
     /// Zielhilfe, wenn eine ungelenkte Bombe gewählt ist und das Flugzeug fliegt.
     pub bomb_aim: Option<BombAim>,
     pub warnings: Warnings,
@@ -1007,6 +1014,7 @@ impl Sim {
             },
             weapon_messages: self.weapon_messages(),
             systems: self.systems,
+            awacs: self.config.spawn.awacs,
             own_contacts: (0..self.targets.len())
                 .filter(|&i| {
                     self.own_contacts.get(i).copied().unwrap_or(false) && self.targets[i].is_intact()

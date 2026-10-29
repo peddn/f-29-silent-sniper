@@ -90,6 +90,7 @@ fn landing_demo() -> Vec<f32> {
         // Nach der Mission: Schächte leer.
         loadout: f29_core::weapons::Loadout::EMPTY,
         night: false,
+        awacs: true,
     };
     let mut sim = Sim::new(SimConfig { seed: 0x0F29, spawn });
     let mut ap = Approach::new(rw);

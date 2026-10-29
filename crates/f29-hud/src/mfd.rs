@@ -316,17 +316,19 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                 let p = proj.to_screen(t.pos);
                 let s = txt * 0.55;
                 if fd.own_contacts.binary_search(&k).is_ok() {
-                    // Eigene Erfassung: Klasse und Kennung „zivil“ bekannt.
+                    // Eigene Erfassung: Zieltyp und Kennung „zivil“ bekannt.
                     let ink = if t.civilian { Ink::MfdDim } else { Ink::Warning };
                     target_symbol(dl, p, s, t.class, ink);
+                } else if fd.awacs {
+                    // AWACS-Datalink: Lage und Zieltyp, aber nicht „zivil“ –
+                    // einheitlich gedämpft.
+                    target_symbol(dl, p, s, t.class, Ink::MfdDim);
                 } else {
-                    // AWACS-Datalink: nur die Lage, als kleine Raute.
-                    let d = s * 0.6;
-                    dl.polyline(
-                        &[[p[0], p[1] + d], [p[0] + d, p[1]], [p[0], p[1] - d], [p[0] - d, p[1]]],
-                        true,
-                        Ink::MfdDim,
-                    );
+                    // Weder eigene Erfassung noch AWACS: unbekannt (nur
+                    // Primär-/Sekundärziel aus dem Briefing bleiben markiert).
+                    if t.role == TargetRole::None {
+                        continue;
+                    }
                 }
                 let tag = match t.role {
                     TargetRole::Primary => Some("P"),

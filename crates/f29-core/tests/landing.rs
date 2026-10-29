@@ -35,6 +35,7 @@ fn on_final(seed: u64, rw: &Runway, dist: f64, offset: f64, fuel: f64) -> Sim {
         // Nach der Mission: Schächte leer.
         loadout: f29_core::weapons::Loadout::EMPTY,
         night: false,
+        awacs: true,
     };
     Sim::new(SimConfig { seed, spawn })
 }

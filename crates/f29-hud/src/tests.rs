@@ -494,3 +494,22 @@ fn corners_only_inside_the_launch_circle() {
     assert_eq!(lines(12.0, Some(LaunchZone::InRange)), lines(12.0, Some(LaunchZone::OutOfRange)));
     assert!(lines(4.0, Some(LaunchZone::InRange)) >= lines(4.0, Some(LaunchZone::OutOfRange)) + 8);
 }
+
+/// Karte: Ziele außerhalb der eigenen Erfassung nur mit AWACS (Zieltyp
+/// gedämpft); ohne AWACS fehlen sie (außer Primär-/Sekundärziel).
+#[test]
+fn awacs_shows_targets_beyond_own_sensors() {
+    let sim = Sim::new(SimConfig::new(0x0F29));
+    let map = MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let mut fd = sim.flight_data();
+    fd.own_contacts.clear();
+    let mut opts = HudOptions { show_hud: false, ..HudOptions::default() };
+    opts.mfd.map_zoom = 4;
+    let lines = |awacs: bool| {
+        let mut f = fd.clone();
+        f.awacs = awacs;
+        build(&f, &layout, &opts, Some(&map)).lines.len()
+    };
+    assert!(lines(true) > lines(false) + 20, "AWACS-Daten fehlen auf der Karte");
+}

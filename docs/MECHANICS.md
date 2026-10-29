@@ -802,14 +802,16 @@ Format jedes Eintrags:
   Nachtflüge (`--night`, im Replay als Tageszeit). Nachts schrumpft die optische
   Reichweite stark, das Radar verliert nichts; die Außensicht ist abgedunkelt und
   bläulich.
-- **AWACS-Datalink (v0.2.7, Spielerentscheidung):** Es ist immer ein AWACS in der
-  Luft. Alle Ziele bleiben auf der Karte sichtbar; was die eigenen Sensoren nicht
-  erfassen (Radar an und in Reichweite, oder optisch in Reichweite mit freier
-  Sicht), kommt per Datalink mit verminderter Information: nur die Lage, als
-  kleine gedämpfte Raute, ohne Klasse und ohne Kennung „zivil“. Primär- und
-  Sekundärziel bleiben markiert (Briefing). Aufschalten geht nur mit den
-  eigenen Sensoren. Die eigene Erfassung wird reihum geprüft (vier Ziele je
-  Erfassungstakt).
+- **AWACS-Datalink (v0.2.7, Spielerentscheidung):** pseudosimuliert als
+  Startbedingung „freundliches AWACS in der Luft“ (Standard an, `--no-awacs`,
+  im Replay). Mit AWACS bleiben alle Ziele auf der Karte; was die eigenen
+  Sensoren nicht erfassen (Radar an und in Reichweite, oder optisch in
+  Reichweite mit freier Sicht), kommt per Datalink mit verminderter
+  Information: Lage und Zieltyp (Symbol: Schiff, Bunker, Radar …), aber ohne
+  Kennung „zivil“ und einheitlich gedämpft. Ohne AWACS fehlen diese Ziele;
+  Primär- und Sekundärziel bleiben markiert (Briefing). Aufschalten geht nur
+  mit den eigenen Sensoren. Die eigene Erfassung wird reihum geprüft (vier
+  Ziele je Erfassungstakt).
 - **Unsere Werte:** Radar 50 km Tag und Nacht, optisch 50 km bei Tag und 20 km
   nachts (Spielerentscheidung v0.2.7). Kegel ±45° um die Blickrichtung, Erfassung 4-mal pro Sekunde (ein
   Wechsel von Radar oder Blickrichtung wirkt sofort), Sichtlinie in 60-m-Schritten

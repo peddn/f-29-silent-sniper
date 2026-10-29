@@ -25,6 +25,7 @@ fn main() {
         // Nach der Mission: Schächte leer.
         loadout: f29_core::weapons::Loadout::EMPTY,
         night: false,
+        awacs: true,
     };
     let mut sim = Sim::new(SimConfig { seed, spawn });
     let mut ap = Approach::new(rw.clone());
