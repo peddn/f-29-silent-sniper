@@ -200,7 +200,7 @@ fn lock_is_kept_when_overflying_and_look_follows() {
     assert!(t.range > 4_000.0, "Ziel liegt hinter uns ({:.0} m)", t.range);
 }
 
-/// Nachts schrumpfen beide Reichweiten stark (optisch 16 km, Radar 40 km).
+/// Nachts schrumpft die optische Reichweite auf 20 km; das Radar bleibt bei 50 km.
 #[test]
 fn night_cuts_both_sensor_ranges() {
     let day = near_primary();
@@ -210,7 +210,35 @@ fn night_cuts_both_sensor_ranges() {
     let (d, n) = (day.sensors(), night.sensors());
     assert_eq!(d.optical_range(), OPTICAL_RANGE_M);
     assert_eq!(d.radar_range(), RADAR_RANGE_M);
-    assert!((n.optical_range() - 16_000.0).abs() < 1.0, "{}", n.optical_range());
-    assert!((n.radar_range() - 40_000.0).abs() < 1.0, "{}", n.radar_range());
-    const { assert!(RADAR_RANGE_M >= 2.0 * OPTICAL_RANGE_M && OPTICAL_RANGE_M >= 80_000.0) };
+    assert!((n.optical_range() - 20_000.0).abs() < 1.0, "{}", n.optical_range());
+    assert_eq!(n.radar_range(), 50_000.0);
+    assert_eq!(d.optical_range(), 50_000.0);
+}
+
+/// Eigene Erfassung vs. AWACS: Ziele jenseits beider Reichweiten sind nie
+/// eigene Kontakte; mit Radar ist nach einem Durchlauf jedes Ziel in
+/// Radarreichweite ein eigener Kontakt.
+#[test]
+fn own_contacts_follow_sensor_ranges() {
+    let mut sim = near_primary();
+    step(&mut sim, flags::RADAR_TOGGLE);
+    for _ in 0..(120 * 4) {
+        step(&mut sim, 0);
+    }
+    let fd = sim.flight_data();
+    let p = sim.aircraft().position;
+    let mut inside = 0;
+    for (i, t) in sim.targets().iter().enumerate() {
+        let c = t.center_ned();
+        let r = ((c[0] - p.x).powi(2) + (c[1] - p.y).powi(2) + (c[2] - p.z).powi(2)).sqrt();
+        let own = fd.own_contacts.contains(&i);
+        if r > RADAR_RANGE_M.max(OPTICAL_RANGE_M) + 2_000.0 {
+            assert!(!own, "Ziel {i} in {r:.0} m ist kein eigener Kontakt");
+        } else if r < RADAR_RANGE_M - 2_000.0 && t.is_intact() {
+            assert!(own, "Ziel {i} in {r:.0} m sollte per Radar erfasst sein");
+            inside += 1;
+        }
+    }
+    assert!(inside > 3);
+    assert!(fd.own_contacts.len() < sim.targets().len(), "alle Ziele erfasst – AWACS ungetestet");
 }

@@ -9,8 +9,10 @@ pub enum Ink {
     Hud,
     /// Abgeschwächte HUD-Symbolik.
     HudDim,
-    /// Warnungen.
+    /// Warnungen (Instrumente, MFDs).
     Warning,
+    /// Warnungen und Hervorhebungen im HUD (blau, Spielerwunsch v0.2.7).
+    HudWarning,
     /// Beschriftung und Skalen der Instrumente.
     Panel,
     /// Hilfslinien der Instrumente.

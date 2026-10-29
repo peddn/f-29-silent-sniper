@@ -3,7 +3,7 @@
 //! ```text
 //! f29-headless demo     [--seed N] [--seconds S] [--record DATEI]
 //! f29-headless replay   DATEI
-//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--bay N] [--out DATEI]
+//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N]
 //! f29-headless sound    [--out VERZEICHNIS]
@@ -27,13 +27,14 @@ f29-headless – F-29 Silent Sniper ohne Grafik
 Befehle:
   demo     [--seed N] [--seconds S] [--record DATEI]   Autopilot fliegt die Route ab
   replay   DATEI                                       Replay abspielen und Hash prüfen
-  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--bay N] [--out DATEI]
+  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
                                                        HUD nach S Sekunden Demo als SVG
                                                        (SEITE des rechten MFDs: msn, tgt, wpn, eng, adi, sys;
                                                        --radar 1 schaltet am Ende das Radar ein,
                                                        --drop 1 öffnet den Schacht und löst eine Waffe aus,
                                                        --damage 1 beschädigt Beispielsysteme,
-                                                       --bay N wählt Waffenschacht N)
+                                                       --bay N wählt Waffenschacht N,
+                                                       --zoom Kartenstufe 0..4 = 2..40 NM)
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N]                                 Flugplätze und Route auflisten
@@ -282,6 +283,7 @@ fn hud_svg(args: &Args) -> Result<(), String> {
     let layout = ScreenLayout::cockpit(aspect);
     let mut opts = HudOptions::default();
     opts.mfd.right_page = right_page;
+    opts.mfd.map_zoom = args.get("zoom", opts.mfd.map_zoom)?;
     let dl = f29_hud::build(&sim.flight_data(), &layout, &opts, Some(&map));
     let svg = f29_hud::svg::to_svg(&dl, &layout, 720);
     std::fs::write(out, svg).map_err(|e| format!("{out}: {e}"))?;

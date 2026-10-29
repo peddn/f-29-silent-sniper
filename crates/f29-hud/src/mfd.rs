@@ -314,9 +314,20 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                     continue;
                 }
                 let p = proj.to_screen(t.pos);
-                let ink = if t.civilian { Ink::MfdDim } else { Ink::Warning };
                 let s = txt * 0.55;
-                target_symbol(dl, p, s, t.class, ink);
+                if fd.own_contacts.binary_search(&k).is_ok() {
+                    // Eigene Erfassung: Klasse und Kennung „zivil“ bekannt.
+                    let ink = if t.civilian { Ink::MfdDim } else { Ink::Warning };
+                    target_symbol(dl, p, s, t.class, ink);
+                } else {
+                    // AWACS-Datalink: nur die Lage, als kleine Raute.
+                    let d = s * 0.6;
+                    dl.polyline(
+                        &[[p[0], p[1] + d], [p[0] + d, p[1]], [p[0], p[1] - d], [p[0] - d, p[1]]],
+                        true,
+                        Ink::MfdDim,
+                    );
+                }
                 let tag = match t.role {
                     TargetRole::Primary => Some("P"),
                     TargetRole::Secondary => Some("S"),

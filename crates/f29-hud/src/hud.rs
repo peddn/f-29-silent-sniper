@@ -18,11 +18,11 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout)
     let glass = Rect::from_center(c, [vh * 0.36, vh * 0.34]);
 
     if fd.warnings.crashed {
-        dl.text_mid(c, TXT * 2.2, Align::Center, "CRASHED", Ink::Warning);
+        dl.text_mid(c, TXT * 2.2, Align::Center, "CRASHED", Ink::HudWarning);
         if let f29_core::Status::Crashed { cause, .. } = fd.status {
-            dl.text_mid([c[0], c[1] - TXT * 2.6], TXT, Align::Center, cause.label(), Ink::Warning);
+            dl.text_mid([c[0], c[1] - TXT * 2.6], TXT, Align::Center, cause.label(), Ink::HudWarning);
         }
-        dl.text_mid([c[0], c[1] - TXT * 5.0], TXT, Align::Center, "R - RESTART", Ink::Warning);
+        dl.text_mid([c[0], c[1] - TXT * 5.0], TXT, Align::Center, "R - RESTART", Ink::HudWarning);
         return;
     }
 
@@ -151,7 +151,7 @@ fn bomb_aim(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass:
     if fd.roll.abs() > f29_core::weapons::MAX_RELEASE_BANK_RAD {
         return;
     }
-    let ink = if aim.too_low { Ink::Warning } else { Ink::Hud };
+    let ink = if aim.too_low { Ink::HudWarning } else { Ink::Hud };
     let r = vh * 0.011;
     // Aufschlagpunkt und Fall-Linie
     if let (Some(fpm), Some(p)) = (
@@ -185,26 +185,38 @@ fn launch_circle(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, c
     dl.circle(center, r, 40, Ink::HudDim);
 }
 
+/// Reichweitenzone, wie sie Zielrahmen und Feuersignal zeigen: Bei Raketen
+/// gilt „in Reichweite“ bzw. „Sweet Spot“ nur, wenn das Ziel auch im
+/// Abschusskreis liegt – sonst würde die Rakete es nicht übernehmen.
+fn armed_zone(fd: &FlightData, t: &f29_core::TargetInfo) -> Option<LaunchZone> {
+    let zone = t.zone?;
+    let st = &fd.stores;
+    let circle = st.bays[st.selected].kind.is_some_and(|k| k.uses_launch_circle());
+    let in_circle =
+        t.direction_body.x >= f29_core::weapons::LAUNCH_CIRCLE_RAD.cos() * t.direction_body.length();
+    match zone {
+        LaunchZone::InRange | LaunchZone::Good if circle && !in_circle => Some(LaunchZone::OutOfRange),
+        z => Some(z),
+    }
+}
+
 /// Feuersignal der Lenkwaffen unten mittig im Glas: „IN RANGE“ in
-/// Reichweite, „SHOOT“ (rot umrahmt) im Sweet Spot – bei Raketen nur, wenn
-/// das Ziel zusätzlich im Abschusskreis liegt (sonst „IN RANGE“).
+/// Reichweite, „SHOOT“ (umrahmt) im Sweet Spot – bei Raketen nur mit dem
+/// Ziel im Abschusskreis.
 fn shoot_cue(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let Some(t) = &fd.target else {
         return;
     };
     let st = &fd.stores;
-    let Some(kind) = st.bays[st.selected].kind.filter(|k| k.is_guided() && st.bays[st.selected].count > 0)
-    else {
+    if !st.bays[st.selected].kind.is_some_and(|k| k.is_guided()) || st.bays[st.selected].count == 0 {
         return;
-    };
-    let in_circle = !kind.uses_launch_circle()
-        || t.direction_body.x >= f29_core::weapons::LAUNCH_CIRCLE_RAD.cos() * t.direction_body.length();
+    }
     let pos = [glass.center()[0], glass.min[1] + TXT * 1.4];
-    match t.zone {
-        Some(LaunchZone::Good) if in_circle => {
-            dl.boxed_text(pos, TXT, Align::Center, "SHOOT", Ink::Warning);
+    match armed_zone(fd, t) {
+        Some(LaunchZone::Good) => {
+            dl.boxed_text(pos, TXT, Align::Center, "SHOOT", Ink::HudWarning);
         }
-        Some(LaunchZone::Good | LaunchZone::InRange) => {
+        Some(LaunchZone::InRange) => {
             dl.text_mid(pos, TXT_SMALL, Align::Center, "IN RANGE", Ink::Hud);
         }
         _ => {}
@@ -265,24 +277,25 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
         return;
     };
     let s = vh * 0.02;
+    let zone = armed_zone(fd, t);
     let ink = if t.civilian { Ink::HudDim } else { Ink::Hud };
     match layout.project_body(t.direction_body.to_array()) {
         Some(p) if glass.contains(p) => {
             // Form nach Reichweitenzone der gewählten Lenkwaffe (wie im
             // Original: in Reichweite erfasst, näher dran Farbwechsel).
             let r = Rect::from_center(p, [s, s]);
-            let ink = match t.zone {
-                Some(LaunchZone::Good) => Ink::Warning,
+            let ink = match zone {
+                Some(LaunchZone::Good) => Ink::HudWarning,
                 Some(LaunchZone::NoEffect) => Ink::HudDim,
                 _ if t.destroyed => Ink::HudDim,
                 _ => ink,
             };
-            if t.zone == Some(LaunchZone::NoEffect) {
+            if zone == Some(LaunchZone::NoEffect) {
                 dashed_rect(dl, r, ink);
             } else {
                 dl.rect(r, ink);
             }
-            if matches!(t.zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
+            if matches!(zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
                 // Kräftige Ecken außen um den Rahmen
                 let o = Rect::from_center(p, [s * 1.45, s * 1.45]);
                 let k = s * 0.55;
@@ -299,7 +312,7 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
                 dl.line(r.min, r.max, ink);
                 dl.line([r.min[0], r.max[1]], [r.max[0], r.min[1]], ink);
             }
-            let sys = match t.zone {
+            let sys = match zone {
                 _ if t.destroyed => "DESTROYED",
                 Some(LaunchZone::NoEffect) => "NO EFF",
                 _ if t.optical => "OPT",
@@ -442,7 +455,7 @@ fn selected_weapon(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     } else {
         "SAFE"
     };
-    let ink = if st.door > 0.0 { Ink::Warning } else { Ink::HudDim };
+    let ink = if st.door > 0.0 { Ink::HudWarning } else { Ink::HudDim };
     dl.text_mid([x, y], TXT_SMALL, Align::Left, &format!("BAY {} {door}", st.selected + 1), ink);
 }
 
@@ -456,7 +469,7 @@ fn configuration(dl: &mut DisplayList, fd: &FlightData, top_left: [f32; 2]) {
     let gear_moving = fd.gear > 0.001 && fd.gear < 0.999;
     let gear_down = fd.gear >= 0.999;
     if (gear_down && (!fd.warnings.gear_overspeed || blink)) || (gear_moving && blink) {
-        let ink = if gear_down && fd.warnings.gear_overspeed { Ink::Warning } else { Ink::Hud };
+        let ink = if gear_down && fd.warnings.gear_overspeed { Ink::HudWarning } else { Ink::Hud };
         dl.text_mid(at(CONFIG_GEAR), TXT_SMALL, Align::Left, "GEAR", ink);
     }
     if fd.flaps > 0.05 {
@@ -487,7 +500,7 @@ fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let rft = units::m_to_ft(fd.radar_altitude_m).max(0.0);
     let step = if rft < 1_000.0 { 10.0 } else { 50.0 };
     let r = (rft / step).round() as i64 * step as i64;
-    let ink = if rft < 500.0 { Ink::Warning } else { Ink::Hud };
+    let ink = if rft < 500.0 { Ink::HudWarning } else { Ink::Hud };
     dl.text_mid([x, cy - 0.045], TXT_SMALL, Align::Right, &format!("R {r:>5}"), ink);
     if let Some(sp) = &fd.steerpoint {
         let nm = units::m_to_nm(sp.range);
@@ -512,7 +525,7 @@ fn weapon_messages(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let c = glass.center();
     let mut y = glass.min[1] - TXT * 1.6;
     for m in fd.weapon_messages.iter().rev() {
-        let ink = if m.warning { Ink::Warning } else { Ink::Hud };
+        let ink = if m.warning { Ink::HudWarning } else { Ink::Hud };
         dl.text_mid([c[0], y], TXT, Align::Center, &m.text, ink);
         y -= TXT * 1.8;
     }
@@ -524,7 +537,7 @@ fn warnings(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let mut y = c[1] - (glass.max[1] - glass.min[1]) * 0.22;
     let mut show = |dl: &mut DisplayList, txt: &str| {
         if blink {
-            dl.boxed_text([c[0], y], TXT, Align::Center, txt, Ink::Warning);
+            dl.boxed_text([c[0], y], TXT, Align::Center, txt, Ink::HudWarning);
         }
         y -= TXT * 2.2;
     };
@@ -601,13 +614,13 @@ fn sink_scale(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let len = 0.17_f32;
     let y_of = |fpm: f32| top - (fpm.clamp(0.0, full) / full) * len;
     dl.line([x, top], [x, top - len], Ink::HudDim);
-    for (fpm, ink) in [(HARD_SINK_FPM, Ink::Hud), (MAX_SINK_FPM, Ink::Warning)] {
+    for (fpm, ink) in [(HARD_SINK_FPM, Ink::Hud), (MAX_SINK_FPM, Ink::HudWarning)] {
         let y = y_of(fpm);
         dl.line([x - 0.010, y], [x + 0.010, y], ink);
     }
     let sink = (-units::mps_to_fpm(fd.vertical_speed_mps)) as f32;
     let y = y_of(sink);
-    let ink = if sink > MAX_SINK_FPM { Ink::Warning } else { Ink::Hud };
+    let ink = if sink > MAX_SINK_FPM { Ink::HudWarning } else { Ink::Hud };
     dl.line([x - 0.004, top], [x - 0.004, y], ink);
     dl.line([x + 0.004, top], [x + 0.004, y], ink);
     dl.line([x - 0.006, y], [x + 0.006, y], ink);
@@ -623,7 +636,8 @@ fn ground_messages(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let y = c[1] + (glass.max[1] - glass.min[1]) * 0.18;
     if let Some(td) = &fd.touchdown {
         let fpm = units::mps_to_fpm(td.sink_mps).round() as i64;
-        let (word, ink) = if td.hard { ("HARD LANDING", Ink::Warning) } else { ("GOOD LANDING", Ink::Hud) };
+        let (word, ink) =
+            if td.hard { ("HARD LANDING", Ink::HudWarning) } else { ("GOOD LANDING", Ink::Hud) };
         dl.text_mid([c[0], y], TXT, Align::Center, word, ink);
         dl.text_mid([c[0], y - TXT * 1.6], TXT_SMALL, Align::Center, &format!("{fpm} FPM"), Ink::Hud);
     }

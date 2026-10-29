@@ -89,7 +89,7 @@ fn crash_screen_replaces_hud() {
     fd.warnings.crashed = true;
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
     let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
-    assert!(dl.lines.iter().all(|l| l.ink == Ink::Warning));
+    assert!(dl.lines.iter().all(|l| l.ink == Ink::HudWarning));
 }
 
 #[test]
@@ -243,7 +243,7 @@ fn fuel_bar_shrinks_with_fuel() {
         dl.lines
             .iter()
             .filter(|l| {
-                (l.ink == Ink::Needle || l.ink == Ink::Warning)
+                (l.ink == Ink::Needle || l.ink == Ink::HudWarning)
                     && l.a[0] > m.right_screen.min[0]
                     && (l.a[1] - l.b[1]).abs() < 1e-6
             })
@@ -324,7 +324,7 @@ fn open_bay_blinks_as_warning() {
         fd.stores.door = door;
         fd.time_s = time_s;
         let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
-        dl.lines.iter().filter(|l| l.ink == Ink::Warning).count()
+        dl.lines.iter().filter(|l| l.ink == Ink::HudWarning).count()
     };
     let closed = warn_lines(0.0, 10.0);
     assert!(warn_lines(1.0, 10.0) > closed, "keine Warnung bei offenem Schacht");
@@ -372,7 +372,7 @@ fn target_box_shows_the_launch_zone() {
         let mut fd = base.clone();
         fd.target = Some(f29_core::TargetInfo { zone, ..t });
         let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
-        (dl.lines.len(), dl.lines.iter().filter(|l| l.ink == Ink::Warning).count())
+        (dl.lines.len(), dl.lines.iter().filter(|l| l.ink == Ink::HudWarning).count())
     };
     let (plain, plain_red) = lines(None);
     let (in_range, _) = lines(Some(LaunchZone::InRange));
@@ -395,7 +395,7 @@ fn bomb_aim_draws_the_pipper() {
         fd.roll = 0.0;
         fd.bomb_aim = aim;
         let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
-        (dl.lines.len(), dl.lines.iter().filter(|l| l.ink == Ink::Warning).count())
+        (dl.lines.len(), dl.lines.iter().filter(|l| l.ink == Ink::HudWarning).count())
     };
     let aim = f29_core::BombAim {
         impact: f29_core::DVec3::ZERO,
@@ -456,7 +456,7 @@ fn shoot_cue_follows_zone_and_circle() {
             ..t0
         });
         let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
-        dl.lines.iter().filter(|l| l.ink == Ink::Warning).count()
+        dl.lines.iter().filter(|l| l.ink == Ink::HudWarning).count()
     };
     let lgb_good = red(WeaponKind::GuidedBomb, LaunchZone::Good, 25.0);
     let lgb_in = red(WeaponKind::GuidedBomb, LaunchZone::InRange, 25.0);
@@ -465,4 +465,32 @@ fn shoot_cue_follows_zone_and_circle() {
     let in_circle = red(WeaponKind::AirToGround, LaunchZone::Good, 4.0);
     let outside = red(WeaponKind::AirToGround, LaunchZone::Good, 15.0);
     assert!(in_circle > outside + 10, "SHOOT trotz Ziel außerhalb des Kreises");
+}
+
+/// Ecken (= Rakete würde übernehmen) nur, wenn das Ziel im Abschusskreis liegt.
+#[test]
+fn corners_only_inside_the_launch_circle() {
+    use f29_core::weapons::{Bay, LaunchZone, WeaponKind};
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let mut sim = Sim::new(SimConfig::new(0x0F29));
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.55, f29_core::controls::flags::RADAR_TOGGLE));
+    let base = sim.flight_data();
+    let t0 = base.target.expect("Ziel");
+    let lines = |off_deg: f64, zone: Option<LaunchZone>| {
+        let mut fd = base.clone();
+        fd.stores.selected = 0;
+        fd.stores.bays[0] = Bay { kind: Some(WeaponKind::AirToGround), count: 1 };
+        fd.bomb_aim = None;
+        let a = off_deg.to_radians();
+        fd.target = Some(f29_core::TargetInfo {
+            zone,
+            civilian: false,
+            direction_body: f29_core::DVec3::new(a.cos(), a.sin(), 0.0),
+            ..t0
+        });
+        build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None).lines.len()
+    };
+    // 12° neben der Nase: außerhalb des Kreises, aber noch im Glas.
+    assert_eq!(lines(12.0, Some(LaunchZone::InRange)), lines(12.0, Some(LaunchZone::OutOfRange)));
+    assert!(lines(4.0, Some(LaunchZone::InRange)) >= lines(4.0, Some(LaunchZone::OutOfRange)) + 8);
 }

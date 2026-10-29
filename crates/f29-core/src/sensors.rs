@@ -21,15 +21,14 @@ use crate::math::DVec3;
 use crate::targets::Target;
 use f29_terrain::Terrain;
 
-/// Reichweite des Radars bei Tag (m, Spielerentscheidung v0.2.7: das
-/// Doppelte der optischen).
-pub const RADAR_RANGE_M: f64 = 160_000.0;
+/// Reichweite des Radars (m, Spielerentscheidung v0.2.7), Tag wie Nacht.
+pub const RADAR_RANGE_M: f64 = 50_000.0;
 /// Reichweite des optischen Systems bei Tag (m, Spielerentscheidung v0.2.7).
-pub const OPTICAL_RANGE_M: f64 = 80_000.0;
-/// Nachts schrumpft die optische Reichweite auf diesen Anteil (16 km) …
-pub const NIGHT_OPTICAL_FACTOR: f64 = 0.2;
-/// … und die des Radars auf diesen (40 km).
-pub const NIGHT_RADAR_FACTOR: f64 = 0.25;
+pub const OPTICAL_RANGE_M: f64 = 50_000.0;
+/// Nachts schrumpft die optische Reichweite auf diesen Anteil (20 km) …
+pub const NIGHT_OPTICAL_FACTOR: f64 = 0.4;
+/// … das Radar verliert nichts.
+pub const NIGHT_RADAR_FACTOR: f64 = 1.0;
 /// Halber Öffnungswinkel des Erfassungskegels um die Blickrichtung (rad, 45°).
 pub const CONE_HALF_RAD: f64 = std::f64::consts::FRAC_PI_4;
 /// Erfassung alle so viele Ticks (4 Hz).
@@ -168,6 +167,17 @@ pub fn line_of_sight(height: impl Fn(f64, f64) -> f64, from: [f64; 3], to: [f64;
 }
 
 impl Sensors {
+    /// Erfassen die eigenen Sensoren ein Ziel (ohne Kegel)? Radar (falls an)
+    /// in Reichweite, oder optisch in Reichweite mit freier Sicht. Ziele, die
+    /// das nicht erfüllen, kennt das Flugzeug nur über den AWACS-Datalink.
+    pub fn sees(&self, t: &Target, terrain: &Terrain, pos: DVec3) -> bool {
+        let c = t.center_ned();
+        let range = (DVec3::new(c[0], c[1], c[2]) - pos).length();
+        (self.radar_on && range <= self.radar_range())
+            || (range <= self.optical_range()
+                && line_of_sight(|n, e| terrain.elevation(n, e), [pos.x, pos.y, -pos.z], [c[0], c[1], -c[2]]))
+    }
+
     /// Radarreichweite unter Berücksichtigung von Schäden (m).
     pub fn radar_range(&self) -> f64 {
         let night = if self.night { NIGHT_RADAR_FACTOR } else { 1.0 };

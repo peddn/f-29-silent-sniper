@@ -35,7 +35,7 @@ cargo run --release -p f29-app -- --seed 1234 --view chase
 # Luftstart statt Start auf der Bahn
 cargo run --release -p f29-app -- --start air
 
-# Nachtflug: dunkle Darstellung, Sensoren mit stark verkürzter Reichweite
+# Nachtflug: dunkle Darstellung, optische Erfassung nur noch 20 km
 cargo run --release -p f29-app -- --night
 
 # Lautstärke in Prozent (Standard 80) bzw. ganz ohne Ton
@@ -194,6 +194,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       der Entfernung (Maverick 16 km, Sweet Spot 8 km), Flug zeigt den Wurf;
       lasergelenkte GBU-12 mit Gleitkorridor und Beleuchtung bis zum Einschlag
       (v0.2.7)
+- [x] Sensoren 50 km (nachts optisch 20 km), Nachtflug, AWACS-Datalink für
+      Ziele außerhalb der eigenen Erfassung, Feuersignal „IN RANGE“/„SHOOT“,
+      HUD-Warnfarbe blau (v0.2.7)
 - [ ] Auslöseklammer für Bomben, neu entworfen (vorgemerkt)
 - [ ] Bordkanone als eigenes Waffensystem: 600 Schuss, Backspace, 2 % Schaden pro
       Treffer (v0.2.8)

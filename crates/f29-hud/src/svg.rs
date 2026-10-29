@@ -9,6 +9,7 @@ fn ink_color(ink: Ink) -> &'static str {
         Ink::Hud => "#55ff55",
         Ink::HudDim => "#22aa22",
         Ink::Warning => "#ff5555",
+        Ink::HudWarning => "#5aa0ff",
         Ink::Panel => "#cccccc",
         Ink::PanelDim => "#666677",
         Ink::Needle => "#ffff55",

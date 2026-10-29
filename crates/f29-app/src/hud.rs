@@ -46,6 +46,7 @@ fn ink_color(ink: Ink) -> Color {
         Ink::Hud => Color::srgb(0.35, 1.0, 0.45),
         Ink::HudDim => Color::srgb(0.15, 0.62, 0.25),
         Ink::Warning => Color::srgb(1.0, 0.33, 0.25),
+        Ink::HudWarning => Color::srgb(0.35, 0.63, 1.0),
         Ink::Panel => Color::srgb(0.82, 0.84, 0.86),
         Ink::PanelDim => Color::srgb(0.42, 0.44, 0.48),
         Ink::Needle => Color::srgb(1.0, 0.86, 0.3),

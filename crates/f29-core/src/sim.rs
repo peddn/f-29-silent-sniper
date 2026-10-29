@@ -266,6 +266,9 @@ pub struct BombAim {
     pub lethal_radius_m: f64,
 }
 
+/// So viele Ziele prüft die eigene Erfassung je Erfassungstakt (reihum).
+const CONTACTS_PER_UPDATE: usize = 4;
+
 /// Die Zielhilfe wird alle so viele Ticks neu berechnet (20 Hz).
 const BOMB_AIM_TICKS: u64 = 6;
 
@@ -371,6 +374,10 @@ pub struct FlightData {
     pub systems: Systems,
     /// Indizes der zerstörten Ziele, aufsteigend (die Karte blendet sie aus).
     pub destroyed_targets: Vec<usize>,
+    /// Indizes der Ziele, die die eigenen Sensoren erfassen, aufsteigend. Alle
+    /// anderen kennt das Flugzeug nur über den AWACS-Datalink (verminderte
+    /// Information: Lage, aber keine Klasse und keine Kennung „zivil“).
+    pub own_contacts: Vec<usize>,
     /// Zielhilfe, wenn eine ungelenkte Bombe gewählt ist und das Flugzeug fliegt.
     pub bomb_aim: Option<BombAim>,
     pub warnings: Warnings,
@@ -400,6 +407,10 @@ pub struct Sim {
     /// Vorausberechneter Aufschlag (Punkt, Fallzeit) der gewählten Bombe;
     /// abgeleitet, nicht Teil des Zustandshashes.
     bomb_prediction: Option<(DVec3, f64)>,
+    /// Ziele, die die eigenen Sensoren erfassen (sonst nur AWACS-Datalink);
+    /// reihum aktualisiert, abgeleitet, nicht Teil des Zustandshashes.
+    own_contacts: Vec<bool>,
+    contact_cursor: usize,
 }
 
 impl Sim {
@@ -472,7 +483,13 @@ impl Sim {
             stores,
             systems: Systems::default(),
             bomb_prediction: None,
+            own_contacts: Vec::new(),
+            contact_cursor: 0,
         };
+        sim.own_contacts = vec![false; sim.targets.len()];
+        for _ in 0..sim.targets.len().div_ceil(CONTACTS_PER_UPDATE) {
+            sim.update_contacts();
+        }
         sim.update_bomb_prediction();
         sim
     }
@@ -615,6 +632,27 @@ impl Sim {
         }
         if !done && self.tick.is_multiple_of(sensors::UPDATE_TICKS) {
             self.sensors.update(&self.targets, &self.terrain, pos, heading);
+        }
+        if self.tick.is_multiple_of(sensors::UPDATE_TICKS) {
+            self.update_contacts();
+        }
+    }
+
+    /// Eigene Erfassung reihum für einige Ziele neu bestimmen (die Sichtlinie
+    /// ist teuer); das aufgeschaltete Ziel gilt immer als erfasst.
+    fn update_contacts(&mut self) {
+        let n = self.targets.len();
+        if n == 0 {
+            return;
+        }
+        let pos = self.aircraft.position;
+        for _ in 0..CONTACTS_PER_UPDATE.min(n) {
+            let i = self.contact_cursor % n;
+            self.contact_cursor = (i + 1) % n;
+            self.own_contacts[i] = self.sensors.sees(&self.targets[i], &self.terrain, pos);
+        }
+        if let Some(l) = self.sensors.lock {
+            self.own_contacts[l.target] = true;
         }
     }
 
@@ -969,6 +1007,11 @@ impl Sim {
             },
             weapon_messages: self.weapon_messages(),
             systems: self.systems,
+            own_contacts: (0..self.targets.len())
+                .filter(|&i| {
+                    self.own_contacts.get(i).copied().unwrap_or(false) && self.targets[i].is_intact()
+                })
+                .collect(),
             bomb_aim: self.bomb_aim(),
             destroyed_targets: (0..self.targets.len()).filter(|&i| !self.targets[i].is_intact()).collect(),
             warnings,

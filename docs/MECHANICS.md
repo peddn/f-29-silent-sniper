@@ -799,14 +799,22 @@ Format jedes Eintrags:
     nach dem Abschuss keine Verbindung zum Flugzeug. Erste Waffen: Freifallbomben,
     gelenkte Bomben, Fallschirmbomben (verzögerter Fall) und gelenkte Raketen.
 - **Tag und Nacht (v0.2.7, Spielerentscheidung):** Wie im Original gibt es
-  Nachtflüge (`--night`, im Replay als Tageszeit). Nachts schrumpfen beide
-  Reichweiten stark; die Außensicht ist abgedunkelt und bläulich.
-- **Unsere Werte:** bei Tag optisch 80 km, Radar 160 km (Spielerentscheidung v0.2.7:
-  „stark erhöhen“, Radar das Doppelte); nachts optisch 16 km (× 0,2), Radar 40 km
-  (× 0,25). Kegel ±45° um die Blickrichtung, Erfassung 4-mal pro Sekunde (ein
+  Nachtflüge (`--night`, im Replay als Tageszeit). Nachts schrumpft die optische
+  Reichweite stark, das Radar verliert nichts; die Außensicht ist abgedunkelt und
+  bläulich.
+- **AWACS-Datalink (v0.2.7, Spielerentscheidung):** Es ist immer ein AWACS in der
+  Luft. Alle Ziele bleiben auf der Karte sichtbar; was die eigenen Sensoren nicht
+  erfassen (Radar an und in Reichweite, oder optisch in Reichweite mit freier
+  Sicht), kommt per Datalink mit verminderter Information: nur die Lage, als
+  kleine gedämpfte Raute, ohne Klasse und ohne Kennung „zivil“. Primär- und
+  Sekundärziel bleiben markiert (Briefing). Aufschalten geht nur mit den
+  eigenen Sensoren. Die eigene Erfassung wird reihum geprüft (vier Ziele je
+  Erfassungstakt).
+- **Unsere Werte:** Radar 50 km Tag und Nacht, optisch 50 km bei Tag und 20 km
+  nachts (Spielerentscheidung v0.2.7). Kegel ±45° um die Blickrichtung, Erfassung 4-mal pro Sekunde (ein
   Wechsel von Radar oder Blickrichtung wirkt sofort), Sichtlinie in 60-m-Schritten
-  (höchstens 1000 Prüfpunkte, auf 80 km also alle 80 m). Bis v0.2.6 waren es
-  14,8 km bzw. 37 km.
+  (höchstens 1000 Prüfpunkte). Bis v0.2.6 waren es optisch 14,8 km und Radar
+  37 km.
 - **Status:** Erfassung umgesetzt (v0.2.1), Zielwechsel und Zielkamera (v0.2.2), Aufschaltung beim Überflug halten (v0.2.3), Suchkopf und Lenkung der Waffen (v0.2.5, Details M-014), große Reichweiten und Nacht (v0.2.7)
 
 ### M-014 Waffenschacht, Abwurf und Zielhilfe
@@ -918,8 +926,8 @@ Format jedes Eintrags:
     gewürfelten Punkt, Bild und Meldung passen also zusammen.
   - **Zielrahmen** (wie im Original: erfasst, näher dran Farbwechsel; keine
     Mindestreichweite): außer Reichweite einfacher Rahmen, in Reichweite der
-    gewählten Lenkwaffe kräftige Ecken, im Sweet Spot rot (näher dran wieder nur
-    Ecken),
+    gewählten Lenkwaffe kräftige Ecken, im Sweet Spot blau hervorgehoben (näher
+    dran wieder nur Ecken),
     gestrichelt „NO EFF“, wenn die Waffe nicht wirkt oder ihr Suchkopf die Klasse
     nicht sieht. Beschädigte Ziele tragen „DMG“.
   - **Wrack:** Nach der Zerstörung bleibt die Aufschaltung auf dem Wrack (Rahmen
@@ -943,9 +951,14 @@ Format jedes Eintrags:
     Maßstab; die Längs- und Querablage liefert der Kern schon
     (`BombAim::target_offset`).
   - **Feuersignal** der Lenkwaffen unten mittig im HUD-Glas: „IN RANGE“ in
-    Reichweite, „SHOOT“ (rot umrahmt) im Sweet Spot – bei Raketen nur, wenn das
-    Ziel zusätzlich im Abschusskreis liegt; bei der Laserbombe, wenn sie im
-    Sweet Spot des Gleitkorridors ist (Spielerwunsch v0.2.7).
+    Reichweite, „SHOOT“ (umrahmt) im Sweet Spot; bei der Laserbombe, wenn sie im
+    Sweet Spot des Gleitkorridors ist (Spielerwunsch v0.2.7). Bei Raketen
+    zählen Reichweite und Sweet Spot – auch für die Ecken und die Farbe des
+    Zielrahmens – nur, wenn das Ziel im Abschusskreis liegt: Die Ecken
+    bedeuten „die Waffe würde übernehmen“.
+  - **HUD-Warnfarbe blau** (Spielerwunsch v0.2.7): Warnungen und
+    Hervorhebungen im HUD (z. B. „BAY OPEN“, „TOO LOW“, Zielrahmen im Sweet
+    Spot, „SHOOT“) sind blau statt rot; die MFDs bleiben bei Rot.
   - **HUD unten links:** gewählte Waffe mit Anzahl (z. B. „MK-82 X2“) und
     Schacht mit Klappenzustand („BAY 1 SAFE/DOORS/OPEN“, offen rot).
   - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,
@@ -960,7 +973,7 @@ Format jedes Eintrags:
   Fallschirm 0,9 m² nach 0,3 s, zwei je Schacht, Wirkradius 30 m, Splitterbereich
   180 m. GBU-12 227 kg, Cw·A 0,022 m², Steuerung 6°/s. Abschusskreis ±8°.
   Maverick 210 kg, 320 m/s, 25°/s, 16 km (Sweet Spot um 8 km), Suchkegel ±25°,
-  Wirkradius 8 m (nachts begrenzt die optische Reichweite von 16 km);
+  Wirkradius 8 m;
   HARM 360 kg, 650 m/s, 20°/s, 30 km, ±35°; Harpoon 520 kg, 270 m/s,
   10°/s, 30 km, ±40°. Startgüte an der Reichweitengrenze 0,25, im Sweet Spot
   (40–60 % der Reichweite) 1, direkt am Ziel 0,3.
