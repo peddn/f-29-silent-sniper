@@ -27,8 +27,8 @@ impl Plugin for WeaponsPlugin {
 /// Leuchtspur: Länge (m) und Dicke (m) einer Patrone.
 const TRACER_LENGTH_M: f32 = 14.0;
 const TRACER_WIDTH_M: f32 = 0.35;
-/// Leuchtspur erst zeigen, wenn die Patrone so lange unterwegs ist (s, ≈ 150 m).
-const TRACER_DELAY_S: f64 = 0.12;
+/// Leuchtspur erst zeigen, wenn die Patrone so lange unterwegs ist (s, ≈ 60 m).
+const TRACER_DELAY_S: f64 = 0.05;
 /// Kleinste Größe als Winkel (rad je m Entfernung): Im Retro-Raster (ein
 /// virtuelles Pixel ≈ 2–3 mrad) verschwänden Spur und Wölkchen sonst schon
 /// nach wenigen hundert Metern.
