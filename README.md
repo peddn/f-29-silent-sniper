@@ -77,10 +77,12 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 ## Klang
 
 Alle Klänge entstehen zur Laufzeit per Synthese im Retro-Stil, es gibt keine
-Klangdateien. Die Abrisswarnung ist eine gesprochene Ansage aus einem kleinen
-eigenen Sprachsynthesizer. Wer eine eigene Aufnahme möchte, legt sie als
-16-Bit-PCM-WAV unter `crates/f29-app/assets/sounds/stall.wav` ab. Hörproben
-ohne Spiel: `cargo run -p f29-headless -- sound --out sounds`.
+Klangdateien. Die Abrisswarnung ist ein hoher, pulsierender Alarmton, die
+Bodenwarnung eine Ansage „PULL UP“ – ohne eigene Aufnahme aus einem kleinen
+eigenen Sprachsynthesizer. Eine Aufnahme kommt als PCM-WAV nach
+`crates/f29-app/assets/sounds/pull_up.wav` (Details und Lizenzregeln in
+`crates/f29-app/assets/sounds/README.md`). Hörproben ohne Spiel:
+`cargo run -p f29-headless -- sound --out sounds`.
 
 ## Werkzeuge ohne Grafik
 

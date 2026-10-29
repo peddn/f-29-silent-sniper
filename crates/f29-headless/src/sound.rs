@@ -148,6 +148,13 @@ pub fn render_all(dir: &Path) -> Result<Vec<String>, String> {
             }),
         ),
         (
+            "06b_bodenwarnung_pull_up",
+            render(6.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
+                pull_up_warning: (1.0..4.5).contains(&t),
+                ..cruise(0.8, 200.0)
+            }),
+        ),
+        (
             "06_abrisswarnung",
             render(7.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
                 stall_warning: (1.0..5.5).contains(&t),
@@ -168,9 +175,11 @@ pub fn render_all(dir: &Path) -> Result<Vec<String>, String> {
             .map_err(|e| format!("{}: {e}", path.display()))?;
         written.push(path.display().to_string());
     }
-    let voice_path = dir.join("10_ansage_stall.wav");
-    std::fs::write(&voice_path, wav::write_mono16(&voice::speak(&voice::STALL, SAMPLE_RATE), SAMPLE_RATE))
-        .map_err(|e| format!("{}: {e}", voice_path.display()))?;
-    written.push(voice_path.display().to_string());
+    for (name, word) in [("10_ansage_pull_up", &voice::PULL_UP[..]), ("11_ansage_stall", &voice::STALL[..])] {
+        let path = dir.join(format!("{name}.wav"));
+        std::fs::write(&path, wav::write_mono16(&voice::speak(word, SAMPLE_RATE), SAMPLE_RATE))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        written.push(path.display().to_string());
+    }
     Ok(written)
 }

@@ -497,12 +497,16 @@ Format jedes Eintrags:
     Einfahren.
   - **Aufsetzen:** Reifenquietschen und Schlag, bei harter Landung lauter.
     **Absturz:** Krachen; das Triebwerk verstummt.
-  - **Abrisswarnung:** gesprochenes „STALL“ alle 1,7 s, solange die Warnung
-    anliegt. Die Stimme kommt aus einem kleinen Formant-Synthesizer (Laute S, T,
-    AO, L; Stimmquelle durch drei Formant-Resonatoren, Zischlaute aus gefiltertem
-    Rauschen) mit grober Abtastung und Quantisierung wie bei frühen
-    Sprachchips. Sie lässt sich durch eine eigene Aufnahme
-    (`assets/sounds/stall.wav`) ersetzen.
+  - **Abrisswarnung:** *v0.1.14 (Spielerwunsch):* hoher, pulsierender
+    Alarmton (1250 Hz, 6 Pulse/s, 40 % an), solange die Warnung anliegt.
+  - **Bodenwarnung „PULL UP“:** Ansage alle 1,6 s, solange die PULL-UP-Warnung
+    anliegt. Gedacht für eine authentische Aufnahme
+    (`assets/sounds/pull_up.wav`, nur frei lizenzierte Aufnahmen, Herkunft in
+    `assets/sounds/README.md`). Ohne Aufnahme spricht ein kleiner
+    Formant-Synthesizer (Stimmquelle durch drei Formant-Resonatoren, Zisch- und
+    Explosivlaute aus gefiltertem Rauschen, grobe Abtastung und Quantisierung
+    wie bei frühen Sprachchips). Das Wort „STALL“ derselben Stimme bleibt für
+    spätere Ansagen erhalten.
   - Hörproben rendern Einzelklänge ohne Triebwerk (Klanggruppen Triebwerk,
     Systeme, Ereignisse, Ansagen lassen sich getrennt pegeln).
   - Pause schaltet weich stumm. Startparameter `--volume 0..100` und

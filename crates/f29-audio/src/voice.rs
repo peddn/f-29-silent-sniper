@@ -82,6 +82,64 @@ pub const STALL: [Segment; 7] = [
     silence(0.07, 95.0),
 ];
 
+/// „PULL UP“ (P – UH – L – AH – P), dringlich und etwas höher gesprochen.
+pub const PULL_UP: [Segment; 9] = [
+    silence(0.03, 150.0),
+    // P: Sprengung
+    Segment {
+        dur: 0.03,
+        f: [400.0, 1_000.0, 2_400.0],
+        bw: NEUTRAL_BW,
+        voiced: 0.0,
+        noise: 0.7,
+        noise_f: 1_200.0,
+        pitch: 150.0,
+    },
+    // UH (wie in „pull“)
+    Segment {
+        dur: 0.13,
+        f: [450.0, 1_030.0, 2_380.0],
+        bw: [80.0, 100.0, 140.0],
+        voiced: 1.0,
+        noise: 0.02,
+        noise_f: 1_500.0,
+        pitch: 140.0,
+    },
+    // L
+    Segment {
+        dur: 0.12,
+        f: [380.0, 1_000.0, 2_700.0],
+        bw: [100.0, 150.0, 220.0],
+        voiced: 0.8,
+        noise: 0.0,
+        noise_f: 1_500.0,
+        pitch: 130.0,
+    },
+    silence(0.04, 150.0),
+    // AH (wie in „up“)
+    Segment {
+        dur: 0.15,
+        f: [640.0, 1_190.0, 2_390.0],
+        bw: [80.0, 100.0, 140.0],
+        voiced: 1.0,
+        noise: 0.02,
+        noise_f: 1_500.0,
+        pitch: 135.0,
+    },
+    // P: Verschluss und leichte Sprengung
+    silence(0.06, 120.0),
+    Segment {
+        dur: 0.03,
+        f: [400.0, 1_000.0, 2_400.0],
+        bw: NEUTRAL_BW,
+        voiced: 0.0,
+        noise: 0.4,
+        noise_f: 1_200.0,
+        pitch: 120.0,
+    },
+    silence(0.06, 110.0),
+];
+
 /// Überblendzeit zwischen Segmenten (s).
 const TRANSITION: f32 = 0.03;
 /// Abtastrate des „Sprachchips“ (Hz) und Auflösung der Quantisierung.
@@ -164,6 +222,16 @@ fn normalize(buf: &mut [f32], peak: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pull_up_is_short_and_bounded() {
+        let w = speak(&PULL_UP, 44_100);
+        let dur = w.len() as f32 / 44_100.0;
+        assert!((0.5..0.8).contains(&dur), "Dauer {dur}");
+        assert!(w.iter().all(|v| v.is_finite() && v.abs() <= 0.91));
+        let rms = (w.iter().map(|v| v * v).sum::<f32>() / w.len() as f32).sqrt();
+        assert!(rms > 0.08, "zu leise: {rms}");
+    }
 
     #[test]
     fn stall_word_has_hiss_then_voice() {

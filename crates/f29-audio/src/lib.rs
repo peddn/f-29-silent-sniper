@@ -15,9 +15,11 @@
 //!   Klicken.
 //! - **Luftbremse:** Zischen beim Aus- und Einfahren.
 //! - **Aufsetzen:** Reifenquietschen und Schlag (hart: lauter), Absturz: Krachen.
-//! - **Abrisswarnung:** gesprochenes „STALL“ in Abständen, solange die
-//!   Warnung anliegt. Die Stimme ist ein Sample, das das Frontend durch eine
-//!   eigene Aufnahme ersetzen kann.
+//! - **Abrisswarnung:** hoher, pulsierender Alarmton, solange die Warnung
+//!   anliegt.
+//! - **PULL UP:** Ansage in Abständen, solange die Bodenwarnung anliegt. Die
+//!   Stimme ist ein Sample; ohne eigene Aufnahme spricht der eingebaute
+//!   Formant-Synthesizer.
 //!
 //! Spätere Musik (z. B. im Startbildschirm) läuft im Frontend als eigener
 //! Kanal neben diesem Datenstrom und berührt ihn nicht.
@@ -32,8 +34,11 @@ use std::sync::Arc;
 
 /// Abtastrate des Datenstroms.
 pub const SAMPLE_RATE: u32 = 44_100;
-/// Abstand der gesprochenen Abrisswarnung (s, von Beginn zu Beginn).
-pub const STALL_REPEAT_S: f32 = 1.7;
+/// Abstand der PULL-UP-Ansage (s, von Beginn zu Beginn).
+pub const PULL_UP_REPEAT_S: f32 = 1.6;
+/// Tonhöhe des Abriss-Alarms (Hz) und seine Pulsfrequenz (Hz).
+pub const STALL_ALARM_HZ: f32 = 1_250.0;
+pub const STALL_PULSE_HZ: f32 = 6.0;
 
 /// Ein Aufsetzen, das einen Klang auslöst.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,6 +63,8 @@ pub struct AudioInput {
     pub airbrake: f32,
     pub on_ground: bool,
     pub stall_warning: bool,
+    /// Bodenwarnung (PULL UP).
+    pub pull_up_warning: bool,
     pub touchdown: Option<TouchdownCue>,
     pub crashed: bool,
     /// Pause: alles verstummt weich.
@@ -75,6 +82,7 @@ impl AudioInput {
             airbrake: fd.airbrake as f32,
             on_ground: fd.on_ground,
             stall_warning: fd.warnings.stall,
+            pull_up_warning: fd.warnings.pull_up,
             touchdown: fd.touchdown.map(|t| TouchdownCue { id: t.tick, hard: t.hard }),
             crashed: matches!(fd.status, Status::Crashed { .. }),
             paused,
@@ -91,7 +99,7 @@ pub struct Mix {
     pub systems: f32,
     /// Einmal-Klänge (Verriegeln, Zischen, Aufsetzen, Absturz).
     pub events: f32,
-    /// Ansagen.
+    /// Warnungen: Abriss-Alarm und Ansagen.
     pub voice: f32,
 }
 
@@ -129,7 +137,7 @@ pub struct Synth {
     sr: f32,
     input: AudioInput,
     noise: Noise,
-    stall_voice: Arc<[f32]>,
+    pull_up_voice: Arc<[f32]>,
     // geglättete Parameter
     rpm: OnePole,
     thrust: OnePole,
@@ -155,20 +163,24 @@ pub struct Synth {
     prev_airbrake: f32,
     last_touchdown: Option<u64>,
     crashed: bool,
-    stall_timer: f32,
+    pull_up_timer: f32,
+    alarm: Phase,
+    alarm_pulse: Phase,
+    alarm_gate: OnePole,
+    alarm_lp: OnePole,
     shots: Vec<OneShot>,
     volume: f32,
     mix: Mix,
 }
 
 impl Synth {
-    /// `stall_voice` ist die Ansage für die Abrisswarnung (Mono, [`SAMPLE_RATE`]).
-    pub fn new(stall_voice: Arc<[f32]>) -> Self {
+    /// `pull_up_voice` ist die Ansage der Bodenwarnung (Mono, [`SAMPLE_RATE`]).
+    pub fn new(pull_up_voice: Arc<[f32]>) -> Self {
         Self {
             sr: SAMPLE_RATE as f32,
             input: AudioInput::default(),
             noise: Noise::new(0x0F29_0A0D),
-            stall_voice,
+            pull_up_voice,
             rpm: OnePole::default(),
             thrust: OnePole::default(),
             master: OnePole::default(),
@@ -191,7 +203,11 @@ impl Synth {
             prev_airbrake: f32::NAN,
             last_touchdown: None,
             crashed: false,
-            stall_timer: 0.0,
+            pull_up_timer: 0.0,
+            alarm: Phase::default(),
+            alarm_pulse: Phase::default(),
+            alarm_gate: OnePole::default(),
+            alarm_lp: OnePole::default(),
             shots: Vec::new(),
             volume: 1.0,
             mix: Mix::default(),
@@ -200,7 +216,7 @@ impl Synth {
 
     /// Mit der eingebauten, synthetischen Ansage.
     pub fn with_default_voice() -> Self {
-        Self::new(default_stall_voice())
+        Self::new(default_pull_up_voice())
     }
 
     /// Gesamtlautstärke 0..1.
@@ -249,8 +265,8 @@ impl Synth {
             self.shots.push(OneShot::Crash { t: 0.0, lp: OnePole::default() });
         }
         self.crashed = input.crashed;
-        if !input.stall_warning {
-            self.stall_timer = 0.0;
+        if !input.pull_up_warning {
+            self.pull_up_timer = 0.0;
         }
         self.prev_gear = input.gear;
         self.prev_flaps = input.flaps;
@@ -278,14 +294,17 @@ impl Synth {
         // Nach dem Absturz soll das Krachen noch zu hören sein.
         let shots_master = if inp.paused { 0.0 } else { self.volume };
 
-        // Abrisswarnung: Ansage in festen Abständen
-        if inp.stall_warning && !inp.paused && !inp.crashed {
-            self.stall_timer -= out.len() as f32 * dt;
-            if self.stall_timer <= 0.0 {
-                self.stall_timer = STALL_REPEAT_S;
-                self.shots.push(OneShot::Sample { pos: 0, gain: 0.55 });
+        // Bodenwarnung: Ansage in festen Abständen
+        if inp.pull_up_warning && !inp.paused && !inp.crashed {
+            self.pull_up_timer -= out.len() as f32 * dt;
+            if self.pull_up_timer <= 0.0 {
+                self.pull_up_timer = PULL_UP_REPEAT_S;
+                self.shots.push(OneShot::Sample { pos: 0, gain: 0.6 });
             }
         }
+        let alarm_on = inp.stall_warning && !inp.paused && !inp.crashed;
+        let a_gate = OnePole::coeff_time(0.004, sr);
+        let a_alarm_lp = OnePole::coeff(3_500.0, sr);
 
         for o in out.iter_mut() {
             let rpm = self.rpm.process(rpm_target, a_rpm);
@@ -315,13 +334,22 @@ impl Synth {
             // Rollgeräusch am Boden
             let rollnoise = self.roll_lp.process(n, OnePole::coeff(120.0, sr)) * 0.35 * roll;
 
+            // Abriss-Alarm: weiches Rechteck, im Takt an und aus (40 % an)
+            let pulse_on = alarm_on && self.alarm_pulse.advance(STALL_PULSE_HZ, sr) < 0.4;
+            let gate = self.alarm_gate.process(if pulse_on { 1.0 } else { 0.0 }, a_gate);
+            let beep = self.alarm_lp.process(pulse(self.alarm.advance(STALL_ALARM_HZ, sr), 0.5), a_alarm_lp);
+            let alarm = beep * gate * 0.13 * self.mix.voice;
+            if !alarm_on && gate < 1e-4 {
+                self.alarm_pulse.0 = 0.0;
+            }
+
             let engine = (rumble + tone + whine + rollnoise) * self.mix.engine;
             let systems = (motor + flap) * self.mix.systems;
             let mut x = (engine + systems) * master;
-            x += self.render_shots(dt) * shots_master;
+            x += self.render_shots(dt) * shots_master + alarm * shots_master;
             *o = x.tanh();
         }
-        self.shots.retain(|s| !shot_finished(s, self.stall_voice.len()));
+        self.shots.retain(|s| !shot_finished(s, self.pull_up_voice.len()));
     }
 
     fn render_shots(&mut self, dt: f32) -> f32 {
@@ -365,7 +393,7 @@ impl Synth {
                         v
                     }
                     OneShot::Sample { pos, gain } => {
-                        let v = self.stall_voice.get(*pos).copied().unwrap_or(0.0) * *gain * mix.voice;
+                        let v = self.pull_up_voice.get(*pos).copied().unwrap_or(0.0) * *gain * mix.voice;
                         *pos += 1;
                         v
                     }
@@ -391,9 +419,9 @@ fn shot_finished(s: &OneShot, voice_len: usize) -> bool {
     }
 }
 
-/// Die eingebaute Ansage „STALL“.
-pub fn default_stall_voice() -> Arc<[f32]> {
-    voice::speak(&voice::STALL, SAMPLE_RATE).into()
+/// Die eingebaute Ansage „PULL UP“.
+pub fn default_pull_up_voice() -> Arc<[f32]> {
+    voice::speak(&voice::PULL_UP, SAMPLE_RATE).into()
 }
 
 #[cfg(test)]
@@ -464,13 +492,37 @@ mod tests {
     }
 
     #[test]
-    fn stall_warning_speaks_repeatedly_only_while_active() {
-        let voice = default_stall_voice();
-        let mut s = Synth::new(voice.clone());
+    fn stall_alarm_pulses_only_while_active() {
+        let mut s = Synth::with_default_voice();
+        s.set_mix(Mix::WITHOUT_ENGINE);
+        s.set_input(flying(0.6));
+        let quiet = run(&mut s, 0.5);
+        assert!(rms(&quiet) < 1e-4);
+        s.set_input(AudioInput { stall_warning: true, ..flying(0.6) });
+        let on = run(&mut s, 2.0);
+        // Pulsieren: Fenster à 20 ms wechseln zwischen laut und still
+        let win = SAMPLE_RATE as usize / 50;
+        let levels: Vec<f32> = on.chunks(win).map(rms).collect();
+        let loud = levels.iter().filter(|l| **l > 0.03).count();
+        let silent = levels.iter().filter(|l| **l < 0.005).count();
+        assert!(loud > 20 && silent > 20, "laut {loud}, still {silent}");
+        // hoch: viele Nulldurchgänge
+        let zc = on.windows(2).filter(|p| (p[0] < 0.0) != (p[1] < 0.0)).count() as f32 / 2.0;
+        assert!(zc > 800.0, "Nulldurchgänge {zc}");
+        assert_eq!(s.active_one_shots(), 0, "Abriss spricht nicht");
+        s.set_input(flying(0.6));
+        run(&mut s, 0.1);
+        let after = run(&mut s, 0.5);
+        assert!(rms(&after) < 1e-4);
+    }
+
+    #[test]
+    fn pull_up_speaks_repeatedly_only_while_active() {
+        let mut s = Synth::with_default_voice();
         s.set_input(flying(0.6));
         run(&mut s, 1.0);
         assert_eq!(s.active_one_shots(), 0);
-        s.set_input(AudioInput { stall_warning: true, ..flying(0.6) });
+        s.set_input(AudioInput { pull_up_warning: true, ..flying(0.6) });
         let mut starts = 0;
         let mut was = false;
         for _ in 0..(4.0 * SAMPLE_RATE as f32 / BLOCK as f32) as usize {
