@@ -27,10 +27,16 @@ impl Plugin for WeaponsPlugin {
 /// Leuchtspur: Länge (m) und Dicke (m) einer Patrone.
 const TRACER_LENGTH_M: f32 = 14.0;
 const TRACER_WIDTH_M: f32 = 0.35;
+/// Leuchtspur erst zeigen, wenn die Patrone so lange unterwegs ist (s, ≈ 150 m).
+const TRACER_DELAY_S: f64 = 0.12;
+/// Kleinste Größe als Winkel (rad je m Entfernung): Im Retro-Raster (ein
+/// virtuelles Pixel ≈ 2–3 mrad) verschwänden Spur und Wölkchen sonst schon
+/// nach wenigen hundert Metern.
+const MIN_ANGULAR: f32 = 0.004;
 /// Einschlagwölkchen der Kanone: Dauer (s) und Radius (m) am Boden bzw. am Ziel.
-const PUFF_S: f32 = 0.45;
-const PUFF_GROUND_M: f32 = 2.0;
-const PUFF_HIT_M: f32 = 3.0;
+const PUFF_S: f32 = 0.6;
+const PUFF_GROUND_M: f32 = 6.0;
+const PUFF_HIT_M: f32 = 8.0;
 
 /// Dauer des Einschlagblitzes (s) und größter Radius (m).
 const BLAST_S: f32 = 1.2;
@@ -104,7 +110,8 @@ fn setup(
     visuals.tracer = meshes.add(Cuboid::new(TRACER_WIDTH_M, TRACER_WIDTH_M, TRACER_LENGTH_M));
     visuals.tracer_material =
         materials.add(StandardMaterial { base_color: color(10), unlit: true, ..default() });
-    visuals.puff_ground = materials.add(StandardMaterial { base_color: color(11), unlit: true, ..default() });
+    // Staub hell, damit er sich vom Gelände abhebt.
+    visuals.puff_ground = materials.add(StandardMaterial { base_color: color(14), unlit: true, ..default() });
     visuals.puff_hit = materials.add(StandardMaterial { base_color: color(15), unlit: true, ..default() });
 }
 
@@ -134,14 +141,19 @@ fn sync_tracers(
             continue;
         };
         match rounds.get(k) {
-            Some(r) => {
+            // Erst ein Stück vor dem Flugzeug sichtbar.
+            Some(r) if r.age_s >= TRACER_DELAY_S => {
                 let dir = Vec3::from_array(coords::relative_yup(r.position + r.velocity, r.position));
                 // Die Spur liegt hinter der Patrone.
                 let at = place(r.position, origin.0) - dir.normalize_or_zero() * (TRACER_LENGTH_M * 0.5);
-                *t = Transform::from_translation(at).looking_to(dir, Vec3::Y);
+                // In der Ferne dicker, damit sie im Retro-Raster sichtbar bleibt.
+                let width = (at.length() * MIN_ANGULAR / TRACER_WIDTH_M).max(1.0);
+                *t = Transform::from_translation(at)
+                    .looking_to(dir, Vec3::Y)
+                    .with_scale(Vec3::new(width, width, 1.0));
                 *vis = Visibility::Inherited;
             }
-            None => *vis = Visibility::Hidden,
+            _ => *vis = Visibility::Hidden,
         }
     }
 }
@@ -187,8 +199,11 @@ fn animate_puffs(
         }
         // Aufpuffen, dann wieder schrumpfen.
         let size = (k * std::f32::consts::PI).sin();
-        t.translation = place(puff.at, origin.0);
-        t.scale = Vec3::splat(puff.radius * size.max(0.05));
+        let at = place(puff.at, origin.0);
+        // Mindestgröße nach Entfernung (Retro-Raster), etwas über dem Boden.
+        let radius = puff.radius.max(at.length() * MIN_ANGULAR * 1.5) * size.max(0.05);
+        t.translation = at + Vec3::Y * radius * 0.4;
+        t.scale = Vec3::splat(radius);
     }
 }
 
