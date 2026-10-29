@@ -286,3 +286,24 @@ fn configuration_rows_do_not_move() {
     fd.warnings.gear_overspeed = false;
     assert!((lowest(&fd) - with_gear).abs() < 1e-6, "AIRBRAKE rutscht bei eingefahrenem Fahrwerk");
 }
+
+#[test]
+fn every_mfd_page_draws_inside_its_screen() {
+    let fd = sample();
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let m = layout.mfd_layout().expect("Brett");
+    let mut state = MfdState::default();
+    let mut seen = Vec::new();
+    for _ in 0..RightPage::ALL.len() {
+        seen.push(state.right_page);
+        let opts = HudOptions { show_hud: false, show_panel: true, mfd: state };
+        let dl = build(&fd, &layout, &opts, None);
+        let screen = m.right_screen;
+        let inside = dl.lines.iter().filter(|l| screen.contains(l.a) && screen.contains(l.b)).count();
+        assert!(inside > 60, "{:?}: kaum Inhalt ({inside} Linien)", state.right_page);
+        state.next_page();
+    }
+    assert_eq!(state.right_page, RightPage::Resources, "F4 kehrt nach der letzten Seite zurück");
+    seen.dedup();
+    assert_eq!(seen.len(), RightPage::ALL.len(), "nicht alle Seiten erreicht");
+}

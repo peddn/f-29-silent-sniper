@@ -3,7 +3,7 @@
 //! ```text
 //! f29-headless demo     [--seed N] [--seconds S] [--record DATEI]
 //! f29-headless replay   DATEI
-//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--out DATEI]
+//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N]
 //! f29-headless sound    [--out VERZEICHNIS]
@@ -27,8 +27,9 @@ f29-headless – F-29 Silent Sniper ohne Grafik
 Befehle:
   demo     [--seed N] [--seconds S] [--record DATEI]   Autopilot fliegt die Route ab
   replay   DATEI                                       Replay abspielen und Hash prüfen
-  hud-svg  [--seed N] [--seconds S] [--aspect A] [--out DATEI]
+  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--out DATEI]
                                                        HUD nach S Sekunden Demo als SVG
+                                                       (SEITE des rechten MFDs: res, wpn, eng, adi, sys)
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N]                                 Flugplätze und Route auflisten
@@ -241,10 +242,17 @@ fn hud_svg(args: &Args) -> Result<(), String> {
     let seconds = args.get("seconds", 20.0_f64)?;
     let aspect = args.get("aspect", 16.0_f32 / 9.0)?;
     let out = args.opt("out").unwrap_or("hud.svg");
+    let page = args.opt("page").unwrap_or("res");
+    let right_page = f29_hud::RightPage::ALL
+        .into_iter()
+        .find(|p| p.label().eq_ignore_ascii_case(page))
+        .ok_or_else(|| format!("unbekannte Seite {page} (res, wpn, eng, adi, sys)"))?;
     let sim = run_demo(seed, seconds, |_, _| {});
     let map = f29_hud::MapData::for_terrain(sim.terrain(), sim.route());
     let layout = ScreenLayout::cockpit(aspect);
-    let dl = f29_hud::build(&sim.flight_data(), &layout, &HudOptions::default(), Some(&map));
+    let mut opts = HudOptions::default();
+    opts.mfd.right_page = right_page;
+    let dl = f29_hud::build(&sim.flight_data(), &layout, &opts, Some(&map));
     let svg = f29_hud::svg::to_svg(&dl, &layout, 720);
     std::fs::write(out, svg).map_err(|e| format!("{out}: {e}"))?;
     println!("{} Linien → {out}", dl.lines.len());

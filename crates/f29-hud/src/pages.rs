@@ -1,0 +1,325 @@
+//! Seiten des rechten MFDs außer „Ressourcen“: Waffen, Triebwerk, künstlicher
+//! Horizont (Reserveinstrument) und Systeme.
+//!
+//! Alle Seiten zeichnen nur in ihre Bildfläche `screen` (das Clipping setzt
+//! der Aufrufer) und lassen unten Platz für die Seitenleiste
+//! ([`page_bar`]).
+
+use crate::canvas::{Align, DisplayList, Ink, Rect};
+use crate::heading_deg;
+use crate::mfd::{RightPage, WEAPON_STATIONS};
+use f29_core::FlightData;
+use f29_core::units;
+
+/// Anteil der Bildhöhe, den die Seitenleiste unten belegt.
+pub(crate) const PAGE_BAR: f32 = 0.075;
+
+/// Maße einer Seite: Breite, Höhe, Schriftgröße, linker/rechter Rand.
+struct Frame {
+    w: f32,
+    h: f32,
+    txt: f32,
+    x0: f32,
+    x1: f32,
+}
+
+fn frame(screen: Rect) -> Frame {
+    let w = screen.max[0] - screen.min[0];
+    let h = screen.max[1] - screen.min[1];
+    Frame { w, h, txt: w * 0.042, x0: screen.min[0] + w * 0.05, x1: screen.max[0] - w * 0.05 }
+}
+
+fn title(dl: &mut DisplayList, screen: Rect, f: &Frame, text: &str) {
+    dl.text_mid([f.x0, screen.max[1] - f.txt * 1.2], f.txt, Align::Left, text, Ink::Mfd);
+}
+
+/// Beschriftete Zeile „NAME ……… WERT“.
+fn row(dl: &mut DisplayList, f: &Frame, y: f32, name: &str, value: &str, ink: Ink) {
+    dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, name, Ink::MfdDim);
+    dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, value, ink);
+}
+
+/// Seitenleiste am unteren Rand: alle Seiten, die aktive gerahmt.
+pub(crate) fn page_bar(dl: &mut DisplayList, screen: Rect, active: RightPage) {
+    let w = screen.max[0] - screen.min[0];
+    let h = screen.max[1] - screen.min[1];
+    let y = screen.min[1] + h * PAGE_BAR * 0.5;
+    let txt = w * 0.03;
+    let pages = RightPage::ALL;
+    for (k, p) in pages.iter().enumerate() {
+        let x = screen.min[0] + w * (k as f32 + 0.5) / pages.len() as f32;
+        if *p == active {
+            dl.boxed_text([x, y], txt, Align::Center, p.label(), Ink::Mfd);
+        } else {
+            dl.text_mid([x, y], txt, Align::Center, p.label(), Ink::MfdDim);
+        }
+    }
+}
+
+/// Waffen: vier Waffenschächte (Platzhalter) als liegende Rechtecke, darunter
+/// Angaben zum gewählten Schacht. Waffen kommen mit v0.2.
+pub(crate) fn weapons(dl: &mut DisplayList, _fd: &FlightData, screen: Rect, selected: usize) {
+    let f = frame(screen);
+    title(dl, screen, &f, "WEAPONS");
+    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, "SAFE", Ink::MfdDim);
+
+    // 2 × 2 Schächte, je etwa doppelt so breit wie hoch
+    let top = screen.max[1] - f.h * 0.13;
+    let gap = f.w * 0.04;
+    let bay_w = (f.x1 - f.x0 - gap) * 0.5;
+    let bay_h = bay_w * 0.42;
+    for k in 0..WEAPON_STATIONS {
+        let (col, rowi) = (k % 2, k / 2);
+        let x = f.x0 + col as f32 * (bay_w + gap);
+        let y = top - rowi as f32 * (bay_h + gap) - bay_h;
+        let r = Rect { min: [x, y], max: [x + bay_w, y + bay_h] };
+        let sel = k == selected;
+        let ink = if sel { Ink::Mfd } else { Ink::MfdDim };
+        dl.rect(r, ink);
+        if sel {
+            let d = f.w * 0.012;
+            dl.rect(Rect { min: [r.min[0] - d, r.min[1] - d], max: [r.max[0] + d, r.max[1] + d] }, Ink::Mfd);
+        }
+        let c = r.center();
+        dl.text_mid(
+            [r.min[0] + f.txt * 0.5, r.max[1] - f.txt * 0.9],
+            f.txt * 0.8,
+            Align::Left,
+            &format!("BAY {}", k + 1),
+            ink,
+        );
+        dl.text_mid([c[0], c[1] - f.txt * 0.4], f.txt * 0.9, Align::Center, "EMPTY", Ink::MfdDim);
+    }
+
+    // Angaben zum gewählten Schacht
+    let info_top = top - 2.0 * bay_h - gap - f.h * 0.05;
+    let step = f.txt * 1.35;
+    dl.text_mid([f.x0, info_top], f.txt, Align::Left, &format!("SELECTED BAY {}", selected + 1), Ink::Mfd);
+    let rows: [(&str, &str); 5] =
+        [("STORE", "---"), ("QTY", "0"), ("WEIGHT", "0 LB"), ("GUIDANCE", "---"), ("RELEASE", "---")];
+    for (i, (name, value)) in rows.iter().enumerate() {
+        row(dl, &f, info_top - step * (i as f32 + 1.1), name, value, Ink::MfdDim);
+    }
+}
+
+/// Triebwerk: Drehzahl als Rundinstrument, Schub, Verbrauch, Restflugzeit.
+pub(crate) fn engine(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
+    let f = frame(screen);
+    title(dl, screen, &f, "ENGINE");
+    let flameout = fd.warnings.flameout;
+    if flameout {
+        dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, "FLAMEOUT", Ink::Warning);
+    }
+
+    // Drehzahl: Leerlauf 62 %, Vollgas 100 %
+    let rpm = if flameout { 100.0 * fd.engine } else { 62.0 + 38.0 * fd.engine };
+    let c = [screen.min[0] + f.w * 0.5, screen.max[1] - f.h * 0.36];
+    let r = f.w * 0.24;
+    let (a0, a1) = (210.0_f32.to_radians(), -30.0_f32.to_radians());
+    let ang = |pct: f64| a0 + (a1 - a0) * (pct.clamp(0.0, 110.0) / 110.0) as f32;
+    dl.arc(c, r, a1, a0, 32, Ink::Mfd);
+    for pct in (0..=110).step_by(10) {
+        let a = ang(f64::from(pct));
+        let (s, co) = a.sin_cos();
+        let inner = if pct % 50 == 0 { 0.8 } else { 0.88 };
+        dl.line([c[0] + co * r * inner, c[1] + s * r * inner], [c[0] + co * r, c[1] + s * r], Ink::Mfd);
+    }
+    // Bereich über 100 % rot markieren
+    dl.arc(c, r * 1.04, ang(110.0), ang(100.0), 4, Ink::Warning);
+    let a = ang(rpm);
+    let (s, co) = a.sin_cos();
+    dl.line(c, [c[0] + co * r * 0.92, c[1] + s * r * 0.92], Ink::Needle);
+    // Schubhebel-Marke außen
+    let ta = ang(62.0 + 38.0 * fd.throttle);
+    let (ts, tc) = ta.sin_cos();
+    dl.line(
+        [c[0] + tc * r * 1.04, c[1] + ts * r * 1.04],
+        [c[0] + tc * r * 1.16, c[1] + ts * r * 1.16],
+        Ink::Hud,
+    );
+    let ink = if flameout { Ink::Warning } else { Ink::Mfd };
+    dl.text_mid([c[0], c[1] - r * 0.35], f.txt * 1.3, Align::Center, &format!("{rpm:.0}%"), ink);
+    dl.text_mid([c[0], c[1] - r * 0.75], f.txt * 0.75, Align::Center, "RPM", Ink::MfdDim);
+
+    // Werte
+    let y0 = c[1] - r * 1.25;
+    let step = f.txt * 1.6;
+    let lb_min = units::kg_to_lb(fd.fuel_flow_kgps) * 60.0;
+    let rows = [
+        ("THROTTLE", format!("{:.0}%", fd.throttle * 100.0)),
+        ("THRUST", format!("{:.0} KN", fd.thrust_n.max(0.0) / 1000.0)),
+        ("FUEL FLOW", format!("{lb_min:.0} LB/MIN")),
+        ("ENDURANCE", format!("{} MIN", (fd.endurance_s / 60.0).floor() as i64)),
+    ];
+    for (i, (name, value)) in rows.iter().enumerate() {
+        row(dl, &f, y0 - step * i as f32, name, value, ink);
+    }
+}
+
+/// Künstlicher Horizont als Reserveinstrument mit Fahrt, Höhe, Steigrate,
+/// Kurs und g-Last.
+pub(crate) fn attitude(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
+    let f = frame(screen);
+    title(dl, screen, &f, "STBY ADI");
+    let c = [screen.min[0] + f.w * 0.5, screen.min[1] + f.h * 0.55];
+    let r = f.w * 0.3;
+    dl.circle(c, r, 48, Ink::Mfd);
+
+    // Horizont und Nicklinien: drehen mit der Querlage, wandern mit der Nicklage
+    let roll = fd.roll as f32;
+    let pitch = fd.pitch as f32;
+    let k = r / 40.0_f32.to_radians(); // 40° vom Mittelpunkt bis zum Rand
+    let (sr, cr) = roll.sin_cos();
+    // Bei Rechtsquerlage dreht sich der Horizont gegen den Uhrzeigersinn.
+    let u = [cr, sr];
+    let n = [-sr, cr];
+    let chord = |d: f32, half: f32, ink: Ink, dl: &mut DisplayList| {
+        if d.abs() >= r {
+            return;
+        }
+        let max_half = (r * r - d * d).sqrt();
+        let hl = half.min(max_half);
+        let m = [c[0] + n[0] * d, c[1] + n[1] * d];
+        dl.line([m[0] - u[0] * hl, m[1] - u[1] * hl], [m[0] + u[0] * hl, m[1] + u[1] * hl], ink);
+    };
+    chord(-pitch * k, r, Ink::Mfd, dl);
+    for deg in [-30, -20, -10, 10, 20, 30] {
+        let d = (deg as f32).to_radians() * k - pitch * k;
+        let half = if deg % 20 == 0 { r * 0.3 } else { r * 0.18 };
+        chord(d, half, if deg > 0 { Ink::Mfd } else { Ink::MfdDim }, dl);
+    }
+    // Boden schraffiert (kurze Striche unter dem Horizont)
+    for i in 1..=4 {
+        let d = -pitch * k - r * 0.18 * i as f32;
+        let half = r * (0.75 - 0.12 * i as f32);
+        if d.abs() < r {
+            let m = [c[0] + n[0] * d, c[1] + n[1] * d];
+            let hl = half.min((r * r - d * d).sqrt());
+            dl.dashed(
+                [m[0] - u[0] * hl, m[1] - u[1] * hl],
+                [m[0] + u[0] * hl, m[1] + u[1] * hl],
+                5,
+                Ink::MfdDim,
+            );
+        }
+    }
+    // Feste Flugzeugmarke
+    let s = r * 0.32;
+    dl.polyline(
+        &[
+            [c[0] - s, c[1]],
+            [c[0] - s * 0.35, c[1]],
+            [c[0], c[1] - s * 0.3],
+            [c[0] + s * 0.35, c[1]],
+            [c[0] + s, c[1]],
+        ],
+        false,
+        Ink::Hud,
+    );
+    // Querlagenskala oben mit Zeiger
+    for deg in [-60, -30, -20, -10, 0, 10, 20, 30, 60] {
+        let a = std::f32::consts::FRAC_PI_2 + (deg as f32).to_radians();
+        let (s, co) = a.sin_cos();
+        let len = if deg % 30 == 0 { 0.1 } else { 0.06 };
+        dl.line(
+            [c[0] + co * r, c[1] + s * r],
+            [c[0] + co * r * (1.0 + len), c[1] + s * r * (1.0 + len)],
+            Ink::Mfd,
+        );
+    }
+    let a = std::f32::consts::FRAC_PI_2 + roll;
+    let (s, co) = a.sin_cos();
+    let tip = [c[0] + co * r * 0.97, c[1] + s * r * 0.97];
+    let base = r * 0.88;
+    let side = 0.05;
+    dl.polyline(
+        &[
+            tip,
+            [c[0] + (a + side).cos() * base, c[1] + (a + side).sin() * base],
+            [c[0] + (a - side).cos() * base, c[1] + (a - side).sin() * base],
+        ],
+        true,
+        Ink::Needle,
+    );
+
+    // Fahrt links, Höhe rechts, Steigrate und g unten, Kurs oben
+    let kt = units::mps_to_kt(fd.tas_mps).round() as i64;
+    let ft = (units::m_to_ft(fd.altitude_m) / 10.0).round() as i64 * 10;
+    let side_y = c[1];
+    dl.boxed_text([screen.min[0] + f.w * 0.04, side_y], f.txt, Align::Left, &format!("{kt}"), Ink::Mfd);
+    dl.boxed_text([screen.max[0] - f.w * 0.04, side_y], f.txt, Align::Right, &format!("{ft}"), Ink::Mfd);
+    dl.text_mid(
+        [screen.min[0] + f.w * 0.04, side_y - f.txt * 1.8],
+        f.txt * 0.7,
+        Align::Left,
+        "KT",
+        Ink::MfdDim,
+    );
+    dl.text_mid(
+        [screen.max[0] - f.w * 0.04, side_y - f.txt * 1.8],
+        f.txt * 0.7,
+        Align::Right,
+        "FT",
+        Ink::MfdDim,
+    );
+    let hdg = format!("HDG {:03}", heading_deg(fd.heading));
+    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, &hdg, Ink::Mfd);
+    let fpm = (units::mps_to_fpm(fd.vertical_speed_mps) / 100.0).round() as i64 * 100;
+    let y = c[1] - r * 1.25;
+    dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, &format!("VS {fpm:+}"), Ink::Mfd);
+    let g_ink = if fd.warnings.over_g { Ink::Warning } else { Ink::Mfd };
+    dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &format!("G {:.1}", fd.load_factor), g_ink);
+}
+
+/// Systeme: Konfiguration, Masse, Abrissfahrt und Warnungen.
+pub(crate) fn systems(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
+    let f = frame(screen);
+    title(dl, screen, &f, "SYSTEMS");
+    let step = f.txt * 1.55;
+    let mut y = screen.max[1] - f.h * 0.15;
+    let gear = if fd.gear >= f29_core::flight::GEAR_LOCKED {
+        "DOWN"
+    } else if fd.gear <= 0.0 {
+        "UP"
+    } else {
+        "TRANSIT"
+    };
+    let gear_ink = if fd.warnings.gear_overspeed || fd.warnings.gear_up { Ink::Warning } else { Ink::Mfd };
+    let rows = [
+        ("GEAR", gear.to_string(), gear_ink),
+        ("FLAPS", format!("{:.0}%", fd.flaps * 100.0), Ink::Mfd),
+        ("AIRBRAKE", format!("{:.0}%", fd.airbrake * 100.0), Ink::Mfd),
+        ("GROSS WT", format!("{} LB", (units::kg_to_lb(fd.mass_kg) / 100.0).round() as i64 * 100), Ink::Mfd),
+        ("STALL SPD", format!("{} KT", units::mps_to_kt(fd.stall_speed_mps).round() as i64), Ink::Mfd),
+        ("MACH", format!("{:.2}", fd.mach), Ink::Mfd),
+    ];
+    for (name, value, ink) in &rows {
+        row(dl, &f, y, name, value, *ink);
+        y -= step;
+    }
+
+    // Warnfeld: alle Warnungen, aktive hell
+    y -= step * 0.4;
+    dl.line([f.x0, y + step * 0.5], [f.x1, y + step * 0.5], Ink::MfdDim);
+    let w = &fd.warnings;
+    let cautions = [
+        ("STALL", w.stall),
+        ("PULL UP", w.pull_up),
+        ("OVER G", w.over_g),
+        ("FUEL LOW", w.fuel_low),
+        ("BINGO", w.bingo),
+        ("FLAMEOUT", w.flameout),
+        ("GEAR SPD", w.gear_overspeed),
+        ("GEAR UP", w.gear_up),
+    ];
+    let col_w = (f.x1 - f.x0) * 0.5;
+    for (i, (name, on)) in cautions.iter().enumerate() {
+        let x = f.x0 + col_w * (i % 2) as f32 + col_w * 0.5;
+        let yy = y - step * 0.6 - step * (i / 2) as f32;
+        if *on {
+            dl.boxed_text([x, yy], f.txt * 0.8, Align::Center, name, Ink::Warning);
+        } else {
+            dl.text_mid([x, yy], f.txt * 0.8, Align::Center, name, Ink::MfdDim);
+        }
+    }
+}

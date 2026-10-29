@@ -10,8 +10,9 @@ jeder Auflösung scharf bleibt.
 > Originals. Mechaniken werden nach Verhaltensbeschreibung nachgebaut; das Vorgehen ist
 > in [`docs/MECHANICS.md`](docs/MECHANICS.md) festgelegt und protokolliert.
 
-**Status:** v0.1 in Arbeit: Freiflug über prozeduralem Gelände mit HUD, Start und
-Landung auf der Heimatbasis und geheimen Pisten, Treibstoff.
+**Status:** v0.1 abgeschlossen: Freiflug über prozeduralem Gelände mit HUD und zwei
+MFDs, Start und Landung auf der Heimatbasis und geheimen Pisten, Treibstoff, Klang.
+Als Nächstes: v0.2, Angriff und Tarnung.
 
 [![CI](https://github.com/peddn/f-29-silent-sniper/actions/workflows/ci.yml/badge.svg)](https://github.com/peddn/f-29-silent-sniper/actions/workflows/ci.yml)
 
@@ -67,7 +68,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
 | Shift+F4 | | HUD ein/aus |
 | F3 | | Karte (linkes MFD): Gitter ↔ Satellitenbild |
-| F4 | | Rechtes MFD: nächste Seite (bisher: Ressourcen) |
+| F4 | | Rechtes MFD: nächste Seite (Ressourcen → Waffen → Triebwerk → Horizont → Systeme) |
 | Y / X | | Karte näher / weiter (2, 5, 10, 20, 40 NM) |
 | P | Start | Pause |
 | F12 | | Screenshot nach `screenshots/` |
@@ -121,7 +122,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Roadmap
 
-### v0.1: Freiflug ✈️ *(aktuell)*
+### v0.1: Freiflug ✈️ *(abgeschlossen)*
 - [x] Deterministischer Simulationskern, 120 Hz, Replays mit Hash-Prüfung
 - [x] Flugmodell: Kräftebilanz + Fly-by-Wire (g-Begrenzer), ISA-Atmosphäre
 - [x] Strömungsabriss mit Durchsacken, Fahrtverlust in Kurven, begrenzte Steigleistung
@@ -142,9 +143,15 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       zoombar) und Ressourcen (Treibstoff, Waffenstationen); Platz für die
       Stealth-/Radarimpuls-Anzeige (v0.1.10); Schubhebel, Konfiguration im HUD (v0.1.11)
 - [x] Klang: prozedurale Retro-Synthese (Triebwerk, Fahrwerk, Klappen, Luftbremse,
-      Aufsetzen, Absturz), gesprochene Abrisswarnung (v0.1.12)
-- [ ] Weitere MFD-Seiten: Triebwerk, künstlicher Horizont, Systeme
-- [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
+      Aufsetzen, Absturz), gesprochene Abrisswarnung (v0.1.12); Abriss-Alarmton,
+      PULL-UP-Ansage mit Platz für ein eigenes Sample (v0.1.14)
+- [x] Feste Zeilen für GEAR, FLAPS und AIRBRAKE im HUD
+- [x] Flugmodell nach Spieltests: Durchsacken im Langsamflug (v0.1.15), gefährlicher
+      Abriss mit großem Höhenverlust (v0.1.16), vereinfachtes Abrissmodell und
+      Kennwert-Tests mit `flight_report` (v0.1.17), mehr Schub, späterer
+      Kurvenabriss, Klappen nicht mehr immun gegen Abriss (v0.1.18)
+- [x] Weitere MFD-Seiten: Waffen (vier Schächte, Platzhalter), Triebwerk,
+      Reserve-Horizont, Systeme (v0.1.19)
 
 ### v0.2: Angriff und Tarnung
 - [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD
@@ -161,6 +168,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [ ] Flugzeugträger
 
 ### v0.4: Luftkampf
+- [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
 - [ ] Luft-Luft-Raketen und Bordkanone
 - [ ] Feindliche Jäger und Abfangjäger mit KI (aufbauend auf dem Autopiloten)
 - [ ] Radarwarnempfänger

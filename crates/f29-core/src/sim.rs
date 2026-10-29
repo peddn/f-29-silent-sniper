@@ -229,6 +229,8 @@ pub struct FlightData {
     pub velocity_dir_body: DVec3,
     pub throttle: f64,
     pub engine: f64,
+    /// Nettoschub (N).
+    pub thrust_n: f64,
     pub airbrake: f64,
     /// Landeklappen 0..1.
     pub flaps: f64,
@@ -625,6 +627,7 @@ impl Sim {
             velocity_dir_body,
             throttle: self.last_controls.throttle_f(),
             engine: a.engine,
+            thrust_n: aero.thrust,
             airbrake: a.airbrake,
             flaps: a.flaps,
             turbulence: self.gust.length(),

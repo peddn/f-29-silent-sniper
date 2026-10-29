@@ -11,6 +11,7 @@ pub mod font;
 mod hud;
 pub mod map;
 pub mod mfd;
+mod pages;
 pub mod svg;
 mod throttle;
 

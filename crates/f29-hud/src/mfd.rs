@@ -1,9 +1,10 @@
 //! Multifunktionsanzeigen (MFDs) im Instrumentenbrett.
 //!
 //! Links: Karte (Gitter oder Satellitenbild, Flugrichtung oben, stufenweise
-//! zoombar). Rechts: Seiten mit Systeminformationen, zuerst „Ressourcen“
-//! (Treibstoff, Waffenstationen). Dazwischen ein senkrechter Balken, der für
-//! die Stealth- und Radarimpuls-Anzeige reserviert ist.
+//! zoombar). Rechts: Seiten mit Systeminformationen, umschaltbar: Ressourcen
+//! (Treibstoff, Waffenstationen), Waffen, Triebwerk, Reserve-Horizont und
+//! Systeme (siehe `pages`). Dazwischen ein senkrechter Balken, der für die
+//! Stealth- und Radarimpuls-Anzeige reserviert ist.
 
 use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::map::{MapData, MapProjection};
@@ -33,6 +34,36 @@ pub enum RightPage {
     /// Treibstoff und Waffenstationen.
     #[default]
     Resources,
+    /// Waffenschächte und gewählte Waffe.
+    Weapons,
+    /// Drehzahl, Schub, Verbrauch.
+    Engine,
+    /// Künstlicher Horizont (Reserveinstrument).
+    Attitude,
+    /// Konfiguration und Warnungen.
+    Systems,
+}
+
+impl RightPage {
+    /// Alle Seiten in Umschaltreihenfolge.
+    pub const ALL: [RightPage; 5] = [
+        RightPage::Resources,
+        RightPage::Weapons,
+        RightPage::Engine,
+        RightPage::Attitude,
+        RightPage::Systems,
+    ];
+
+    /// Kurzname in der Seitenleiste.
+    pub fn label(self) -> &'static str {
+        match self {
+            RightPage::Resources => "RES",
+            RightPage::Weapons => "WPN",
+            RightPage::Engine => "ENG",
+            RightPage::Attitude => "ADI",
+            RightPage::Systems => "SYS",
+        }
+    }
 }
 
 /// Bedienzustand der MFDs.
@@ -42,11 +73,13 @@ pub struct MfdState {
     /// Index in [`MAP_RANGES_NM`].
     pub map_zoom: usize,
     pub right_page: RightPage,
+    /// Gewählter Waffenschacht (0-basiert; Auswahl folgt mit den Waffen in v0.2).
+    pub selected_bay: usize,
 }
 
 impl Default for MfdState {
     fn default() -> Self {
-        Self { map_mode: MapMode::Grid, map_zoom: 2, right_page: RightPage::Resources }
+        Self { map_mode: MapMode::Grid, map_zoom: 2, right_page: RightPage::Resources, selected_bay: 0 }
     }
 }
 
@@ -66,11 +99,11 @@ impl MfdState {
         };
     }
 
-    /// Nächste Seite des rechten MFDs (bisher nur eine).
+    /// Nächste Seite des rechten MFDs (nach der letzten wieder die erste).
     pub fn next_page(&mut self) {
-        self.right_page = match self.right_page {
-            RightPage::Resources => RightPage::Resources,
-        };
+        let all = RightPage::ALL;
+        let i = all.iter().position(|p| *p == self.right_page).unwrap_or(0);
+        self.right_page = all[(i + 1) % all.len()];
     }
 
     /// Kartenbereich (Mitte bis Rand) in Metern.
@@ -167,9 +200,15 @@ pub(crate) fn draw(
     dl.set_clip(Some(m.left_screen));
     draw_map(dl, fd, m.left_screen, state, map);
     dl.set_clip(Some(m.right_screen));
+    let rs = m.right_screen;
     match state.right_page {
-        RightPage::Resources => draw_resources(dl, fd, m.right_screen),
+        RightPage::Resources => draw_resources(dl, fd, rs),
+        RightPage::Weapons => crate::pages::weapons(dl, fd, rs, state.selected_bay),
+        RightPage::Engine => crate::pages::engine(dl, fd, rs),
+        RightPage::Attitude => crate::pages::attitude(dl, fd, rs),
+        RightPage::Systems => crate::pages::systems(dl, fd, rs),
     }
+    crate::pages::page_bar(dl, rs, state.right_page);
     dl.set_clip(None);
     signature_placeholder(dl, m.center);
     if m.throttle.max[0] - m.throttle.min[0] > 0.03 {
@@ -325,7 +364,7 @@ fn draw_resources(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
 
     // Waffenstationen: leere Rahmen als Platzhalter
     let slot_top = screen.max[1] - h * 0.17;
-    let slot_bottom = screen.min[1] + h * 0.33;
+    let slot_bottom = screen.min[1] + h * 0.39;
     let slot_w = (x1 - x0) / WEAPON_STATIONS as f32;
     for k in 0..WEAPON_STATIONS {
         let r = Rect {
@@ -339,7 +378,7 @@ fn draw_resources(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     }
 
     // Treibstoffbalken am unteren Rand
-    let bar = Rect { min: [x0, screen.min[1] + h * 0.08], max: [x1, screen.min[1] + h * 0.15] };
+    let bar = Rect { min: [x0, screen.min[1] + h * 0.15], max: [x1, screen.min[1] + h * 0.22] };
     let low = fd.warnings.fuel_low || fd.warnings.bingo || fd.warnings.flameout;
     let fill_ink = if low { Ink::Warning } else { Ink::Needle };
     let frac = fd.fuel_fraction.clamp(0.0, 1.0) as f32;
