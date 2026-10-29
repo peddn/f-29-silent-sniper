@@ -78,6 +78,11 @@ pub const LAUNCH_CIRCLE_RAD: f64 = 8.0 * std::f64::consts::PI / 180.0;
 /// Annäherung wieder ab (Spielerentscheidung v0.2.5, Maverick 8 von 16 km).
 pub const SWEET_SPOT_FAR: f64 = 0.6;
 pub const SWEET_SPOT_NEAR: f64 = 0.4;
+/// Bereich hoher Trefferchance um den Sweet Spot: beginnt davor und endet
+/// danach; die Startgüte liegt darin über ≈ 0,8 (Spielerwunsch v0.2.7,
+/// Maverick 4,8–11,2 km, Sweet Spot 6,4–9,6 km).
+pub const HIGH_BAND_FAR: f64 = 0.7;
+pub const HIGH_BAND_NEAR: f64 = 0.3;
 /// Startgüte an der Reichweitengrenze.
 const QUALITY_AT_MAX_RANGE: f64 = 0.25;
 /// Startgüte direkt am Ziel (zu nah: kaum Zeit zum Eindrehen).
@@ -92,6 +97,8 @@ const LASER_CROSS: f64 = 0.2;
 const LASER_CROSS_MIN_M: f64 = 100.0;
 /// Bis zu diesem Anteil des Korridors gilt die volle Güte (Sweet Spot).
 const LASER_SWEET: f64 = 0.3;
+/// Laserbombe: Bereich hoher Trefferchance (Anteil des Korridors).
+const LASER_HIGH: f64 = 0.45;
 /// Ausgang-Wahrscheinlichkeiten bei Startgüte 0 bzw. 1: (Miss, Near Miss);
 /// der Rest ist Hit.
 const ODDS_POOR: (f64, f64) = (0.55, 0.30);
@@ -217,9 +224,10 @@ const MISSILE: WeaponSpec = WeaponSpec {
     deploy_s: 0.0,
     per_bay: 2,
     seeker: Seeker::Optical,
-    // Deutlich schneller als das Flugzeug (Spielerwunsch v0.2.7).
-    cruise_mps: 600.0,
-    accel_mps2: 300.0,
+    // Deutlich schneller als das Flugzeug, beschleunigt aber gemächlich und
+    // bleibt so länger sichtbar (Spielerwunsch v0.2.7).
+    cruise_mps: 700.0,
+    accel_mps2: 70.0,
     turn_rate_rad: deg(25.0),
     max_range_m: 16_000.0,
     seeker_cone_rad: deg(25.0),
@@ -378,7 +386,9 @@ pub enum LaunchZone {
     OutOfRange,
     /// In Reichweite.
     InRange,
-    /// Gute Zone: höchste Trefferchance.
+    /// Bereich hoher Trefferchance um den Sweet Spot (Zielrahmen blau).
+    High,
+    /// Sweet Spot: höchste Trefferchance („SHOOT“).
     Good,
 }
 
@@ -396,6 +406,8 @@ pub fn launch_zone(kind: WeaponKind, position: DVec3, target: &Target, visible: 
         LaunchZone::OutOfRange
     } else if (SWEET_SPOT_NEAR..=SWEET_SPOT_FAR).contains(&r) {
         LaunchZone::Good
+    } else if (HIGH_BAND_NEAR..=HIGH_BAND_FAR).contains(&r) {
+        LaunchZone::High
     } else {
         LaunchZone::InRange
     }
@@ -438,6 +450,7 @@ pub fn laser_zone(
     }
     match ballistic.and_then(|b| laser_corridor(position, velocity, b, target)) {
         Some(dev) if visible && dev <= LASER_SWEET => LaunchZone::Good,
+        Some(dev) if visible && dev <= LASER_HIGH => LaunchZone::High,
         Some(_) if visible => LaunchZone::InRange,
         _ => LaunchZone::OutOfRange,
     }
@@ -1391,7 +1404,8 @@ mod tests {
             designated: None,
         };
         let nose = w.boresight;
-        for _ in 0..(120 * 4) {
+        // Lange genug, um auf Marschfahrt zu kommen (gemächliche Beschleunigung).
+        for _ in 0..(120 * 12) {
             guide(&mut w, &world);
         }
         let dir = w.velocity.normalize_or_zero();

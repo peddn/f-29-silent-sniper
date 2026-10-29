@@ -315,9 +315,10 @@ fn every_mfd_page_draws_inside_its_screen() {
     assert_eq!(seen.len(), RightPage::ALL.len(), "nicht alle Seiten erreicht");
 }
 
-/// Offene Schachtklappen blinken als Warnung im HUD.
+/// Offene Schachtklappen zeigt nur die Waffenanzeige unten links (blau, ohne
+/// Blinken); die zentrale Warnung „BAY OPEN“ entfällt (v0.2.7).
 #[test]
-fn open_bay_blinks_as_warning() {
+fn open_bay_shows_in_the_weapon_line() {
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
     let warn_lines = |door: f64, time_s: f64| {
         let mut fd = sample();
@@ -329,9 +330,7 @@ fn open_bay_blinks_as_warning() {
     let closed = warn_lines(0.0, 10.0);
     assert!(warn_lines(1.0, 10.0) > closed, "keine Warnung bei offenem Schacht");
     assert!(warn_lines(0.4, 10.0) > closed, "keine Warnung bei sich öffnendem Schacht");
-    // „BAY OPEN“ blinkt: in der Aus-Phase weniger rote Linien (die
-    // Waffenanzeige unten links bleibt dauerhaft rot).
-    assert!(warn_lines(1.0, 10.4) < warn_lines(1.0, 10.0), "blinkt nicht");
+    assert_eq!(warn_lines(1.0, 10.4), warn_lines(1.0, 10.0), "blinkt");
     assert_eq!(warn_lines(0.0, 10.4), closed);
 }
 
@@ -377,11 +376,14 @@ fn target_box_shows_the_launch_zone() {
     let (plain, plain_red) = lines(None);
     let (in_range, _) = lines(Some(LaunchZone::InRange));
     let (good, good_red) = lines(Some(LaunchZone::Good));
+    let (high, high_red) = lines(Some(LaunchZone::High));
     let (none, _) = lines(Some(LaunchZone::NoEffect));
     assert_eq!(lines(Some(LaunchZone::OutOfRange)).0, plain);
     assert_eq!(in_range, plain + 8, "acht Eckstriche");
-    assert!(good_red > plain_red + 8, "gute Zone rot");
+    assert!(good_red > plain_red + 8, "gute Zone blau");
+    assert!(high_red > plain_red + 8, "Bereich hoher Trefferchance blau");
     assert_eq!(good, in_range);
+    assert_eq!(high, in_range);
     assert_ne!(none, plain, "ohne Wirkung gestrichelt");
 }
 

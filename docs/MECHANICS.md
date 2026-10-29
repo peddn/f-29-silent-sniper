@@ -883,7 +883,9 @@ Format jedes Eintrags:
     Waffen zählen zur Flugzeugmasse und werden beim Abwurf leichter.
   - Bedienung: Schachtklappen mit **eigener Taste** (öffnen dauert gut eine
     Sekunde, in Etappe 3 erhöht ein offener Schacht die Sichtbarkeit; solange die
-    Klappen nicht ganz zu sind, blinkt „BAY OPEN“ im HUD), Schacht
+    Klappen nicht ganz zu sind, zeigt die Waffenanzeige unten links „OPEN“ bzw.
+    „DOORS“ in Warnfarbe; die zentrale Warnung „BAY OPEN“ ist seit v0.2.7
+    entfallen, Spielerwunsch), Schacht
     wählen, auslösen. Auslösen nur bei offenem Schacht, nicht am Boden, bis 60°
     Querlage und mit höchstens acht eigenen Waffen in der Luft; sonst Meldung.
   - Bombenflugbahn: echte Ballistik im Kern statt Neigungsregel – Massenpunkt mit
@@ -933,8 +935,11 @@ Format jedes Eintrags:
     gewürfelten Punkt, Bild und Meldung passen also zusammen.
   - **Zielrahmen** (wie im Original: erfasst, näher dran Farbwechsel; keine
     Mindestreichweite): außer Reichweite einfacher Rahmen, in Reichweite der
-    gewählten Lenkwaffe kräftige Ecken, im Sweet Spot blau hervorgehoben (näher
-    dran wieder nur Ecken),
+    gewählten Lenkwaffe kräftige Ecken, im **Bereich hoher Trefferchance** blau
+    hervorgehoben (näher dran wieder nur Ecken). Der Bereich beginnt vor dem
+    Sweet Spot und endet danach (30–70 % der Reichweite, Startgüte darin über
+    ≈ 0,8; Laserbombe bis 45 % der Korridorabweichung), der Sweet Spot selbst
+    (40–60 %) zeigt zusätzlich „SHOOT“ (Spielerwunsch v0.2.7),
     gestrichelt „NO EFF“, wenn die Waffe nicht wirkt oder ihr Suchkopf die Klasse
     nicht sieht. Beschädigte Ziele tragen „DMG“.
   - **Wrack:** Nach der Zerstörung bleibt die Aufschaltung auf dem Wrack (Rahmen
@@ -958,14 +963,14 @@ Format jedes Eintrags:
     Maßstab; die Längs- und Querablage liefert der Kern schon
     (`BombAim::target_offset`).
   - **Feuersignal** der Lenkwaffen unten mittig im HUD-Glas: „IN RANGE“ in
-    Reichweite, „SHOOT“ (umrahmt) im Sweet Spot; bei der Laserbombe, wenn sie im
+    Reichweite und im Bereich hoher Trefferchance, „SHOOT“ (umrahmt) im Sweet Spot; bei der Laserbombe, wenn sie im
     Sweet Spot des Gleitkorridors ist (Spielerwunsch v0.2.7). Bei Raketen
     zählen Reichweite und Sweet Spot – auch für die Ecken und die Farbe des
     Zielrahmens – nur, wenn das Ziel im Abschusskreis liegt: Die Ecken
     bedeuten „die Waffe würde übernehmen“.
   - **HUD-Warnfarbe blau** (Spielerwunsch v0.2.7): Warnungen und
-    Hervorhebungen im HUD (z. B. „BAY OPEN“, „TOO LOW“, Zielrahmen im Sweet
-    Spot, „SHOOT“) sind blau statt rot; die MFDs bleiben bei Rot.
+    Hervorhebungen im HUD (z. B. „TOO LOW“, Zielrahmen im Bereich hoher
+    Trefferchance, „SHOOT“) sind blau statt rot; die MFDs bleiben bei Rot.
   - **HUD unten links:** gewählte Waffe mit Anzahl (z. B. „MK-82 X2“) und
     Schacht mit Klappenzustand („BAY 1 SAFE/DOORS/OPEN“, offen rot).
   - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,
@@ -979,7 +984,8 @@ Format jedes Eintrags:
 - **Unsere Werte:** Mk 82 241 kg, Cw·A 0,020 m²,
   Fallschirm 0,9 m² nach 0,3 s, zwei je Schacht, Wirkradius 30 m, Splitterbereich
   180 m. GBU-12 227 kg, Cw·A 0,022 m², Steuerung 6°/s. Abschusskreis ±8°.
-  Maverick 210 kg, 600 m/s (deutlich schneller als das Flugzeug), 25°/s, 16 km (Sweet Spot um 8 km), Suchkegel ±25°,
+  Maverick 210 kg, 700 m/s nach gemächlicher Beschleunigung (70 m/s², bleibt
+  länger sichtbar), 25°/s, 16 km (Sweet Spot um 8 km), Suchkegel ±25°,
   Wirkradius 8 m;
   HARM 360 kg, 650 m/s, 20°/s, 30 km, ±35°; Harpoon 520 kg, 270 m/s,
   10°/s, 30 km, ±40°. Startgüte an der Reichweitengrenze 0,25, im Sweet Spot

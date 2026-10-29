@@ -105,7 +105,7 @@ fn tally(dist: f64, height: f64) -> Tally {
             continue;
         };
         let zone = sim.flight_data().target.and_then(|t| t.zone);
-        if !matches!(zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
+        if !matches!(zone, Some(LaunchZone::InRange | LaunchZone::High | LaunchZone::Good)) {
             continue;
         }
         let events = shoot(&mut sim);
@@ -175,6 +175,8 @@ fn launch_zones_follow_the_range() {
     assert_eq!(zone(8_000.0, agm(), true), Some(LaunchZone::Good));
     // Näher als der Sweet Spot: wieder nur „in Reichweite“.
     assert_eq!(zone(2_000.0, agm(), true), Some(LaunchZone::InRange));
+    assert_eq!(zone(5_500.0, agm(), true), Some(LaunchZone::High));
+    assert_eq!(zone(10_500.0, agm(), true), Some(LaunchZone::High));
     assert_eq!(zone(13_500.0, agm(), true), Some(LaunchZone::InRange));
     assert_eq!(zone(20_000.0, agm(), false), Some(LaunchZone::OutOfRange));
     let arm = Loadout([Some(WeaponKind::AntiRadar), None, None, None]);

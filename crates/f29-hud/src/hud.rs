@@ -195,7 +195,9 @@ fn armed_zone(fd: &FlightData, t: &f29_core::TargetInfo) -> Option<LaunchZone> {
     let in_circle =
         t.direction_body.x >= f29_core::weapons::LAUNCH_CIRCLE_RAD.cos() * t.direction_body.length();
     match zone {
-        LaunchZone::InRange | LaunchZone::Good if circle && !in_circle => Some(LaunchZone::OutOfRange),
+        LaunchZone::InRange | LaunchZone::High | LaunchZone::Good if circle && !in_circle => {
+            Some(LaunchZone::OutOfRange)
+        }
         z => Some(z),
     }
 }
@@ -216,7 +218,7 @@ fn shoot_cue(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
         Some(LaunchZone::Good) => {
             dl.boxed_text(pos, TXT, Align::Center, "SHOOT", Ink::HudWarning);
         }
-        Some(LaunchZone::InRange) => {
+        Some(LaunchZone::InRange | LaunchZone::High) => {
             dl.text_mid(pos, TXT_SMALL, Align::Center, "IN RANGE", Ink::Hud);
         }
         _ => {}
@@ -282,10 +284,11 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
     match layout.project_body(t.direction_body.to_array()) {
         Some(p) if glass.contains(p) => {
             // Form nach Reichweitenzone der gewählten Lenkwaffe (wie im
-            // Original: in Reichweite erfasst, näher dran Farbwechsel).
+            // Original: in Reichweite erfasst, näher dran Farbwechsel). Blau
+            // im ganzen Bereich hoher Trefferchance, „SHOOT“ nur im Sweet Spot.
             let r = Rect::from_center(p, [s, s]);
             let ink = match zone {
-                Some(LaunchZone::Good) => Ink::HudWarning,
+                Some(LaunchZone::High | LaunchZone::Good) => Ink::HudWarning,
                 Some(LaunchZone::NoEffect) => Ink::HudDim,
                 _ if t.destroyed => Ink::HudDim,
                 _ => ink,
@@ -295,7 +298,7 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
             } else {
                 dl.rect(r, ink);
             }
-            if matches!(zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
+            if matches!(zone, Some(LaunchZone::InRange | LaunchZone::High | LaunchZone::Good)) {
                 // Kräftige Ecken außen um den Rahmen
                 let o = Rect::from_center(p, [s * 1.45, s * 1.45]);
                 let k = s * 0.55;
@@ -558,10 +561,6 @@ fn warnings(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     // Bombe fiele in den eigenen Splitterbereich (M-014).
     if fd.bomb_aim.is_some_and(|a| a.too_low) {
         show(dl, "TOO LOW");
-    }
-    // Offener (oder sich bewegender) Waffenschacht verrät das Flugzeug (M-014).
-    if fd.stores.door > 0.0 {
-        show(dl, "BAY OPEN");
     }
     if fd.warnings.flameout {
         show(dl, "FLAMEOUT");
