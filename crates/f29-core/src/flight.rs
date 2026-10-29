@@ -591,19 +591,34 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
     s.attitude = (s.attitude * DQuat::from_rotation_vector(s.body_rates * dt)).normalize();
 
     // Abrissstärke folgt stetig dem Fahrtdefizit gegenüber der (g-abhängigen)
-    // Abrissgeschwindigkeit – kein Schaltzustand, keine Hysterese. Zusätzlich
-    // wächst sie jenseits des Abrisswinkels mit dem Anstellwinkel, damit auch
-    // knapp über der Abrissgeschwindigkeit kein absurder Anstellwinkel entsteht.
-    let target = if aero.tas >= MIN_AERO_SPEED {
+    // Abrissgeschwindigkeit. Zusätzlich wächst sie jenseits des Abrisswinkels
+    // mit dem Anstellwinkel, damit auch knapp über der Abrissgeschwindigkeit
+    // kein absurder Anstellwinkel entsteht. Die Erholung ist träge: Erst ab
+    // `stall_recovery_factor` × 1-g-Abrissfahrt klingt der Abriss ab, und dann
+    // mit `stall_recovery_time_s`.
+    let (target, recovering) = if aero.tas >= MIN_AERO_SPEED {
         let n = demanded_load_factor(spec, s, c, aero.tas, aero.qbar);
-        let by_speed =
-            stall_target(spec, stall_speed(spec, mass, aero.density, n, s.flaps), aero.tas, s.flaps);
+        let v_stall = stall_speed(spec, mass, aero.density, n, s.flaps);
+        let by_speed = stall_target(spec, v_stall, aero.tas, s.flaps);
         let by_alpha = ((aero.wing_alpha.abs() - spec.alpha_stall_rad) / STALL_ALPHA_FULL).clamp(0.0, 1.0);
-        by_speed.max(by_alpha)
+        // Erholung bezogen auf die 1-g-Abrissfahrt: Wer schnell genug ist,
+        // fängt sich zügig, auch wenn er noch zieht.
+        let v_stall_1g = spec.stall_speed_1g(mass, aero.density, s.flaps);
+        (by_speed.max(by_alpha), aero.tas >= spec.stall_recovery_factor * v_stall_1g)
     } else {
-        1.0
+        (1.0, false)
     };
-    s.stall += (target - s.stall) * (dt / spec.stall_time_constant_s).min(1.0);
+    // Ein merklicher Abriss „rastet ein“: Bis die Fahrt wieder reicht, bleibt
+    // er mindestens bei `stall_latch_strength` (mit Klappen milder) – die Nase
+    // fällt deutlich, das Flugzeug verliert spürbar Höhe, auch wenn der Pilot
+    // sofort loslässt.
+    let target = if s.stall > STALL_NOTICEABLE && !recovering {
+        target.max(spec.stall_latch_strength * (1.0 - stall_softening(spec, s.flaps)))
+    } else {
+        target
+    };
+    let tau = if target >= s.stall { spec.stall_time_constant_s } else { spec.stall_recovery_time_s };
+    s.stall += (target - s.stall) * (dt / tau).min(1.0);
 
     aero
 }

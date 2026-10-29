@@ -479,9 +479,16 @@ fn flaps_make_slow_flight_controllable() {
     };
     let (q_clean, nose_clean) = probe(0);
     let (q_flaps, nose_flaps) = probe(flags::FLAPS);
-    assert!(q_flaps > 1.4 * q_clean, "Nickrate mit Klappen {q_flaps:.3}, ohne {q_clean:.3}");
+    // Seit v0.1.16 wirken die Klappen schwächer auf die Ruder (Spielerwunsch).
+    assert!(q_flaps > 1.2 * q_clean, "Nickrate mit Klappen {q_flaps:.3}, ohne {q_clean:.3}");
     assert!(nose_clean < -0.3, "ohne Klappen kein Abkippen: {:.0}°", nose_clean.to_degrees());
-    assert!(nose_flaps > -0.2, "mit Klappen kippt die Nase ab: {:.0}°", nose_flaps.to_degrees());
+    // Seit v0.1.16 entschärfen Klappen den Abriss nur noch teilweise: Die Nase
+    // fällt auch mit Klappen, aber deutlich weniger tief.
+    assert!(
+        nose_flaps > nose_clean + 0.35,
+        "Klappen mildern das Abkippen kaum: {:.0}°",
+        nose_flaps.to_degrees()
+    );
 }
 
 /// Hochziehen im Geradeausflug reißt später ab als derselbe Zug in steiler

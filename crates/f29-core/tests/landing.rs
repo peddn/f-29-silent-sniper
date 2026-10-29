@@ -157,7 +157,12 @@ fn land_on_secret_strip_turn_around_and_take_off_again() {
     // … und in Gegenrichtung wieder starten.
     for _ in 0..ticks(60.0) {
         let fd = sim.flight_data();
-        let pull = if fd.tas_mps > 1.08 * fd.stall_speed_mps { 0.7 } else { 0.0 };
+        // Rotieren und auf etwa 12° Steigfluglage halten.
+        let pull = if fd.tas_mps > 1.08 * fd.stall_speed_mps {
+            ((0.21 - fd.pitch) * 4.0).clamp(-0.3, 0.7)
+        } else {
+            0.0
+        };
         sim.step(ControlFrame::from_analog(pull, 0.0, 0.0, 1.0, flags::GEAR | flags::FLAPS));
         if sim.status() != Status::Flying {
             break;
@@ -357,10 +362,10 @@ fn full_pull_takeoff_does_not_stall_near_the_ground() {
                     break;
                 }
             }
-            if flap != 0 {
-                // Mit Klappen ist ein Abriss mild: kein Absturz, kräftiger Steigflug
-                // (bei Dauerzug pendelnd, daher die größte Höhe).
-                assert_eq!(sim.status(), Status::Flying, "Absturz mit Klappen (Dauerzug {hold})");
+            if flap != 0 && hold {
+                // Mit Klappen reißt Dauerzug kurz nach dem Abheben nur leicht ab,
+                // das Flugzeug steigt kräftig. Seit v0.1.16 endet weiteres
+                // Ziehen aber im vollen Abriss – ein Absturz ist möglich.
                 assert!(max_agl > 150.0, "kein Steigflug mit Klappen: höchstens {max_agl:.0} m");
             } else if hold {
                 let agl = first_stall_agl.expect("Dauerzug endet nicht im Abriss");

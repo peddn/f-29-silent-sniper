@@ -247,7 +247,24 @@ Format jedes Eintrags:
   Schub sinkt das Flugzeug jetzt rund 240 ft, statt 150 ft zu steigen; bei 140 kt
   steigt es mit 70 % Schub nur noch leicht; ab etwa 200 kt ändert sich nichts.
   Abgesichert durch `slow_flight_sinks_steadily_and_flaps_relieve_it`.
-- **Status:** umgesetzt (v0.1.4, Durchsacken v0.1.15)
+
+  *v0.1.16 – gefährlicherer Abriss (Spielertest):* Der Abriss war zu
+  harmlos. Die Abrissgeschwindigkeit hängt auch am gezogenen Knüppel; wer
+  loslässt, beendet einen Abriss im Geradeausflug sofort. Im Original kostet
+  ein Abriss dagegen viel Höhe. Neu ist eine Einrastung: Ein merklicher Abriss
+  bleibt mindestens bei `stall_latch_strength` (0,5, mit Klappen milder), bis
+  die Fahrt `stall_recovery_factor` × 1-g-Abrissfahrt (1,2) erreicht. Erst dann
+  klingt er mit `stall_recovery_time_s` (1,5 s) ab. Die Erholung bezieht sich
+  bewusst auf die 1-g-Abrissfahrt: Schnelle, kurze Abrisse in harten Kurven
+  bleiben kurz. Das Abkippen ist etwas kräftiger (`stall_pitch_break` 1,9 statt
+  1,7).
+  Gemessen mit `examples/stall_loss`, 3000 m: Im Horizontalflug bis zum Abriss
+  verzögern, dann loslassen und mit halbem Zug abfangen. Ohne Klappen gehen
+  jetzt etwa 4900 ft verloren statt 1300 ft, mit Klappen etwa 2200 ft statt
+  40 ft. Ein Abriss aus 40° Steigflug kostet ohne Klappen etwa 5200 ft
+  (vorher 3900 ft), mit Klappen 3500 ft (vorher 340 ft). Wer nach dem Start
+  voll gezogen hält, kann jetzt auch mit Klappen abstürzen.
+- **Status:** umgesetzt (v0.1.4, Durchsacken v0.1.15, Einrastung v0.1.16)
 
 ### M-009 Treibstoff
 
@@ -425,6 +442,11 @@ Format jedes Eintrags:
     Radarquerschnitt (M-020).
   - *v0.1.15:* Klappen lindern außerdem das Durchsacken im Langsamflug um
     60 % (M-004).
+  - *v0.1.16 (Spielertest: Klappen zu mächtig):* Abschwächung der
+    Abrissentschärfung `flap_stall_softening` 0,6 → 0,45, der Durchsacklinderung
+    `flap_sink_relief` 0,6 → 0,4 und der Ruderhilfe `flap_control_q_factor`
+    0,35 → 0,5. Die Abrissgeschwindigkeit sinkt weiterhin um etwa 15 %. Ein
+    Abriss mit Klappen ist milder, aber nicht mehr harmlos (M-004).
   - Gemessen: Bei 135 kt und halbem Zug kippt das Flugzeug ohne Klappen auf
     −78° ab; mit Klappen bleibt die Nase oben, die Nickrate ist doppelt so hoch,
     die Rollrate bei 140 kt steigt von 44°/s auf 126°/s. Bei 450 kt und 8 s am

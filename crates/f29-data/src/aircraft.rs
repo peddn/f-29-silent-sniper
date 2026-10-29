@@ -134,6 +134,14 @@ pub struct AircraftSpec {
     pub stall_stick_level_factor: f64,
     /// Zeitkonstante, mit der die Abrissstärke dem Fahrtdefizit folgt (s).
     pub stall_time_constant_s: f64,
+    /// Erholung: Erst ab diesem Vielfachen der 1-g-Abrissfahrt klingt ein
+    /// Abriss ab; darunter bleibt er eingerastet (Höhenverlust wie im Original).
+    pub stall_recovery_factor: f64,
+    /// Mindeststärke eines eingerasteten Abrisses (0..1, mit Klappen um
+    /// `flap_stall_softening` milder).
+    pub stall_latch_strength: f64,
+    /// Zeitkonstante, mit der der Abriss danach abklingt (s).
+    pub stall_recovery_time_s: f64,
     /// Abkippen bei vollem Abriss: Drehrate (rad/s), mit der die Nase aus
     /// jeder Fluglage Richtung senkrecht nach unten fällt.
     pub stall_pitch_break: f64,
@@ -177,13 +185,13 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     flap_cl: 0.40,
     flap_cd: 0.016,
     flap_induced_factor: 0.6,
-    flap_control_q_factor: 0.35,
-    flap_stall_softening: 0.6,
+    flap_control_q_factor: 0.5,
+    flap_stall_softening: 0.45,
     flap_rate: 0.5,
 
     sink_angle_max_rad: 0.15,
     sink_onset_factor: 1.5,
-    flap_sink_relief: 0.6,
+    flap_sink_relief: 0.4,
 
     gear_cd: 0.045,
     gear_time_s: 5.0,
@@ -209,7 +217,10 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     stall_stick_g: 3.5,
     stall_stick_level_factor: 0.4,
     stall_time_constant_s: 0.3,
-    stall_pitch_break: 1.7,
+    stall_recovery_factor: 1.2,
+    stall_latch_strength: 0.5,
+    stall_recovery_time_s: 1.5,
+    stall_pitch_break: 1.9,
     stall_control_factor: 0.1,
     stall_lift_factor: 0.18,
     yaw_damper_gain: 2.5,
@@ -223,7 +234,7 @@ impl AircraftSpec {
             field,
             reason,
         };
-        let positive: [(&'static str, f64); 38] = [
+        let positive: [(&'static str, f64); 39] = [
             ("empty_mass_kg", self.empty_mass_kg),
             ("fuel_capacity_kg", self.fuel_capacity_kg),
             ("fuel_flow_idle_kgps", self.fuel_flow_idle_kgps),
@@ -262,6 +273,7 @@ impl AircraftSpec {
             ("flap_control_q_factor", self.flap_control_q_factor),
             ("flap_rate", self.flap_rate),
             ("stall_time_constant_s", self.stall_time_constant_s),
+            ("stall_recovery_time_s", self.stall_recovery_time_s),
         ];
         for (field, value) in positive {
             if !(value.is_finite() && value > 0.0) {
@@ -311,6 +323,12 @@ impl AircraftSpec {
         }
         if self.flap_induced_factor > 1.0 || self.flap_control_q_factor > 1.0 {
             return Err(err("flap_induced_factor", "Klappenfaktoren dürfen höchstens 1 sein".into()));
+        }
+        if !(0.0..=1.0).contains(&self.stall_latch_strength) {
+            return Err(err("stall_latch_strength", "muss zwischen 0 und 1 liegen".into()));
+        }
+        if !(self.stall_recovery_factor.is_finite() && self.stall_recovery_factor >= 1.0) {
+            return Err(err("stall_recovery_factor", "muss mindestens 1 sein".into()));
         }
         if self.stall_deficit_full > 1.0 {
             return Err(err("stall_deficit_full", "muss höchstens 1 sein".into()));
