@@ -352,3 +352,33 @@ fn failed_displays_go_dark_and_damaged_ones_flicker() {
         (0..40).map(|i| count(Condition::Degraded(0.3), 10.0 + i as f64 * 0.013)).collect();
     assert!(samples.contains(&ok) && samples.contains(&dark), "flackert nicht");
 }
+
+/// Zielrahmen nach Reichweitenzone: Ecken in Reichweite, rot in der guten
+/// Zone, gestrichelt ohne Wirkung.
+#[test]
+fn target_box_shows_the_launch_zone() {
+    use f29_core::weapons::LaunchZone;
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let mut sim = Sim::new(SimConfig::new(0x0F29));
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.55, f29_core::controls::flags::RADAR_TOGGLE));
+    let base = sim.flight_data();
+    let Some(mut t) = base.target else { panic!("kein Ziel aufgeschaltet") };
+    // Ziel genau voraus, damit der Rahmen im Glas liegt.
+    t.direction_body = f29_core::DVec3::new(1.0, 0.0, 0.05).normalize_or_zero();
+    t.civilian = false;
+    let lines = |zone: Option<LaunchZone>| {
+        let mut fd = base.clone();
+        fd.target = Some(f29_core::TargetInfo { zone, ..t });
+        let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
+        (dl.lines.len(), dl.lines.iter().filter(|l| l.ink == Ink::Warning).count())
+    };
+    let (plain, plain_red) = lines(None);
+    let (in_range, _) = lines(Some(LaunchZone::InRange));
+    let (good, good_red) = lines(Some(LaunchZone::Good));
+    let (none, _) = lines(Some(LaunchZone::NoEffect));
+    assert_eq!(lines(Some(LaunchZone::OutOfRange)).0, plain);
+    assert_eq!(in_range, plain + 8, "acht Eckstriche");
+    assert!(good_red > plain_red + 8, "gute Zone rot");
+    assert_eq!(good, in_range);
+    assert_ne!(none, plain, "ohne Wirkung gestrichelt");
+}

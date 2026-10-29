@@ -680,12 +680,19 @@ Format jedes Eintrags:
   flachem Land, Schiffe nur auf offenem Wasser, Abstand zu Flugplätzen und
   untereinander. Alle Ziele erscheinen auf der Karte mit einem Symbol je Klasse,
   Primär- und Sekundärziel markiert (P/S), zivile gedämpft.
-  Wirkungsmatrix Waffe × Zielklasse: `WeaponKind::effectiveness` (0 = wirkungslos,
-  1 = volle Wirkung); Radarjäger nur gegen Flugabwehr, Seezielrakete nur gegen
-  Schiffe, Luft-Boden-Rakete schwach gegen Gebäude, Brücken und große Schiffe.
+  Wirkungsmatrix Waffe × Zielklasse: `WeaponKind::effectiveness` als **Schaden pro
+  Treffer** (Spielerentscheidung v0.2.5): 1 = ein Treffer zerstört, 0,5 = zwei
+  Treffer, 0 = wirkungslos. Der Schaden sammelt sich am Ziel (beschädigt →
+  zerstört). Brücken, Gebäude und gepanzerte Ziele brauchen zwei Bomben, große
+  Schiffe drei; Radarjäger nur gegen Flugabwehr, Seezielrakete nur gegen Schiffe
+  (große: zwei), Luft-Boden-Rakete schwach gegen Gebäude (drei), Brücken und große
+  Schiffe (vier). Jeder Treffer würfelt unabhängig einen **kritischen Treffer**
+  (1 %), der das Ziel sicher zerstört – mit Glück reicht dann eine Bombe für die
+  Brücke. Keine Sekundärexplosionen, keine Wirkung auf Nachbarziele.
 - **Unsere Werte:** `crates/f29-core/src/targets.rs`; je Seed etwa 30–50 Ziele.
   Wirkung: `crates/f29-core/src/weapons.rs`.
-- **Status:** Ziele umgesetzt (v0.2.1), Wirkung umgesetzt (v0.2.4)
+- **Status:** Ziele umgesetzt (v0.2.1), Wirkung umgesetzt (v0.2.4), Schaden pro
+  Treffer und kritische Treffer (v0.2.5)
 
 ### M-011 Einschlagdistanz und Schwierigkeitsfaktor
 
@@ -698,11 +705,12 @@ Format jedes Eintrags:
   muss man genauer treffen. Flugkörper, die ihr Ziel erreichen, zerstören es mit einer
   Wahrscheinlichkeit, die mit dem Wirkungswert steigt. Wer zu tief auslöst, wird von
   den eigenen Splittern getroffen.
-- **Unser Design (Entwurf):** Wirkradius je Waffe aus der Sprengladung; die
-  Trefferwahrscheinlichkeit fällt mit dem Abstand stetig ab, statt an einer harten
-  Schwelle umzuschlagen. Der Schwierigkeitsgrad skaliert den Wirkradius (folgt mit
-  den Schwierigkeitsstufen).
-- **Status:** umgesetzt ohne Schwierigkeitsstufen (v0.2.4)
+- **Unser Design:** Bomben sind rein physikalisch (Spielerentscheidung): Wirkradius
+  je Waffe; bis 40 % davon (vom Zielrand) voller Schaden – das ist ein Treffer –,
+  dann linear weniger bis null. Kein Würfel außer dem kritischen Treffer (M-010).
+  Lenkwaffen würfeln ihren Endanflug (M-014). Der Schwierigkeitsgrad skaliert
+  später den Wirkradius bzw. die Startgüte.
+- **Status:** umgesetzt ohne Schwierigkeitsstufen (v0.2.4, v0.2.5)
 
 ### M-012 Gehärtete Ziele: Spezialmunition und Toss-Bombing
 
@@ -794,7 +802,7 @@ Format jedes Eintrags:
   Erfassung 4-mal pro Sekunde (ein Wechsel von Radar oder Blickrichtung wirkt
   sofort), Sichtlinie in 60-m-Schritten. Reichweiten so gewählt, dass das Radar die
   Kartenstufe 20 NM füllt und die Optik etwa die Sichtweite bei klarem Wetter trifft.
-- **Status:** Erfassung umgesetzt (v0.2.1), Zielwechsel und Zielkamera (v0.2.2), Aufschaltung beim Überflug halten (v0.2.3)
+- **Status:** Erfassung umgesetzt (v0.2.1), Zielwechsel und Zielkamera (v0.2.2), Aufschaltung beim Überflug halten (v0.2.3), Suchkopf und Lenkung der Waffen (v0.2.5, Details M-014)
 
 ### M-014 Waffenschacht, Abwurf und Zielhilfe
 
@@ -853,32 +861,65 @@ Format jedes Eintrags:
     Klappen nicht ganz zu sind, blinkt „BAY OPEN“ im HUD), Schacht
     wählen, auslösen. Auslösen nur bei offenem Schacht, nicht am Boden, bis 60°
     Querlage und mit höchstens acht eigenen Waffen in der Luft; sonst Meldung.
-  - Flugbahn: echte Ballistik im Kern statt Neigungsregel – Massenpunkt mit
-    Schwerkraft, Luftwiderstand aus der Normatmosphäre und Triebwerk (Flugkörper),
-    120 Hz. Start knapp unter dem Rumpf mit kleiner Ausstoßgeschwindigkeit.
-    Wurf aus dem Steigflug (Toss) ergibt sich daraus von selbst. Eine Vorhersage
-    mit derselben Rechnung liefert den Aufschlagpunkt (für die Zielhilfe).
-  - Einschlag: Alle Ziele im Wirkradius werden gewürfelt (eigener Zufallsstrom);
-    Wahrscheinlichkeit = Wirkung der Waffe gegen die Klasse × Abstandsabfall
-    (M-011). Gehärtete Ziele nur mit steil einfallender Bombe (M-012). Zerstörte
-    Ziele werden zum flachen, dunklen Wrack, die Aufschaltung fällt ab.
+  - Bombenflugbahn: echte Ballistik im Kern statt Neigungsregel – Massenpunkt mit
+    Schwerkraft und Luftwiderstand aus der Normatmosphäre, 120 Hz. Start knapp
+    unter dem Rumpf mit kleiner Ausstoßgeschwindigkeit. Wurf aus dem Steigflug
+    (Toss) ergibt sich daraus von selbst. Eine Vorhersage mit derselben Rechnung
+    liefert den Aufschlagpunkt (für die Zielhilfe).
+  - Bombeneinschlag: Alle Ziele im Wirkradius erhalten Schaden nach Abstand
+    (M-011), gehärtete Ziele nur bei steilem Eintreffen (M-012). Zerstörte Ziele
+    werden zum flachen, dunklen Wrack, die Aufschaltung fällt ab.
+  - **Lenkwaffen (v0.2.5), einfach wie im Original:** Sie fallen kurz frei aus dem
+    Schacht, beschleunigen dann auf ihre **Marschfahrt und halten sie** bis zum
+    Ende der Flugzeit (kein Brennschluss) und drehen mit **begrenzter Drehrate**
+    auf ihr Ziel. Die Gleitbombe gleitet mit fester Fahrt und muss mindestens mit
+    Gleitzahl 6 sinken: Aus zu großer Entfernung oder zu geringer Höhe fällt sie zu
+    kurz (ihre Reichweite hängt von der Höhe über dem Ziel ab).
+  - **Übergabe beim Abschuss:** Sieht der Suchkopf das aufgeschaltete Ziel (Klasse
+    passt, im Kegel um die Flugrichtung, in Reichweite, optisch mit Sichtlinie),
+    übernimmt er es. Sonst sucht die Waffe selbst und schaltet auf, was ihr vor den
+    Suchkopf kommt – **auch zivile Ziele** (Spielerentscheidung); Radarjäger nur
+    Flugabwehr, Seezielrakete nur Schiffe.
+  - **Gewürfelter Endanflug (Spielerentscheidung):** Beim Erfassen wird aus der
+    **Startgüte** gewürfelt: Miss (30–80 m daneben, keine Wirkung), Near Miss
+    (knapp daneben, halber Treffer-Schaden), Hit (voller Schaden nach Matrix, 1 %
+    kritisch). Startgüte = Entfernung (volle Güte bis zur halben Reichweite, dann
+    abnehmend) × Ablage vom Suchkopfkegel (Ziel nahe der Flugrichtung – Nase aufs
+    Ziel – ist besser) × Leistung der Bordoptik bei optischen Suchköpfen
+    (Schadensmodell). Die Waffe fliegt sichtbar auf den gewürfelten Punkt, Bild
+    und Meldung passen also zusammen. Verliert der Suchkopf das Ziel (Kegel,
+    Sichtlinie), verfällt der Wurf und die Waffe fliegt blind weiter, die Nase
+    sinkt langsam; ein Einschlag zählt dann physikalisch wie bei Bomben.
+  - **Zielrahmen** (wie im Original: erfasst, näher dran Farbwechsel; keine
+    Mindestreichweite): außer Reichweite einfacher Rahmen, in Reichweite der
+    gewählten Lenkwaffe kräftige Ecken, in der guten Zone (halbe Reichweite) rot,
+    gestrichelt „NO EFF“, wenn die Waffe nicht wirkt oder ihr Suchkopf die Klasse
+    nicht sieht. Beschädigte Ziele tragen „DMG“.
   - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,
     gibt es vorerst nur die Warnung „FRAG WARNING“ (Schaden kommt mit Etappe 4).
     Die Fallschirmbombe ist genau dafür da: Sie bleibt im Tiefflug weit genug
     zurück.
-  - Meldungen unter dem HUD-Glas (z. B. „B-25 AWAY“, „BAY CLOSED“, „… DESTROYED“,
+  - Meldungen unter dem HUD-Glas (z. B. „B-25 AWAY“, „BAY CLOSED“, „AGR-7 LOCK …“,
+    „AGR-7 LOST LOCK“, „… DAMAGED“, „… DESTROYED“, „CRITICAL HIT … DESTROYED“,
     „INEFFECTIVE ON …“, „CIVILIAN … DESTROYED“); die WPN-Seite zeigt Bestand je
     Schacht, Klappenzustand (SAFE/DOORS/ARMED) und Bereitschaft.
 - **Unsere Werte:** Bomben 250 kg (Gleitbombe 270 kg), Cw·A 0,020 m²,
   Fallschirm 0,9 m² nach 0,3 s, zwei je Schacht, Wirkradius 30 m, Splitterbereich
-  180 m. Luft-Boden-Rakete 210 kg, 9 kN für 6 s, Wirkradius 8 m; Radarjäger
-  360 kg, 20 kN für 8 s; Seezielrakete 520 kg, 3,5 kN Marschtriebwerk. Volle
+  180 m. Gleitbombe 220 m/s, 12°/s, bis 10 km (Gleitzahl 6), Kegel ±30°.
+  Luft-Boden-Rakete 210 kg, 320 m/s, 25°/s, 12 km, ±25°, Wirkradius 8 m;
+  Radarjäger 360 kg, 650 m/s, 20°/s, 30 km, ±35°; Seezielrakete 520 kg, 270 m/s,
+  10°/s, 30 km, ±40°. Startgüte an der Reichweitengrenze 0,25, am Kegelrand 0,6;
+  Ausgang bei Güte 1: 5 % Miss, 15 % Near Miss, 80 % Hit; bei Güte 0: 55 %, 30 %,
+  15 %. Gemessen (Luft-Boden-Rakete gegen weiche Ziele, 80 Anflüge aus 1500 m
+  Höhe, Ziel 20° unter der Nase): aus der guten Zone 69 % zerstört, 15 %
+  daneben; an der Reichweitengrenze 47 % zerstört, 29 % daneben. Volle
   Wirkung bis 40 % des Wirkradius (vom Zielrand gemessen), dann linear auf null.
   Gehärtet ab 60° Eintreffwinkel. Größenordnungen aus öffentlichen Daten realer
   250-kg-Bomben und leichter Luft-Boden-Flugkörper, Wirkung nach Spielbalance.
   Volle Standardbeladung wiegt knapp 2 t; Landeanflüge in Tests fliegen leer.
-- **Status:** Abwurf, Ballistik und Wirkung umgesetzt (v0.2.4); Lenkung (v0.2.5) und
-  HUD-Zielhilfe (v0.2.6) folgen
+- **Status:** Abwurf, Ballistik und Wirkung umgesetzt (v0.2.4); Lenkwaffen,
+  gewürfelter Endanflug und Zielrahmen nach Reichweite (v0.2.5); HUD-Zielhilfe für
+  Bomben (v0.2.6) folgt
 
 ### M-015 Bordsysteme und Schadensmodell (Gerüst)
 

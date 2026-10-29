@@ -192,7 +192,7 @@ pub enum TargetRole {
     Secondary,
 }
 
-/// Zustand eines Ziels (Schaden kommt mit den Waffen in Etappe 2).
+/// Zustand eines Ziels (folgt aus dem angesammelten Schaden, M-010).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TargetState {
     #[default]
@@ -216,6 +216,8 @@ pub struct Target {
     /// Ausrichtung (rad, 0 = Nord).
     pub heading: f64,
     pub state: TargetState,
+    /// Angesammelter Schaden 0..1; ab 1 zerstört (M-010).
+    pub damage: f64,
 }
 
 impl Target {
@@ -296,6 +298,7 @@ impl Placer<'_> {
             elevation,
             heading,
             state: TargetState::Intact,
+            damage: 0.0,
         });
     }
 

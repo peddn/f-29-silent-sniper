@@ -4,6 +4,7 @@ use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::{ScreenLayout, heading_deg};
 use f29_core::FlightData;
 use f29_core::units;
+use f29_core::weapons::LaunchZone;
 
 /// Zeichenhöhe der HUD-Schrift (Bildschirmeinheiten).
 const TXT: f32 = 0.020;
@@ -193,14 +194,45 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
     let ink = if t.civilian { Ink::HudDim } else { Ink::Hud };
     match layout.project_body(t.direction_body.to_array()) {
         Some(p) if glass.contains(p) => {
+            // Form nach Reichweitenzone der gewählten Lenkwaffe (wie im
+            // Original: in Reichweite erfasst, näher dran Farbwechsel).
             let r = Rect::from_center(p, [s, s]);
-            dl.rect(r, ink);
+            let ink = match t.zone {
+                Some(LaunchZone::Good) => Ink::Warning,
+                Some(LaunchZone::NoEffect) => Ink::HudDim,
+                _ => ink,
+            };
+            if t.zone == Some(LaunchZone::NoEffect) {
+                dashed_rect(dl, r, ink);
+            } else {
+                dl.rect(r, ink);
+            }
+            if matches!(t.zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
+                // Kräftige Ecken außen um den Rahmen
+                let o = Rect::from_center(p, [s * 1.45, s * 1.45]);
+                let k = s * 0.55;
+                for (cx, cy, dx, dy) in [
+                    (o.min[0], o.min[1], 1.0, 1.0),
+                    (o.max[0], o.min[1], -1.0, 1.0),
+                    (o.min[0], o.max[1], 1.0, -1.0),
+                    (o.max[0], o.max[1], -1.0, -1.0),
+                ] {
+                    dl.polyline(&[[cx + dx * k, cy], [cx, cy], [cx, cy + dy * k]], false, ink);
+                }
+            }
             if t.civilian {
                 dl.line(r.min, r.max, ink);
                 dl.line([r.min[0], r.max[1]], [r.max[0], r.min[1]], ink);
             }
-            let sys = if t.optical { "OPT" } else { "RDR" };
-            dl.text_mid([p[0], p[1] - s * 2.0], TXT_SMALL * 0.8, Align::Center, sys, ink);
+            let sys = match t.zone {
+                Some(LaunchZone::NoEffect) => "NO EFF",
+                _ if t.optical => "OPT",
+                _ => "RDR",
+            };
+            dl.text_mid([p[0], p[1] - s * 2.2], TXT_SMALL * 0.8, Align::Center, sys, ink);
+            if t.damage > 0.0 {
+                dl.text_mid([p[0], p[1] + s * 2.2], TXT_SMALL * 0.8, Align::Center, "DMG", ink);
+            }
         }
         _ => {
             if let Some(tip) = edge_arrow(dl, t.direction_body, glass, s * 0.8, ink) {
@@ -211,6 +243,20 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
                 ];
                 dl.text_mid(back, TXT_SMALL * 0.8, Align::Center, "TGT", ink);
             }
+        }
+    }
+}
+
+/// Rechteck aus Strichen (drei je Seite).
+fn dashed_rect(dl: &mut DisplayList, r: Rect, ink: Ink) {
+    let corners = [r.min, [r.max[0], r.min[1]], r.max, [r.min[0], r.max[1]]];
+    for k in 0..4 {
+        let (a, b) = (corners[k], corners[(k + 1) % 4]);
+        for d in 0..3 {
+            let t0 = (d as f32 * 2.0) / 5.0;
+            let t1 = t0 + 1.0 / 5.0;
+            let at = |t: f32| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+            dl.line(at(t0), at(t1), ink);
         }
     }
 }

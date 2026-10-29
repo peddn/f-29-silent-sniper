@@ -9,7 +9,7 @@ use crate::rng::Pcg32;
 use crate::sensors::{self, LookDir, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
-use crate::weapons::{self, Bay, ImpactResult, Loadout, Stores, Weapon, WeaponEvent};
+use crate::weapons::{self, Bay, ImpactResult, LaunchZone, Loadout, Stores, Weapon, WeaponEvent};
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_terrain::{AirfieldKind, Terrain};
 
@@ -220,6 +220,11 @@ pub struct TargetInfo {
     pub offset_ned: DVec3,
     /// Ausrichtung des Ziels (rad, 0 = Nord).
     pub heading: f64,
+    /// Reichweitenzone der gewählten Lenkwaffe gegen dieses Ziel (Zielrahmen);
+    /// `None`, wenn keine Lenkwaffe gewählt ist.
+    pub zone: Option<LaunchZone>,
+    /// Angesammelter Schaden 0..1.
+    pub damage: f64,
 }
 
 /// Waffenbestand für die Anzeigen (M-014).
@@ -494,12 +499,18 @@ impl Sim {
         let bay_ok = !self.systems.get(System::WeaponBay).is_failed();
         if controls.has_weapon(weapon_flags::RELEASE) {
             let a = &self.aircraft;
-            let lock = self.sensors.lock.map(|l| l.target);
-            let dropped = if a.on_ground {
-                0.0
-            } else {
-                self.stores.release(self.tick, a.position, a.velocity, a.attitude, lock, bay_ok)
+            let launch = weapons::Launch {
+                tick: self.tick,
+                position: a.position,
+                velocity: a.velocity,
+                attitude: a.attitude,
+                lock: self.sensors.lock.map(|l| l.target),
+                targets: &self.targets,
+                terrain: &self.terrain,
+                bay_ok,
+                optics: self.systems.capability(System::Optics),
             };
+            let dropped = if a.on_ground { 0.0 } else { self.stores.release(&launch) };
             self.aircraft.stores_kg = (self.aircraft.stores_kg - dropped).max(0.0);
         }
     }
@@ -775,6 +786,12 @@ impl Sim {
                     -t.elevation - a.position.z,
                 ),
                 heading: t.heading,
+                zone: self
+                    .stores
+                    .selected_weapon()
+                    .filter(|k| k.is_guided())
+                    .map(|k| weapons::launch_zone(k, a.position, t, lock.optical)),
+                damage: t.damage,
             })
         });
 
@@ -914,13 +931,22 @@ impl Sim {
                     WeaponEvent::Busy => ("WEAPONS BUSY".to_string(), true),
                     WeaponEvent::FragWarning => ("FRAG WARNING".to_string(), true),
                     WeaponEvent::Expired { kind, .. } => (format!("{} LOST", kind.label()), false),
+                    WeaponEvent::Acquired { kind, target, .. } => {
+                        (format!("{} LOCK {}", kind.label(), name(target)), self.targets[target].civilian)
+                    }
+                    WeaponEvent::LockLost { kind, .. } => (format!("{} LOST LOCK", kind.label()), false),
                     WeaponEvent::Impact { kind, result, .. } => match result {
-                        ImpactResult::Destroyed(i) if self.targets[i].civilian => {
+                        ImpactResult::Destroyed { target: i, .. } if self.targets[i].civilian => {
                             (format!("CIVILIAN {} DESTROYED", name(i)), true)
                         }
-                        ImpactResult::Destroyed(i) => (format!("{} DESTROYED", name(i)), false),
+                        ImpactResult::Destroyed { target: i, critical: true } => {
+                            (format!("CRITICAL HIT {} DESTROYED", name(i)), false)
+                        }
+                        ImpactResult::Destroyed { target: i, .. } => {
+                            (format!("{} DESTROYED", name(i)), false)
+                        }
+                        ImpactResult::Damaged(i) => (format!("{} DAMAGED", name(i)), false),
                         ImpactResult::Ineffective(i) => (format!("INEFFECTIVE ON {}", name(i)), true),
-                        ImpactResult::Survived(i) => (format!("NEAR MISS {}", name(i)), false),
                         ImpactResult::Ground => (format!("{} MISSED", kind.label()), false),
                     },
                 };
@@ -999,6 +1025,11 @@ impl Sim {
             }
             h.f64(w.age_s);
             h.u64(w.target.map_or(u64::MAX, |t| t as u64));
+            h.u64(w.outcome.map_or(9, |o| o as u64));
+            h.u64(u64::from(w.critical) | u64::from(w.searching) << 1);
+            h.f64(w.aim_offset.x);
+            h.f64(w.aim_offset.y);
+            h.f64(w.aim_offset.z);
         }
         h.u64(u64::from(self.sensors.radar_on));
         h.u64(u64::from(self.sensors.look.code()));
@@ -1008,6 +1039,7 @@ impl Sim {
         }
         for t in &self.targets {
             h.u64(t.state as u64);
+            h.f64(t.damage);
         }
         h.finish()
     }

@@ -1,0 +1,178 @@
+//! Lenkwaffen (M-013, M-014): Übergabe der Aufschaltung, gewürfelter
+//! Endanflug abhängig von der Startgüte, Selbstsuche, Reichweitenzonen.
+
+use f29_core::controls::{flags, weapon_flags};
+use f29_core::sensors::LookDir;
+use f29_core::sim::Spawn;
+use f29_core::targets::TargetClass;
+use f29_core::weapons::{self, ImpactResult, LaunchZone, Loadout, WeaponEvent, WeaponKind};
+use f29_core::{ControlFrame, Sim, SimConfig, TICK_HZ};
+
+fn ticks(s: f64) -> usize {
+    (s * f64::from(TICK_HZ)) as usize
+}
+
+fn step(sim: &mut Sim, f: u8, w: u8) {
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, f).with_weapons(w));
+}
+
+/// Flug auf das erste Ziel der Klasse zu, `dist` m davor, 1500 m darüber;
+/// Radar an und auf dieses Ziel weitergeschaltet. `None`, wenn das Ziel nicht
+/// aufschaltbar ist (z. B. Gelände im Weg).
+fn lined_up(seed: u64, class: TargetClass, dist: f64, loadout: Loadout) -> Option<(Sim, usize)> {
+    let probe = Sim::new(SimConfig::new(seed));
+    let (i, t) = probe.targets().iter().enumerate().find(|(_, t)| t.class == class)?;
+    let mut sim = Sim::new(SimConfig {
+        seed,
+        spawn: Spawn {
+            north: t.north - dist,
+            east: t.east,
+            altitude: t.elevation + 1_500.0,
+            min_clearance: 300.0,
+            heading: 0.0,
+            speed: 200.0,
+            throttle: 0.7,
+            loadout,
+            ..Spawn::default()
+        },
+    });
+    step(&mut sim, flags::RADAR_TOGGLE, 0);
+    step(&mut sim, ControlFrame::look_flags(LookDir::Right.code()), 0);
+    step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()), 0);
+    for _ in 0..40 {
+        if sim.sensors().lock.map(|l| l.target) == Some(i) {
+            return Some((sim, i));
+        }
+        step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()), 0);
+    }
+    None
+}
+
+/// Schacht öffnen, auslösen, bis zum Ende des Flugs weiterfliegen. Liefert
+/// die Ereignisse seit dem Auslösen.
+fn shoot(sim: &mut Sim) -> Vec<WeaponEvent> {
+    step(sim, 0, weapon_flags::BAY_DOORS);
+    for _ in 0..ticks(weapons::DOOR_TIME_S + 0.1) {
+        step(sim, 0, 0);
+    }
+    let t0 = sim.flight_data().tick;
+    step(sim, 0, weapon_flags::RELEASE);
+    for _ in 0..ticks(90.0) {
+        step(sim, 0, 0);
+        if sim.weapons_in_flight().is_empty() {
+            break;
+        }
+    }
+    sim.weapon_events().iter().filter(|(t, _)| *t > t0).map(|(_, e)| *e).collect()
+}
+
+fn impact(events: &[WeaponEvent]) -> Option<ImpactResult> {
+    events.iter().find_map(|e| match e {
+        WeaponEvent::Impact { result, .. } => Some(*result),
+        _ => None,
+    })
+}
+
+/// Nur Luft-Boden-Raketen an Bord (Schacht 1).
+fn agm() -> Loadout {
+    Loadout([Some(WeaponKind::AirToGround), None, None, None])
+}
+
+#[derive(Debug, Default)]
+struct Tally {
+    shots: u32,
+    destroyed: u32,
+    damaged: u32,
+    missed: u32,
+}
+
+fn tally(dist: f64) -> Tally {
+    let mut t = Tally::default();
+    for seed in 1..=80_u64 {
+        let Some((mut sim, target)) = lined_up(seed, TargetClass::Soft, dist, agm()) else { continue };
+        let zone = sim.flight_data().target.and_then(|t| t.zone);
+        if !matches!(zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
+            continue;
+        }
+        let events = shoot(&mut sim);
+        assert!(
+            events.iter().any(|e| matches!(e, WeaponEvent::Acquired { target: x, .. } if *x == target)),
+            "Seed {seed}: Übergabe der Aufschaltung fehlt: {events:?}"
+        );
+        t.shots += 1;
+        match impact(&events) {
+            Some(ImpactResult::Destroyed { .. }) => t.destroyed += 1,
+            Some(ImpactResult::Damaged(_)) => t.damaged += 1,
+            _ => t.missed += 1,
+        }
+    }
+    t
+}
+
+/// Aus der guten Zone trifft die Rakete meist; an der Reichweitengrenze
+/// geht deutlich mehr daneben.
+#[test]
+fn good_zone_hits_more_often_than_max_range() {
+    let max = WeaponKind::AirToGround.spec().max_range_m;
+    let good = tally(max * 0.35);
+    let far = tally(max * 0.93);
+    assert!(good.shots >= 30 && far.shots >= 30, "zu wenige Schüsse: {good:?} {far:?}");
+    let rate = |n: u32, t: &Tally| f64::from(n) / f64::from(t.shots);
+    assert!(rate(good.destroyed, &good) > 0.6, "gute Zone: {good:?}");
+    assert!(rate(far.destroyed, &far) < rate(good.destroyed, &good) - 0.15, "{good:?} vs {far:?}");
+    assert!(rate(far.missed, &far) > rate(good.missed, &good), "{good:?} vs {far:?}");
+}
+
+/// Zielrahmen-Zonen: außer Reichweite, in Reichweite, gute Zone; der
+/// Radarjäger wirkt nicht gegen weiche Ziele.
+#[test]
+fn launch_zones_follow_the_range() {
+    let max = WeaponKind::AirToGround.spec().max_range_m;
+    // Erster Anflug mit (bei `optical`) optischer Erfassung.
+    let zone = |dist: f64, loadout, optical: bool| {
+        (1..=30_u64)
+            .filter_map(|seed| lined_up(seed, TargetClass::Soft, dist, loadout))
+            .find_map(|(sim, _)| sim.flight_data().target.filter(|t| t.optical || !optical).map(|t| t.zone))
+            .flatten()
+    };
+    assert_eq!(zone(max * 0.3, agm(), true), Some(LaunchZone::Good));
+    assert_eq!(zone(max * 0.8, agm(), true), Some(LaunchZone::InRange));
+    assert_eq!(zone(max * 1.3, agm(), false), Some(LaunchZone::OutOfRange));
+    let arm = Loadout([Some(WeaponKind::AntiRadar), None, None, None]);
+    assert_eq!(zone(max * 0.3, arm, false), Some(LaunchZone::NoEffect));
+    // Ungelenkte Waffe gewählt: keine Zone.
+    let bombs = Loadout([Some(WeaponKind::FreeFall), None, None, None]);
+    assert_eq!(zone(max * 0.3, bombs, false), None);
+}
+
+/// Ohne passende Aufschaltung abgefeuert, sucht der Radarjäger selbst – und
+/// schaltet nur Flugabwehrstellungen auf.
+#[test]
+fn unlocked_weapon_searches_for_its_own_kind() {
+    let arm = Loadout([Some(WeaponKind::AntiRadar), None, None, None]);
+    let mut checked = 0;
+    for seed in 1..=10_u64 {
+        let Some((mut sim, _)) = lined_up(seed, TargetClass::Soft, 4_000.0, arm) else { continue };
+        let events = shoot(&mut sim);
+        for e in &events {
+            if let WeaponEvent::Acquired { target, .. } = e {
+                assert_eq!(sim.targets()[*target].class, TargetClass::AirDefense);
+            }
+        }
+        checked += 1;
+    }
+    assert!(checked > 3);
+}
+
+/// Die Gleitbombe kommt nur so weit, wie ihre Höhe trägt: aus 1500 m über dem
+/// Ziel und 12 km Entfernung ist sie außer Reichweite und fällt zu kurz.
+#[test]
+fn glide_bomb_falls_short_from_too_far() {
+    let glide = Loadout([Some(WeaponKind::GuidedBomb), None, None, None]);
+    let (mut sim, target) =
+        (1..=20_u64).find_map(|s| lined_up(s, TargetClass::Soft, 12_000.0, glide)).expect("Anflug");
+    assert_eq!(sim.flight_data().target.and_then(|t| t.zone), Some(LaunchZone::OutOfRange));
+    let events = shoot(&mut sim);
+    assert!(sim.targets()[target].is_intact());
+    assert!(!matches!(impact(&events), Some(ImpactResult::Destroyed { target: t, .. }) if t == target));
+}

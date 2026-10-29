@@ -155,7 +155,7 @@ fn free_fall_bomb_hits_the_predicted_point_and_destroys_a_soft_target() {
     let run = bomb_run(TargetClass::Soft, -drift);
     let miss = ((run.impact.x - goal.north).powi(2) + (run.impact.y - goal.east).powi(2)).sqrt();
     assert!(miss < 8.0, "Einschlag {miss:.1} m neben dem Ziel");
-    assert!(matches!(run.result, ImpactResult::Destroyed(_)), "{:?}", run.result);
+    assert!(matches!(run.result, ImpactResult::Destroyed { .. }), "{:?}", run.result);
     assert_eq!(run.sim.targets()[run.target].state, TargetState::Destroyed);
 }
 
