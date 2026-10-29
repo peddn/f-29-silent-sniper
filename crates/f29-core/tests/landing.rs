@@ -342,12 +342,14 @@ fn full_pull_takeoff_does_not_stall_near_the_ground() {
             let mut stick = 0.0_f64;
             let mut released = false;
             let mut first_stall_agl = None;
+            let mut max_agl = 0.0_f64;
             for _ in 0..ticks(60.0) {
                 let fd = sim.flight_data();
                 released |= !hold && !fd.on_ground && fd.pitch > 0.26;
                 let target = if released { 0.0 } else { 1.0 };
                 stick += (target - stick).clamp(-3.0 * DT, 3.0 * DT);
                 sim.step(ControlFrame::from_analog(stick, 0.0, 0.0, 1.0, flags::GEAR | flap));
+                max_agl = max_agl.max(sim.flight_data().radar_altitude_m);
                 if first_stall_agl.is_none() && sim.aircraft().is_stalled() {
                     first_stall_agl = Some(sim.flight_data().radar_altitude_m);
                 }
@@ -356,9 +358,10 @@ fn full_pull_takeoff_does_not_stall_near_the_ground() {
                 }
             }
             if flap != 0 {
-                // Mit Klappen ist ein Abriss mild: kein Absturz, kräftiger Steigflug.
+                // Mit Klappen ist ein Abriss mild: kein Absturz, kräftiger Steigflug
+                // (bei Dauerzug pendelnd, daher die größte Höhe).
                 assert_eq!(sim.status(), Status::Flying, "Absturz mit Klappen (Dauerzug {hold})");
-                assert!(sim.flight_data().radar_altitude_m > 150.0, "kein Steigflug mit Klappen");
+                assert!(max_agl > 150.0, "kein Steigflug mit Klappen: höchstens {max_agl:.0} m");
             } else if hold {
                 let agl = first_stall_agl.expect("Dauerzug endet nicht im Abriss");
                 assert!(agl > 60.0, "Abriss schon {agl:.0} m über Grund");

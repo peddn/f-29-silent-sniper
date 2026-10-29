@@ -68,6 +68,9 @@ pub struct AircraftState {
     pub gear: f64,
     /// Steht bzw. rollt auf dem Boden (Rollmodus statt Flugmodell).
     pub on_ground: bool,
+    /// Radhöhe über Grund (m). Abgeleitet, vom Sim vor jedem Tick gesetzt;
+    /// dämpft das Durchsacken in Bodennähe (Bodeneffekt).
+    pub height_agl_m: f64,
 }
 
 impl AircraftState {
@@ -86,6 +89,7 @@ impl AircraftState {
             fuel_kg: f29_data::F29_SPEC.fuel_capacity_kg,
             gear: 0.0,
             on_ground: false,
+            height_agl_m: f64::INFINITY,
         }
     }
 
@@ -133,7 +137,14 @@ pub struct AeroData {
     pub tas: f64,
     pub mach: f64,
     pub qbar: f64,
+    /// Geometrischer Anstellwinkel (Nase gegen Flugbahn).
     pub alpha: f64,
+    /// Anstellwinkel, den der Flügel „spürt“: `alpha` minus Durchsackwinkel
+    /// (siehe [`sink_angle`]). Auftrieb, Widerstand, Abriss und Anzeige
+    /// rechnen damit.
+    pub wing_alpha: f64,
+    /// Durchsackwinkel (rad), siehe [`sink_angle`].
+    pub sink_angle: f64,
     pub beta: f64,
     /// Lastvielfaches in Körper-z (positiv = in den Sitz gedrückt).
     pub load_factor: f64,
@@ -206,6 +217,28 @@ pub fn drag_coefficient(spec: &AircraftSpec, alpha: f64, cl: f64, airbrake: f64,
     }
 }
 
+/// Durchsackwinkel im Langsamflug (rad), wie im Original: Unterhalb von
+/// `sink_onset_factor` × 1-g-Abrissfahrt liegt die Flugbahn bei gleicher
+/// Nicklage um diesen Winkel tiefer, ohne dass der Flügel mehr Anstellwinkel
+/// spürt. Ein Zusatzwiderstand von Gewicht × sin(Winkel) verhindert, dass das
+/// Sinken in Fahrt umgesetzt wird: Bei gehaltener Nicklage sinkt das Flugzeug
+/// stetig mit etwa Fahrt × sin(Winkel). Wer die Höhe halten will, nimmt die
+/// Nase höher und braucht mehr Schub. Er wächst quadratisch zur Abrissfahrt hin; Klappen lindern
+/// ihn um `flap_sink_relief`.
+pub fn sink_angle(spec: &AircraftSpec, tas: f64, stall_speed_1g: f64, flaps: f64) -> f64 {
+    if stall_speed_1g <= 0.0 {
+        return 0.0;
+    }
+    let onset = spec.sink_onset_factor;
+    let x = ((onset - tas / stall_speed_1g) / (onset - 1.0)).clamp(0.0, 1.0);
+    let relief = 1.0 - spec.flap_sink_relief * flaps.clamp(0.0, 1.0);
+    spec.sink_angle_max_rad * x * x * relief
+}
+
+/// Radhöhe (m), unter der das Durchsacken zum Boden hin linear verschwindet
+/// (Bodeneffekt): Abheben und Abfangen bleiben dadurch unverändert.
+const SINK_GROUND_EFFECT_M: f64 = 15.0;
+
 /// Berechnet die aerodynamischen Größen für einen Zustand.
 pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
     let air = atmosphere::isa(s.altitude());
@@ -225,8 +258,18 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
     let alpha = detmath::atan2(vb.z, vb.x);
     let beta = detmath::asin(vb.y / tas);
     let qbar = 0.5 * air.density * tas * tas;
-    let mut cl = lift_coefficient(spec, alpha) + spec.flap_cl * s.flaps;
-    let mut cd = drag_coefficient(spec, alpha, cl, s.airbrake, s.flaps)
+    // Am Boden kein Durchsacken, darüber blendet es mit der Höhe ein.
+    let sink = if s.on_ground {
+        0.0
+    } else {
+        // Im Abriss übernimmt die Abrissmechanik; beides zusammen wäre doppelt.
+        let ground_effect = (s.height_agl_m / SINK_GROUND_EFFECT_M).clamp(0.0, 1.0);
+        let vs = spec.stall_speed_1g(s.mass(spec), air.density, s.flaps);
+        sink_angle(spec, tas, vs, s.flaps) * ground_effect * (1.0 - s.stall)
+    };
+    let wing_alpha = alpha - sink;
+    let mut cl = lift_coefficient(spec, wing_alpha) + spec.flap_cl * s.flaps;
+    let mut cd = drag_coefficient(spec, wing_alpha, cl, s.airbrake, s.flaps)
         + spec.flap_cd * s.flaps
         + spec.gear_cd * s.gear;
     if s.stall > 0.0 {
@@ -242,6 +285,8 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
         mach: tas / air.speed_of_sound,
         qbar,
         alpha,
+        wing_alpha,
+        sink_angle: sink,
         beta,
         load_factor: -fz / (s.mass(spec) * G0),
         density: air.density,
@@ -526,6 +571,9 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
         force_body += lift_dir * (qs * aero.cl);
         force_body -= v_hat * (qs * aero.cd);
         force_body += DVec3::Y * (-qs * spec.cy_beta * aero.beta);
+        // Durchsacken kostet Energie: Ohne diesen Zusatzwiderstand würde das
+        // Sinken in Fahrt umgesetzt, und das Flugzeug finge sich von selbst.
+        force_body -= v_hat * (mass * G0 * detmath::sin(aero.sink_angle));
         if s.stall > 0.0 {
             // Flugbahn zur Nase drehen: Kraft senkrecht zur Geschwindigkeit,
             // ändert also nur die Richtung, nicht den Betrag der Fahrt.
@@ -550,7 +598,7 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
         let n = demanded_load_factor(spec, s, c, aero.tas, aero.qbar);
         let by_speed =
             stall_target(spec, stall_speed(spec, mass, aero.density, n, s.flaps), aero.tas, s.flaps);
-        let by_alpha = ((aero.alpha.abs() - spec.alpha_stall_rad) / STALL_ALPHA_FULL).clamp(0.0, 1.0);
+        let by_alpha = ((aero.wing_alpha.abs() - spec.alpha_stall_rad) / STALL_ALPHA_FULL).clamp(0.0, 1.0);
         by_speed.max(by_alpha)
     } else {
         1.0
@@ -584,6 +632,53 @@ mod tests {
         assert!(drag_coefficient(s, 0.0, 0.0, 1.0, 0.0) > drag_coefficient(s, 0.0, 0.0, 0.0, 0.0));
         // Klappen senken den induzierten Widerstand
         assert!(drag_coefficient(s, 0.1, 0.8, 0.0, 1.0) < drag_coefficient(s, 0.1, 0.8, 0.0, 0.0));
+    }
+
+    #[test]
+    fn sink_angle_grows_towards_stall_speed_and_flaps_relieve_it() {
+        let s = &F29_SPEC;
+        let vs = 60.0;
+        assert_eq!(sink_angle(s, s.sink_onset_factor * vs, vs, 0.0), 0.0);
+        assert_eq!(sink_angle(s, 2.0 * s.sink_onset_factor * vs, vs, 0.0), 0.0);
+        assert!((sink_angle(s, vs, vs, 0.0) - s.sink_angle_max_rad).abs() < 1e-12);
+        assert!((sink_angle(s, 0.5 * vs, vs, 0.0) - s.sink_angle_max_rad).abs() < 1e-12);
+        let mid = sink_angle(s, 1.2 * vs, vs, 0.0);
+        assert!(mid > 0.0 && mid < s.sink_angle_max_rad);
+        let flaps = sink_angle(s, 1.2 * vs, vs, 1.0);
+        assert!((flaps - mid * (1.0 - s.flap_sink_relief)).abs() < 1e-12);
+    }
+
+    /// Langsam mit gehaltener Nicklage und mäßigem Schub: Das Flugzeug sackt
+    /// stetig durch, ohne abzureißen. Klappen lindern das, schnell gibt es
+    /// kein Durchsacken.
+    #[test]
+    fn slow_flight_sinks_steadily_and_flaps_relieve_it() {
+        let spec = &F29_SPEC;
+        let rho = atmosphere::isa(1_000.0).density;
+        let vs = spec.stall_speed_1g(spec.full_mass_kg(), rho, 0.0);
+        let fly = |speed: f64, flaps: f64| {
+            let mut st = AircraftState::level(0.0, 0.0, 1_000.0, 0.0, speed);
+            st.flaps = flaps;
+            st.engine = 0.5;
+            // Getrimmt wie beim Spawn: Nase um den nötigen Anstellwinkel heben
+            // (ohne Durchsacken – das soll sich gerade zeigen).
+            let qs = 0.5 * rho * speed * speed * spec.wing_area_m2;
+            let cl_req = st.mass(spec) * G0 / qs - spec.flap_cl * flaps;
+            let alpha = (cl_req - spec.cl0) / spec.cl_alpha;
+            st.attitude = DQuat::from_euler(0.0, alpha, 0.0);
+            st.velocity = DVec3::new(speed, 0.0, 0.0);
+            let f = if flaps > 0.0 { flags::FLAPS } else { 0 };
+            run(&mut st, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.5, f), 20.0);
+            (st.altitude() - 1_000.0, st.velocity.length(), st.stall)
+        };
+        let (dh_clean, v_clean, stall_clean) = fly(1.2 * vs, 0.0);
+        let (dh_flaps, _, stall_flaps) = fly(1.2 * vs, 1.0);
+        let (dh_fast, _, _) = fly(1.8 * vs, 0.0);
+        assert!(dh_clean < -40.0, "kaum Durchsacken: {dh_clean:.0} m");
+        assert!(stall_clean < STALL_NOTICEABLE && stall_flaps < STALL_NOTICEABLE, "Abriss beim Durchsacken");
+        assert!(v_clean > 0.95 * vs, "Fahrt bricht ein: {v_clean:.0} m/s");
+        assert!(dh_flaps > dh_clean + 30.0, "Klappen lindern kaum: {dh_flaps:.0} vs {dh_clean:.0} m");
+        assert!(dh_fast > dh_clean + 30.0, "schnell sackt genauso durch: {dh_fast:.0} m");
     }
 
     /// Simuliert `seconds` mit fester Eingabe und liefert den Zustand.

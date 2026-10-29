@@ -67,6 +67,18 @@ pub struct AircraftSpec {
     /// Aus-/Einfahrgeschwindigkeit der Klappen (Anteil pro s).
     pub flap_rate: f64,
 
+    // --- Durchsacken im Langsamflug (wie im Original) ---
+    /// Größter Durchsackwinkel (rad) bei Abrissfahrt: Um so viel liegt die
+    /// Flugbahn bei gleicher Nicklage tiefer, ohne dass der Flügel mehr
+    /// Anstellwinkel „spürt“. Das Flugzeug verliert dadurch stetig Höhe,
+    /// bis die Nase entsprechend höher genommen wird.
+    pub sink_angle_max_rad: f64,
+    /// Unterhalb dieses Vielfachen der 1-g-Abrissfahrt setzt das Durchsacken
+    /// ein; zur Abrissfahrt hin wächst es quadratisch auf den Größtwert.
+    pub sink_onset_factor: f64,
+    /// Anteil, um den voll ausgefahrene Klappen das Durchsacken lindern (0..1).
+    pub flap_sink_relief: f64,
+
     // --- Fahrwerk und Boden ---
     /// Zusätzlicher Widerstandsbeiwert bei ausgefahrenem Fahrwerk.
     pub gear_cd: f64,
@@ -168,6 +180,10 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     flap_control_q_factor: 0.35,
     flap_stall_softening: 0.6,
     flap_rate: 0.5,
+
+    sink_angle_max_rad: 0.15,
+    sink_onset_factor: 1.5,
+    flap_sink_relief: 0.6,
 
     gear_cd: 0.045,
     gear_time_s: 5.0,
@@ -280,6 +296,15 @@ impl AircraftSpec {
         }
         if !(0.0..=1.0).contains(&self.stall_stick_level_factor) {
             return Err(err("stall_stick_level_factor", "muss zwischen 0 und 1 liegen".into()));
+        }
+        if !(0.0..=1.0).contains(&self.flap_sink_relief) {
+            return Err(err("flap_sink_relief", "muss zwischen 0 und 1 liegen".into()));
+        }
+        if !(self.sink_angle_max_rad.is_finite() && (0.0..0.5).contains(&self.sink_angle_max_rad)) {
+            return Err(err("sink_angle_max_rad", "muss in 0..0,5 rad liegen".into()));
+        }
+        if !(self.sink_onset_factor.is_finite() && self.sink_onset_factor > 1.0) {
+            return Err(err("sink_onset_factor", "muss größer als 1 sein".into()));
         }
         if !(0.0..=1.0).contains(&self.flap_stall_softening) {
             return Err(err("flap_stall_softening", "muss zwischen 0 und 1 liegen".into()));

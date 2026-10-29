@@ -217,6 +217,8 @@ pub struct FlightData {
     pub heading: f64,
     pub pitch: f64,
     pub roll: f64,
+    /// Anstellwinkel des Flügels (ohne Durchsackwinkel, siehe
+    /// [`flight::sink_angle`]).
     pub alpha: f64,
     pub beta: f64,
     pub tas_mps: f64,
@@ -314,10 +316,17 @@ impl Sim {
             let qbar = 0.5 * air.density * sp.speed * sp.speed;
             if qbar > 0.0 {
                 let cl_req = aircraft.mass(&spec) * crate::atmosphere::G0 / (qbar * spec.wing_area_m2);
-                let alpha_trim = ((cl_req - spec.cl0) / spec.cl_alpha).clamp(0.0, spec.alpha_warning_rad);
+                // Plus Durchsackwinkel, damit die Bahn anfangs waagerecht liegt.
+                let vs = spec.stall_speed_1g(aircraft.mass(&spec), air.density, aircraft.flaps);
+                let alpha_trim = ((cl_req - spec.cl0) / spec.cl_alpha).clamp(0.0, spec.alpha_warning_rad)
+                    + flight::sink_angle(&spec, sp.speed, vs, aircraft.flaps);
                 aircraft.attitude = crate::math::DQuat::from_euler(sp.heading, alpha_trim, 0.0);
             }
         }
+        aircraft.height_agl_m = (aircraft.altitude()
+            - terrain.elevation(aircraft.position.x, aircraft.position.y)
+            - spec.gear_height_m)
+            .max(0.0);
         let route = build_route(&terrain, config.seed, sp);
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
@@ -349,13 +358,21 @@ impl Sim {
             return;
         }
         self.update_turbulence();
+        self.update_height_agl();
         if self.aircraft.on_ground {
             self.step_ground(&controls);
         } else {
             flight::step(&self.spec, &mut self.aircraft, &controls, self.gust, DT);
             self.check_contact();
         }
+        self.update_height_agl();
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
+    }
+
+    fn update_height_agl(&mut self) {
+        let a = &mut self.aircraft;
+        let ground = self.terrain.elevation(a.position.x, a.position.y);
+        a.height_agl_m = (a.altitude() - ground - self.spec.gear_height_m).max(0.0);
     }
 
     fn crash(&mut self, cause: CrashCause) {
@@ -571,7 +588,7 @@ impl Sim {
         let warnings = Warnings {
             stall: airborne
                 && (a.stall > 0.02
-                    || aero.alpha.abs() >= self.spec.alpha_warning_rad
+                    || aero.wing_alpha.abs() >= self.spec.alpha_warning_rad
                     || aero.tas < STALL_WARNING_MARGIN * v_stall)
                 && aero.tas > 1.0,
             // Mit ausgefahrenem Fahrwerk nur bei gefährlicher Sinkrate (Landeanflug).
@@ -599,7 +616,7 @@ impl Sim {
             heading: detmath::wrap_two_pi(yaw),
             pitch,
             roll,
-            alpha: aero.alpha,
+            alpha: aero.wing_alpha,
             beta: aero.beta,
             tas_mps: aero.tas,
             mach: aero.mach,

@@ -224,7 +224,30 @@ Format jedes Eintrags:
   ist. Voll gezogen nach dem Start steigt das Flugzeug immer steiler und reißt
   ohne Klappen in einigen hundert Fuß ab, statt direkt über der Bahn. Langsame
   Kurven ohne Klappen reißen weiterhin ab, etwas milder als zuvor.
-- **Status:** umgesetzt (v0.1.4)
+
+  *v0.1.15 – Durchsacken im Langsamflug (Spielerwunsch):* Im langsamen
+  Horizontalflug hielt das Flugzeug die Höhe zu gut. Grund war die große
+  Schubreserve (Horizontalflug kurz über der Abrissfahrt mit etwa 40 % Schub) und
+  die lineare Auftriebskurve. Jetzt sackt es unterhalb von
+  `sink_onset_factor` × 1-g-Abrissfahrt (1,5) bei gehaltener Nicklage stetig
+  durch, wie im Original, wo die Flugbahn bei geringer Fahrt zunehmend unter der
+  Nase liegt (gleiche Referenzstelle). Umsetzung als *Durchsackwinkel*
+  (`flight::sink_angle`): Um ihn liegt die Bahn tiefer, ohne dass der Flügel mehr
+  Anstellwinkel spürt. Er wächst quadratisch auf `sink_angle_max_rad` (0,15 rad)
+  bei Abrissfahrt. Ein Zusatzwiderstand von Gewicht × sin(Winkel) verhindert,
+  dass das Sinken in Fahrt umgesetzt wird. Wer die Höhe halten will, nimmt die
+  Nase höher und gibt mehr Schub. Klappen lindern das Durchsacken um
+  `flap_sink_relief` (60 %). Am Boden gibt es kein Durchsacken; bis 15 m Radhöhe
+  blendet es linear ein (Bodeneffekt), damit Abheben und Abfangen unverändert
+  bleiben. Im Abriss tritt es zugunsten der Abrissmechanik zurück.
+  Physikalischere Varianten wurden geprüft und verworfen: Eine Rückseite der
+  Leistungskurve über stark steigenden induzierten Widerstand ist bei
+  gehaltener Nicklage instabil, die Fahrt bricht dann bis zum Abriss ein.
+  Gemessen (1000 m, 70 % Treibstoff, Knüppel neutral, 30 s): 150 kt mit 50 %
+  Schub sinkt das Flugzeug jetzt rund 240 ft, statt 150 ft zu steigen; bei 140 kt
+  steigt es mit 70 % Schub nur noch leicht; ab etwa 200 kt ändert sich nichts.
+  Abgesichert durch `slow_flight_sinks_steadily_and_flaps_relieve_it`.
+- **Status:** umgesetzt (v0.1.4, Durchsacken v0.1.15)
 
 ### M-009 Treibstoff
 
@@ -400,6 +423,8 @@ Format jedes Eintrags:
     Harte Kurven kosten deutlich weniger Fahrt, Geradeausflug kostet etwas
     Fahrt (`flap_cd`). Später (v0.2) erhöhen ausgefahrene Klappen den
     Radarquerschnitt (M-020).
+  - *v0.1.15:* Klappen lindern außerdem das Durchsacken im Langsamflug um
+    60 % (M-004).
   - Gemessen: Bei 135 kt und halbem Zug kippt das Flugzeug ohne Klappen auf
     −78° ab; mit Klappen bleibt die Nase oben, die Nickrate ist doppelt so hoch,
     die Rollrate bei 140 kt steigt von 44°/s auf 126°/s. Bei 450 kt und 8 s am
