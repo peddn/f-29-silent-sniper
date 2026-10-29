@@ -229,7 +229,7 @@ pub(crate) fn draw(
     }
     crate::pages::page_bar(dl, rs, state.right_page);
     dl.set_clip(None);
-    signature_placeholder(dl, m.center);
+    signature(dl, fd, m.center);
 }
 
 /// Gehäuse mit Bildschirmrahmen und je fünf Tasten oben und unten.
@@ -354,6 +354,30 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                         dl.line(corner, [corner[0], corner[1] - sy * c], Ink::Hud);
                     }
                 }
+            }
+            // Radarstellungen, die das Flugzeug entdeckt haben (M-020):
+            // Reichweitenkreis und Symbol, auch ohne eigene Erfassung oder
+            // AWACS; Farbe nach Alarmstufe. Dazu der gemerkte Ping-Ort.
+            for site in fd.threat.sites.iter().filter(|s| s.alert > 0) {
+                let p = proj.to_screen(site.pos);
+                let r = (site.range_m * proj.scale) as f32;
+                let ink = match site.alert {
+                    1 => Ink::MfdDim,
+                    2 => Ink::Mfd,
+                    _ => Ink::Warning,
+                };
+                dl.circle(p, r, 72, ink);
+                if near(site.pos)
+                    && let Some(t) = map.targets.get(site.target)
+                {
+                    target_symbol(dl, p, txt * 0.55, t.class, Ink::Warning);
+                }
+            }
+            if let Some(pp) = fd.threat.ping_point {
+                let p = proj.to_screen([pp.x, pp.y]);
+                let k = txt * 0.45;
+                dl.line([p[0] - k, p[1] - k], [p[0] + k, p[1] + k], Ink::Warning);
+                dl.line([p[0] - k, p[1] + k], [p[0] + k, p[1] - k], Ink::Warning);
             }
             // Route
             let active = fd.steerpoint.as_ref().map(|s| s.index);
@@ -500,6 +524,12 @@ pub(crate) fn target_symbol(dl: &mut DisplayList, p: [f32; 2], s: f32, class: Ta
             );
             dl.line([x, y - s * 0.6], [x, y + s * 1.3], ink);
         }
+        TargetClass::EarlyWarning => {
+            // Radarschirm auf einem Mast
+            dl.arc([x, y + s * 0.2], s * 0.9, std::f32::consts::PI, std::f32::consts::TAU, 6, ink);
+            dl.line([x - s * 0.9, y + s * 0.2], [x + s * 0.9, y + s * 0.2], ink);
+            dl.line([x, y + s * 0.2], [x, y - s * 0.8], ink);
+        }
         TargetClass::Bridge => {
             dl.line([x - s, y - s * 0.3], [x + s, y - s * 0.3], ink);
             dl.line([x - s, y + s * 0.3], [x + s, y + s * 0.3], ink);
@@ -528,21 +558,76 @@ pub(crate) fn target_symbol(dl: &mut DisplayList, p: [f32; 2], s: f32, class: Ta
     }
 }
 
-/// Platzhalter für die Stealth- und Radarimpuls-Anzeige (kommt mit v0.2).
-fn signature_placeholder(dl: &mut DisplayList, r: Rect) {
+/// Stealth-Anzeige zwischen den MFDs (M-020): links das eigene Stealth-Level,
+/// rechts die Stärke des Impulses der gefährlichsten Radarstellung in
+/// Reichweite. Ragt der Impuls über das Stealth-Level, wird der nächste Ping
+/// dieser Stellung ein Treffer. Darüber drei Lampen für die höchste
+/// Alarmstufe, unten der Radartyp (PLS Impuls, DOP Doppler).
+fn signature(dl: &mut DisplayList, fd: &FlightData, r: Rect) {
     let w = r.max[0] - r.min[0];
     let txt = w * 0.32;
+    let th = &fd.threat;
+    let lamps_y = r.max[1] - txt * 2.6;
     let bar = Rect {
-        min: [r.min[0] + w * 0.25, r.min[1] + txt * 2.2],
-        max: [r.max[0] - w * 0.25, r.max[1] - txt * 2.2],
+        min: [r.min[0] + w * 0.18, r.min[1] + txt * 2.2],
+        max: [r.max[0] - w * 0.18, lamps_y - txt * 0.9],
     };
     dl.rect(r, Ink::PanelDim);
     dl.rect(bar, Ink::MfdDim);
     let cx = r.center()[0];
-    for k in 1..10 {
-        let y = bar.min[1] + (bar.max[1] - bar.min[1]) * k as f32 / 10.0;
-        dl.line([bar.min[0], y], [bar.min[0] + (bar.max[0] - bar.min[0]) * 0.3, y], Ink::MfdDim);
+    let h = bar.max[1] - bar.min[1];
+    let y_of = |v: f64| bar.min[1] + h * v.clamp(0.0, 1.0) as f32;
+    // Füllung als waagerechte Linien (wie der Treibstoffbalken)
+    let fill = |dl: &mut DisplayList, x0: f32, x1: f32, v: f64, ink: Ink| {
+        let top = y_of(v);
+        let mut y = bar.min[1] + h * 0.01;
+        while y <= top {
+            dl.line([x0, y], [x1, y], ink);
+            y += h * 0.035;
+        }
+    };
+    let gap = (bar.max[0] - bar.min[0]) * 0.1;
+    let mid = cx;
+    let signal = th.worst.map_or(0.0, |t| t.signal);
+    let exposed = signal > th.stealth;
+    fill(dl, bar.min[0] + gap * 0.5, mid - gap * 0.5, th.stealth, Ink::Mfd);
+    fill(
+        dl,
+        mid + gap * 0.5,
+        bar.max[0] - gap * 0.5,
+        signal,
+        if exposed { Ink::Warning } else { Ink::Needle },
+    );
+    // Letzter Ping: kurz eine helle Marke in seiner Stärke
+    if let Some(p) = th.last_ping.filter(|p| p.age_s < 0.4) {
+        let y = y_of(p.signal);
+        dl.line(
+            [bar.min[0] - w * 0.08, y],
+            [bar.max[0] + w * 0.08, y],
+            if p.hit { Ink::Warning } else { Ink::Mfd },
+        );
+    }
+    // Alarmstufe
+    let lamp = w * 0.22;
+    for k in 0..3_u8 {
+        let x = cx + (f32::from(k) - 1.0) * lamp * 1.35;
+        let c = [x, lamps_y];
+        let on = th.max_alert > k;
+        let rr = Rect::from_center(c, [lamp * 0.5, lamp * 0.5]);
+        dl.rect(rr, if on { Ink::Warning } else { Ink::MfdDim });
+        if on {
+            // gefüllt
+            for f in 1..4 {
+                let y = rr.min[1] + (rr.max[1] - rr.min[1]) * f as f32 / 4.0;
+                dl.line([rr.min[0], y], [rr.max[0], y], Ink::Warning);
+            }
+        }
     }
     dl.text_mid([cx, r.max[1] - txt * 1.1], txt, Align::Center, "SIG", Ink::Mfd);
-    dl.text_mid([cx, r.min[1] + txt * 1.1], txt, Align::Center, "RDR", Ink::Mfd);
+    let (kind, ink) = match th.worst.map(|t| t.kind) {
+        Some(f29_core::radar::RadarKind::Pulse) => ("PLS", Ink::Mfd),
+        Some(f29_core::radar::RadarKind::Doppler) => ("DOP", Ink::Mfd),
+        None => ("RDR", Ink::MfdDim),
+    };
+    dl.text_mid([cx, r.min[1] + txt * 1.1], txt, Align::Center, kind, ink);
 }

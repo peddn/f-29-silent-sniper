@@ -666,3 +666,55 @@ fn hud_modes_show_their_symbology() {
     assert_eq!(HudMode::default(), HudMode::Nav);
     assert_eq!(HudMode::Nav.next().next().next(), HudMode::Nav);
 }
+
+/// Stealth-Anzeige: Ragt der Impuls über das Stealth-Level, wird sein Balken
+/// rot; Alarmstufen leuchten als Lampen. Entdeckende Stellungen zeigen auf
+/// der Karte ihren Reichweitenkreis.
+#[test]
+fn signature_gauge_and_radar_circles() {
+    use f29_core::radar::RadarKind;
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let m = layout.mfd_layout().unwrap();
+    let sim = Sim::new(SimConfig::new(0x0F29));
+    let map = MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
+    let base = sim.flight_data();
+    let site = |signal: f64, alert: u8| f29_core::ThreatSite {
+        site: 0,
+        target: 0,
+        name: "SAM SITE",
+        kind: RadarKind::Doppler,
+        signal,
+        stealth: 0.6,
+        alert,
+        range_m: 10_000.0,
+    };
+    let red_in = |fd: &f29_core::FlightData, r: crate::Rect| {
+        let opts = HudOptions { show_hud: false, ..HudOptions::default() };
+        build(fd, &layout, &opts, Some(&map))
+            .lines
+            .iter()
+            .filter(|l| l.ink == Ink::Warning && r.contains(l.a) && r.contains(l.b))
+            .count()
+    };
+    let mut hidden = base.clone();
+    hidden.threat.stealth = 0.6;
+    hidden.threat.worst = Some(site(0.4, 0));
+    let mut seen = hidden.clone();
+    seen.threat.worst = Some(site(0.8, 0));
+    assert_eq!(red_in(&hidden, m.center), 0);
+    assert!(red_in(&seen, m.center) > 10, "Impuls über Stealth-Level nicht rot");
+    let mut alarmed = hidden.clone();
+    alarmed.threat.max_alert = 3;
+    assert!(red_in(&alarmed, m.center) >= 12, "Alarmlampen");
+    // Karte: Kreis um eine Stellung mit Alarmstufe
+    let mut on_map = hidden.clone();
+    let t = &sim.targets()[0];
+    on_map.threat.sites = vec![f29_core::RadarSiteInfo {
+        target: 0,
+        pos: [t.north, t.east],
+        range_m: 30_000.0,
+        kind: RadarKind::Doppler,
+        alert: 3,
+    }];
+    assert!(red_in(&on_map, m.left_screen) > red_in(&hidden, m.left_screen) + 10, "kein Reichweitenkreis");
+}

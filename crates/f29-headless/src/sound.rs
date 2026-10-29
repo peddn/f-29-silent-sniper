@@ -169,6 +169,18 @@ pub fn render_all(dir: &Path) -> Result<Vec<String>, String> {
             "07_absturz",
             render(4.0, Mix::WITHOUT_ENGINE, |t| AudioInput { crashed: t > 1.0, ..cruise(0.9, 200.0) }),
         ),
+        (
+            "07b_radarping",
+            render(8.0, Mix::WITHOUT_ENGINE, |t| {
+                // Pings alle 2 s: zwei schwache, dann zwei Treffer
+                let k = (t / 2.0) as u64;
+                let fresh = t - k as f32 * 2.0 < 0.3;
+                AudioInput {
+                    ping: fresh.then_some(f29_audio::PingCue { id: k + 1, hit: k >= 2 }),
+                    ..cruise(0.0, 200.0)
+                }
+            }),
+        ),
         ("08_flug_start_abriss", flight_demo()),
         ("09_flug_landung", landing_demo()),
     ];

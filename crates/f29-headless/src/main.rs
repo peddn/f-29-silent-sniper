@@ -196,11 +196,13 @@ fn demo(args: &Args) -> Result<(), String> {
             last_report = sim.tick();
             let fd = sim.flight_data();
             println!(
-                "t={:5.0}s  {:>6.0} m  {:>5.0} km/h  Kurs {:03.0}  {}",
+                "t={:5.0}s  {:>6.0} m  {:>5.0} km/h  Kurs {:03.0}  Alarm {}  Stealth {:.2}  {}",
                 fd.time_s,
                 fd.altitude_m,
                 units::mps_to_kmh(fd.tas_mps),
                 fd.heading.to_degrees(),
+                fd.threat.max_alert,
+                fd.threat.stealth,
                 fd.steerpoint.as_ref().map_or(String::new(), |s| format!(
                     "{} {:.1} km",
                     s.name,

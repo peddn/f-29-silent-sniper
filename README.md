@@ -74,7 +74,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | F | 8 | Klappen ein/aus – bei jeder Fahrt: langsam gut steuerbar, schnell weniger Fahrtverlust in Kurven |
 | G | 7 | Fahrwerk aus/ein (am Boden gesperrt) |
 | N | 6 | nächster Navigationspunkt |
-| V | 5 | Radar ein/aus (schaltet ohne Sichtlinie auf, erhöht später die eigene Sichtbarkeit) |
+| V | 5 | Radar ein/aus (schaltet ohne Sichtlinie auf; eingeschaltet etwas sichtbarer für feindliche Radare, wie ein offener Schacht) |
 | O | 4 | Schachtklappen auf/zu |
 | Tab | 3 | nächste Waffe: GUN → BAY 1 → … → BAY 4 → GUN (Start: GUN) |
 | Leertaste | 2 | gewählte Waffe auslösen (Schachtwaffen nur bei offenem Schacht; die Kanone feuert, solange die Taste gehalten wird) |
@@ -230,10 +230,15 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Bordkanone als eigenes Waffensystem: 600 Schuss (50/s), Rücktaste, 2 %
       Schaden pro Treffer bei jedem Ziel, Kanonenkreuz am Aufschlagpunkt,
       Leuchtspur (v0.2.8)
-- [ ] Bodenziele und Boden-Luft-Bedrohungen (Radar-SAM, Flak)
-- [ ] Radar-/Detektionsmodell: aspektabhängiger Radarquerschnitt, Geländemaskierung,
-      Emissionen; Signaturanzeige im Cockpit
-- [ ] Täuschkörper (Düppel, Fackeln)
+- [x] Entdeckungsmodell: SAM-Stellungen (Doppler) und Frühwarnradare (Impuls)
+      pingen je Antennenumlauf; Impuls gegen Stealth-Level (Lage zum Radar,
+      Schacht, Fahrwerk, Klappen, eigenes Radar); Alarmstufen 1–3 mit
+      Abklingen, gemerkter Ping-Ort; SIG-Anzeige, Pieps, Reichweitenkreise
+      (v0.2.9)
+- [ ] Boden-Luft-Raketen ab Stufe 3: SAM-Stellungen und Langstreckenraketen
+      der Frühwarnradare – zusammen mit dem Schadensmodell
+- [ ] Täuschkörper (Düppel, Fackeln) gegen Langstreckenraketen
+- ~~Flak~~ (gestrichen, Spielerentscheidung v0.2.9)
 
 ### v0.3: Missionen
 - [ ] Missionsdaten: Primär- und Sekundärziel, Route, Bedrohungslage

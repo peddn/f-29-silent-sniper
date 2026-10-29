@@ -138,7 +138,7 @@ impl Seeker {
         match self {
             Seeker::None => false,
             Seeker::Optical | Seeker::Laser => true,
-            Seeker::Radiation => class == TargetClass::AirDefense,
+            Seeker::Radiation => class.is_radar(),
             Seeker::Naval => class.is_naval(),
         }
     }
@@ -342,7 +342,7 @@ impl WeaponKind {
         use WeaponKind as W;
         let steep = impact_rad >= HARDENED_MIN_IMPACT_RAD;
         match (self, class) {
-            (W::AntiRadar, C::AirDefense) => 1.0,
+            (W::AntiRadar, C::AirDefense | C::EarlyWarning) => 1.0,
             (W::AntiRadar, _) => 0.0,
             (W::AntiShip, C::ShipSmall) => 1.0,
             (W::AntiShip, C::ShipLarge) => 0.5,
@@ -358,7 +358,7 @@ impl WeaponKind {
                 }
             }
             (_, C::Hardened) => 0.0,
-            (_, C::Soft | C::ParkedAircraft | C::AirDefense | C::ShipSmall) => 1.0,
+            (_, C::Soft | C::ParkedAircraft | C::AirDefense | C::EarlyWarning | C::ShipSmall) => 1.0,
             (W::GuidedBomb | W::AirToGround, C::Armored) => 1.0,
             (W::AirToGround, C::Building) => 0.34,
             (W::AirToGround, C::Bridge | C::ShipLarge) => 0.25,

@@ -1101,26 +1101,63 @@ Format jedes Eintrags:
   Alarmstufe und lenkt radargelenkte Flugkörper ab; ein zweiter Störer wirkt gegen
   infrarotgelenkte. Die Bedrohungsanzeige im Cockpit zeigt Bewertung gegen
   Sichtbarkeit als zwei Balken.
-- **Unser Design (Entwurf):** Radarquerschnitt abhängig vom Aspektwinkel (Bug, Flanke,
-  Unterseite) plus Zuschläge für offenen Schacht und eigene Emissionen. Die Detektion
-  folgt der Radargleichung (Reichweite ∝ RCS^¼) mit Sichtlinienprüfung gegen das Gelände.
-  Erfassung als Zustandsmaschine (Suche → Verfolgung → Abschuss) mit Zufallsanteilen aus
-  einem eigenen RNG-Strom. Ausgefahrene Klappen (M-007) und Fahrwerk erhöhen den
-  Radarquerschnitt – der Preis für die bessere Kurven- und Langsamflugleistung.
-- **Status:** geplant (v0.2)
+- **Unser Design:** `crates/f29-core/src/radar.rs`. Spielerentscheidungen v0.2.9:
+  Radare sehen **durch das Gelände** (keine Sichtlinie, wie unsere eigenen
+  Sensoren); feste **Stufenleiter** statt fein dosierter Alarmzuwächse.
+  - **Stellungen:** SAM-Stellungen (Dopplerradar, mittlere Reichweite) und
+    Frühwarnradare (Impulsradar, große Reichweite, neue Zielklasse abseits der
+    Route). Eine zerstörte Stellung strahlt nicht mehr und vergisst.
+  - **Pings:** Jede Stellung pingt einmal je Antennenumlauf (versetzt je
+    Stellung). Nur dann wird gerechnet.
+  - **Impulsstärke** am Flugzeug: fällt linear mit der Entfernung bis zur
+    Reichweitengrenze. Doppler: schwach, wenn das Flugzeug quer zur Stellung
+    fliegt (nur die Bewegung auf sie zu oder von ihr weg zählt). Impuls:
+    richtungsunabhängig, im Tiefflug schwach (Bodenechos, glatt zwischen
+    50 und 400 m über Grund).
+  - **Stealth-Level** gegenüber dieser Stellung = 1 − Sichtbarkeit.
+    Sichtbarkeit aus der Blickrichtung des Radars auf das Flugzeug (Bug klein,
+    Flanke größer, Ober-/Unterseite am größten – die Querlage zeigt den Bauch)
+    plus Zuschläge: offener Schacht, Fahrwerk, Landeklappen, Luftbremse,
+    eigenes Radar (ein kleiner Verlust wie der offene Schacht).
+  - **Alarmstufe:** Ein Ping, dessen Impuls stärker ist als das Stealth-Level,
+    hebt die Stufe der Stellung um eins: 1 „RADAR DETECTED“ (Stellung mit
+    Reichweitenkreis auf der Karte), 2 „TRACKED“ (Ping-Ort gemerkt – Ziel
+    späterer Patrouillen), 3 „RADAR ID“ (Auslöser für den Raketenstart, auch
+    beim Frühwarnradar mit Langstreckenraketen; kommt mit dem
+    Schadensmodell). Ohne Treffer sinkt die Stufe nach 30 s um eins; bei 0
+    „LOST CONTACT“.
+  - **Anzeigen:** SIG-Säule zwischen den MFDs (links Stealth-Level, rechts
+    Impuls der gefährlichsten Stellung, rot, wenn er darüber liegt; drei
+    Alarmlampen; Radartyp PLS/DOP), heller Strich beim Ping, Pieps des
+    Radarwarnempfängers (Treffer doppelt und höher), Reichweitenkreise und
+    gemerkter Ping-Ort auf der Karte. Der Zustand geht in den Zustandshash ein.
+- **Unsere Werte:** Frühwarnradar 60 km, Umlauf 10 s; SAM 30 km, Umlauf 5 s.
+  Sichtbarkeit Bug 0,15, Flanke 0,30, Ober-/Unterseite 0,40; Zuschläge Schacht
+  0,15, eigenes Radar 0,15, Fahrwerk 0,10, Klappen und Luftbremse je 0,05.
+  Doppler im reinen Querflug 25 %, Impuls ganz unten 30 % der Stärke.
+  Beispiele: Unauffällig mit dem Bug voraus entdeckt eine SAM-Stellung das
+  Flugzeug erst unter etwa 4,5 km; im Querflug gar nicht. Ein Frühwarnradar
+  sieht die Flanke in 1500 m bis etwa 18 km, mit offenem Schacht bis etwa
+  27 km.
+- **Status:** Entdeckung umgesetzt (v0.2.9); Raketen, Patrouillen und
+  Störsender folgen.
 
 ### M-021 Boden-Luft-Bedrohungen
 
-- **Verhalten:** Radargeführte Flugabwehrraketen und Flak bedrohen das Flugzeug abhängig
-  von Detektion und Reichweite.
+- **Verhalten:** Radargeführte Flugabwehrraketen bedrohen das Flugzeug abhängig
+  von Detektion und Reichweite. Flak gibt es nicht (gestrichen, Spielerentscheidung
+  v0.2.9).
 - **Referenzstelle:** f19re `src_en/egcombat.c` (Flugkörper der Bedrohungen),
   `src_en/egframe.c` (Täuschkörper).
 - **Lesephase v0.2:** Täuschkörper (Fackeln, Düppel) und ein Störsender sind begrenzt
   vorrätig; ein Täuschkörper lockt Flugkörper der passenden Lenkart an, solange er in
   ihrem Suchkegel liegt.
-- **Unser Design (Entwurf):** Eigene, fiktive Systemklassen mit Reichweiten aus
-  öffentlichen Größenordnungen. Lenkflugkörper werden mit Proportionalnavigation
-  simuliert; Täuschkörper wirken über eigene Wahrscheinlichkeitsmodelle.
+- **Unser Design (Entwurf):** Start bei Alarmstufe 3 (M-020): SAM-Stellungen
+  mit mittlerer Reichweite, Frühwarnradare mit Langstreckenraketen, die auch
+  aus großer Entfernung treffen können – Täuschkörper müssen geopfert werden
+  (Spielerwunsch v0.2.9). Lenkflugkörper mit Proportionalnavigation;
+  Täuschkörper über eigene Wahrscheinlichkeitsmodelle. Kommt zusammen mit dem
+  Schadensmodell.
 - **Status:** geplant (v0.2)
 
 ### M-030 Karriere, Szenarien, Orden

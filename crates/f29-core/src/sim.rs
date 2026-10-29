@@ -6,6 +6,7 @@ use crate::flight::{self, AeroData, AircraftState};
 use crate::gun::{self, Gun, GunEvent};
 use crate::math::{DQuat, DVec3};
 use crate::nav::{self, Steerpoint};
+use crate::radar::{Exposure, RadarEvent, RadarKind, RadarNet};
 use crate::rng::Pcg32;
 use crate::sensors::{self, LookDir, Sensors};
 use crate::systems::{Condition, System, Systems};
@@ -394,7 +395,65 @@ pub struct FlightData {
     pub munitions: Vec<MunitionInfo>,
     /// Bordkanone: Munition, Abzug und Aufschlagpunkt.
     pub gun: GunInfo,
+    /// Lage gegenüber den feindlichen Radaren (M-020).
+    pub threat: ThreatInfo,
     pub warnings: Warnings,
+}
+
+/// Lage gegenüber den feindlichen Radaren (M-020).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ThreatInfo {
+    /// Eigenes Stealth-Level 0..1 gegenüber der gefährlichsten Stellung in
+    /// Reichweite (sonst der nächsten).
+    pub stealth: f64,
+    /// Die Stellung, deren Impuls dem Stealth-Level am nächsten kommt.
+    pub worst: Option<ThreatSite>,
+    /// Höchste Alarmstufe aller Stellungen.
+    pub max_alert: u8,
+    /// Letzter Ping, der das Flugzeug erreicht hat.
+    pub last_ping: Option<PingInfo>,
+    /// Jüngster gemerkter Ping-Ort (NED).
+    pub ping_point: Option<DVec3>,
+    /// Alle intakten Radarstellungen (für die Karte).
+    pub sites: Vec<RadarSiteInfo>,
+}
+
+/// Eine Radarstellung in Reichweite.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ThreatSite {
+    /// Index in [`RadarNet::sites`].
+    pub site: usize,
+    /// Index in [`Sim::targets`].
+    pub target: usize,
+    pub name: &'static str,
+    pub kind: RadarKind,
+    /// Stärke ihres Impulses am Flugzeug 0..1.
+    pub signal: f64,
+    /// Stealth-Level ihr gegenüber 0..1.
+    pub stealth: f64,
+    pub alert: u8,
+    pub range_m: f64,
+}
+
+/// Letzter Ping.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PingInfo {
+    pub tick: u64,
+    pub age_s: f64,
+    pub signal: f64,
+    pub stealth: f64,
+    pub hit: bool,
+}
+
+/// Radarstellung für die Karte.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RadarSiteInfo {
+    pub target: usize,
+    /// Nord, Ost (m).
+    pub pos: [f64; 2],
+    pub range_m: f64,
+    pub kind: RadarKind,
+    pub alert: u8,
 }
 
 /// Bordkanone für die Anzeigen.
@@ -454,6 +513,8 @@ pub struct Sim {
     sensors: Sensors,
     stores: Stores,
     gun: Gun,
+    /// Feindliche Radarstellungen mit Alarmstufen (M-020).
+    radar: RadarNet,
     systems: Systems,
     /// Aufschlag (Punkt, Flugzeit) einer jetzt abgefeuerten Patrone; abgeleitet.
     gun_prediction: Option<(DVec3, f64)>,
@@ -535,6 +596,7 @@ impl Sim {
             sensors,
             stores,
             gun: Gun::new(seed),
+            radar: RadarNet::default(),
             systems: Systems::default(),
             gun_prediction: None,
             bomb_prediction: None,
@@ -542,6 +604,7 @@ impl Sim {
             contact_cursor: 0,
         };
         sim.own_contacts = vec![false; sim.targets.len()];
+        sim.radar = RadarNet::new(&sim.targets);
         for _ in 0..sim.targets.len().div_ceil(CONTACTS_PER_UPDATE) {
             sim.update_contacts();
         }
@@ -554,6 +617,15 @@ impl Sim {
     pub fn set_condition(&mut self, system: System, condition: Condition) {
         self.systems.set(system, condition);
         self.apply_systems();
+    }
+
+    /// Zerstört ein Ziel sofort – Zugang für Tests (und spätere
+    /// Missionsereignisse).
+    pub fn destroy_target(&mut self, index: usize) {
+        if let Some(t) = self.targets.get_mut(index) {
+            t.damage = 1.0;
+            t.state = targets::TargetState::Destroyed;
+        }
     }
 
     /// Bordsysteme (Schadensmodell).
@@ -583,6 +655,7 @@ impl Sim {
         self.gun.step(self.tick, &self.terrain, &mut self.targets, self.aircraft.position, DT);
         if self.status != Status::Flying {
             self.gun.trigger(self.tick, false, DVec3::ZERO, DVec3::ZERO, DQuat::IDENTITY, DT);
+            self.radar.step(self.tick, &self.targets, None);
             return;
         }
         self.update_weapon_controls(&controls);
@@ -597,6 +670,8 @@ impl Sim {
         }
         self.update_height_agl();
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
+        let exposure = self.exposure();
+        self.radar.step(self.tick, &self.targets, Some(&exposure));
         if self.tick.is_multiple_of(BOMB_AIM_TICKS) {
             self.update_bomb_prediction();
             let a = &self.aircraft;
@@ -605,6 +680,97 @@ impl Sim {
             } else {
                 gun::predict_impact(a.position, a.velocity, a.attitude, &self.terrain)
             };
+        }
+    }
+
+    /// Was die feindlichen Radare vom Flugzeug sehen (M-020).
+    fn exposure(&self) -> Exposure {
+        let a = &self.aircraft;
+        Exposure {
+            position: a.position,
+            velocity: a.velocity,
+            attitude: a.attitude,
+            height_agl_m: a.height_agl_m,
+            door: self.stores.door,
+            gear: a.gear,
+            flaps: a.flaps,
+            airbrake: a.airbrake,
+            radar_on: self.sensors.radar_on,
+        }
+    }
+
+    /// Feindliche Radarstellungen (M-020).
+    pub fn radar(&self) -> &RadarNet {
+        &self.radar
+    }
+
+    /// Lage gegenüber den feindlichen Radaren für die Anzeigen.
+    fn threat_info(&self) -> ThreatInfo {
+        let x = self.exposure();
+        let mut worst: Option<ThreatSite> = None;
+        let mut nearest: Option<(f64, f64)> = None;
+        for (k, s) in self.radar.sites.iter().enumerate() {
+            let t = &self.targets[s.target];
+            if !t.is_intact() {
+                continue;
+            }
+            let c = t.center_ned();
+            let at = DVec3::new(c[0], c[1], c[2]);
+            let range_m = (at - x.position).length();
+            let stealth = x.stealth(at);
+            if nearest.is_none_or(|(d, _)| range_m < d) {
+                nearest = Some((range_m, stealth));
+            }
+            let signal = x.signal(&s.spec, at);
+            if signal <= 0.0 {
+                continue;
+            }
+            let site = ThreatSite {
+                site: k,
+                target: s.target,
+                name: t.name,
+                kind: s.spec.kind,
+                signal,
+                stealth,
+                alert: s.alert,
+                range_m,
+            };
+            if worst.is_none_or(|w| site.signal - site.stealth > w.signal - w.stealth) {
+                worst = Some(site);
+            }
+        }
+        let stealth = worst.map_or_else(
+            || nearest.map_or(1.0 - x.signature(x.position + DVec3::new(0.0, 1.0, 0.0)), |(_, s)| s),
+            |w| w.stealth,
+        );
+        ThreatInfo {
+            stealth,
+            worst,
+            max_alert: self.radar.max_alert(),
+            last_ping: self.radar.last_ping.map(|p| PingInfo {
+                tick: p.tick,
+                age_s: self.tick.saturating_sub(p.tick) as f64 * DT,
+                signal: p.signal,
+                stealth: p.stealth,
+                hit: p.hit,
+            }),
+            ping_point: self.radar.latest_ping_point(),
+            sites: self
+                .radar
+                .sites
+                .iter()
+                .filter(|s| self.targets[s.target].is_intact())
+                .map(|s| {
+                    let t = &self.targets[s.target];
+                    RadarSiteInfo {
+                        target: s.target,
+                        pos: [t.north, t.east],
+                        range_m: s.spec.range_m,
+                        kind: s.spec.kind,
+                        alert: s.alert,
+                    }
+                })
+                .collect(),
         }
     }
 
@@ -1101,6 +1267,7 @@ impl Sim {
                     }
                 }),
             },
+            threat: self.threat_info(),
             munitions: self
                 .stores
                 .in_flight
@@ -1185,6 +1352,22 @@ impl Sim {
                 };
                 Some((tick, WeaponMessage { text, warning, age_s }))
             })
+            .chain(self.radar.events.iter().filter_map(|&(tick, e)| {
+                let age_s = self.tick.saturating_sub(tick) as f64 * DT;
+                if age_s > WEAPON_MESSAGE_S {
+                    return None;
+                }
+                let site_name = |k: usize| self.targets[self.radar.sites[k].target].name;
+                let (text, warning) = match e {
+                    RadarEvent::Alert { site, level: 1 } => {
+                        (format!("RADAR DETECTED - {}", site_name(site)), true)
+                    }
+                    RadarEvent::Alert { site, level: 2 } => (format!("TRACKED - {}", site_name(site)), true),
+                    RadarEvent::Alert { site, .. } => (format!("RADAR ID - {}", site_name(site)), true),
+                    RadarEvent::Lost { site } => (format!("{} LOST CONTACT", site_name(site)), false),
+                };
+                Some((tick, WeaponMessage { text, warning, age_s }))
+            }))
             .chain(self.gun.events.iter().filter_map(|&(tick, e)| {
                 let age_s = self.tick.saturating_sub(tick) as f64 * DT;
                 if age_s > WEAPON_MESSAGE_S {
@@ -1280,6 +1463,15 @@ impl Sim {
             h.f64(w.aim_offset.x);
             h.f64(w.aim_offset.y);
             h.f64(w.aim_offset.z);
+        }
+        for s in &self.radar.sites {
+            h.u64(u64::from(s.alert));
+            h.u64(s.last_change_tick);
+            if let Some(p) = s.ping_point {
+                h.f64(p.x);
+                h.f64(p.y);
+                h.f64(p.z);
+            }
         }
         let g = &self.gun;
         h.u64(u64::from(g.rounds) | u64::from(g.trigger) << 16);

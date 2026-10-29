@@ -48,6 +48,15 @@ pub struct TouchdownCue {
     pub hard: bool,
 }
 
+/// Ein Radarping, der das Flugzeug erreicht hat (M-020).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PingCue {
+    /// Eindeutige Kennung (Tick des Pings) – derselbe Wert klingt nur einmal.
+    pub id: u64,
+    /// Treffer: Der Impuls war stärker als das Stealth-Level.
+    pub hit: bool,
+}
+
 /// Momentaufnahme der Simulation für den Klang.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct AudioInput {
@@ -66,6 +75,8 @@ pub struct AudioInput {
     /// Bodenwarnung (PULL UP).
     pub pull_up_warning: bool,
     pub touchdown: Option<TouchdownCue>,
+    /// Jüngster Radarping (Radarwarnempfänger).
+    pub ping: Option<PingCue>,
     pub crashed: bool,
     /// Pause: alles verstummt weich.
     pub paused: bool,
@@ -84,6 +95,7 @@ impl AudioInput {
             stall_warning: fd.warnings.stall,
             pull_up_warning: fd.warnings.pull_up,
             touchdown: fd.touchdown.map(|t| TouchdownCue { id: t.tick, hard: t.hard }),
+            ping: fd.threat.last_ping.filter(|p| p.age_s < 0.5).map(|p| PingCue { id: p.tick, hit: p.hit }),
             crashed: matches!(fd.status, Status::Crashed { .. }),
             paused,
         }
@@ -129,6 +141,8 @@ enum OneShot {
     Crash { t: f32, lp: OnePole },
     /// Abspielen eines Samples (Ansage).
     Sample { pos: usize, gain: f32 },
+    /// Piepton des Radarwarnempfängers.
+    Beep { t: f32, freq: f32, gain: f32, dur: f32, phase: Phase },
 }
 
 /// Der Synthesizer. Ein Exemplar pro Datenstrom.
@@ -162,6 +176,7 @@ pub struct Synth {
     prev_flaps: f32,
     prev_airbrake: f32,
     last_touchdown: Option<u64>,
+    last_ping: Option<u64>,
     crashed: bool,
     pull_up_timer: f32,
     alarm: Phase,
@@ -202,6 +217,7 @@ impl Synth {
             prev_flaps: f32::NAN,
             prev_airbrake: f32::NAN,
             last_touchdown: None,
+            last_ping: None,
             crashed: false,
             pull_up_timer: 0.0,
             alarm: Phase::default(),
@@ -259,6 +275,38 @@ impl Synth {
                 let g = if td.hard { 1.6 } else { 1.0 };
                 self.shots.push(OneShot::Squeal { t: 0.0, gain: 0.11 * g, phase: Phase::default() });
                 self.shots.push(OneShot::Thump { t: 0.0, freq: 52.0, gain: 0.35 * g, decay: 0.12 });
+            }
+        }
+        // Radarping: leiser kurzer Ton; ein Treffer doppelt und höher.
+        if let Some(p) = input.ping
+            && self.last_ping != Some(p.id)
+        {
+            self.last_ping = Some(p.id);
+            if !first {
+                if p.hit {
+                    self.shots.push(OneShot::Beep {
+                        t: 0.0,
+                        freq: 1_700.0,
+                        gain: 0.10,
+                        dur: 0.07,
+                        phase: Phase::default(),
+                    });
+                    self.shots.push(OneShot::Beep {
+                        t: -0.11,
+                        freq: 1_700.0,
+                        gain: 0.10,
+                        dur: 0.07,
+                        phase: Phase::default(),
+                    });
+                } else {
+                    self.shots.push(OneShot::Beep {
+                        t: 0.0,
+                        freq: 950.0,
+                        gain: 0.05,
+                        dur: 0.05,
+                        phase: Phase::default(),
+                    });
+                }
             }
         }
         if input.crashed && !self.crashed && !first {
@@ -358,7 +406,8 @@ impl Synth {
         let mix = self.mix;
         for s in &mut self.shots {
             let n = self.noise.sample();
-            let group = if matches!(s, OneShot::Sample { .. }) { 1.0 } else { mix.events };
+            let group =
+                if matches!(s, OneShot::Sample { .. } | OneShot::Beep { .. }) { 1.0 } else { mix.events };
             sum += group
                 * match s {
                     OneShot::Thump { t, freq, gain, decay } => {
@@ -397,6 +446,17 @@ impl Synth {
                         *pos += 1;
                         v
                     }
+                    OneShot::Beep { t, freq, gain, dur, phase } => {
+                        // Negative Zeit = Verzögerung (zweiter Ton)
+                        let v = if *t >= 0.0 {
+                            let env = (*t / 0.004).min(1.0) * ((*dur - *t) / 0.01).clamp(0.0, 1.0);
+                            pulse(phase.advance(*freq, sr), 0.5) * env * *gain * mix.voice
+                        } else {
+                            0.0
+                        };
+                        *t += dt;
+                        v
+                    }
                 };
         }
         sum
@@ -416,6 +476,7 @@ fn shot_finished(s: &OneShot, voice_len: usize) -> bool {
         OneShot::Squeal { t, .. } => *t >= 0.32,
         OneShot::Crash { t, .. } => *t > 3.0,
         OneShot::Sample { pos, .. } => *pos >= voice_len,
+        OneShot::Beep { t, dur, .. } => *t >= *dur,
     }
 }
 

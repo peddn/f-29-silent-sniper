@@ -20,6 +20,7 @@ pub mod flight;
 pub mod gun;
 pub mod math;
 pub mod nav;
+pub mod radar;
 pub mod replay;
 pub mod rng;
 pub mod sensors;
@@ -32,8 +33,9 @@ pub mod weapons;
 pub use controls::ControlFrame;
 pub use math::{DQuat, DVec3};
 pub use sim::{
-    BombAim, CrashCause, DT, FlightData, GunAim, GunInfo, MunitionInfo, Sim, SimConfig, SpawnKind, Status,
-    StoresInfo, TICK_HZ, TargetInfo, Touchdown, WeaponMessage,
+    BombAim, CrashCause, DT, FlightData, GunAim, GunInfo, MunitionInfo, PingInfo, RadarSiteInfo, Sim,
+    SimConfig, SpawnKind, Status, StoresInfo, TICK_HZ, TargetInfo, ThreatInfo, ThreatSite, Touchdown,
+    WeaponMessage,
 };
 
 pub use f29_data as data;
