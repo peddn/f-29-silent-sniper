@@ -314,3 +314,21 @@ fn every_mfd_page_draws_inside_its_screen() {
     seen.dedup();
     assert_eq!(seen.len(), RightPage::ALL.len(), "nicht alle Seiten erreicht");
 }
+
+/// Offene Schachtklappen blinken als Warnung im HUD.
+#[test]
+fn open_bay_blinks_as_warning() {
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let warn_lines = |door: f64, time_s: f64| {
+        let mut fd = sample();
+        fd.stores.door = door;
+        fd.time_s = time_s;
+        let dl = build(&fd, &layout, &HudOptions { show_panel: false, ..HudOptions::default() }, None);
+        dl.lines.iter().filter(|l| l.ink == Ink::Warning).count()
+    };
+    let closed = warn_lines(0.0, 10.0);
+    assert!(warn_lines(1.0, 10.0) > closed, "keine Warnung bei offenem Schacht");
+    assert!(warn_lines(0.4, 10.0) > closed, "keine Warnung bei sich öffnendem Schacht");
+    // Blinkphase aus: nichts zusätzlich
+    assert_eq!(warn_lines(1.0, 10.4), closed);
+}

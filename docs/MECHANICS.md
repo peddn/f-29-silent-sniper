@@ -849,7 +849,8 @@ Format jedes Eintrags:
     `--loadout`; ein Beladungsbildschirm kommt mit dem Missionsbriefing. Die
     Waffen zählen zur Flugzeugmasse und werden beim Abwurf leichter.
   - Bedienung: Schachtklappen mit **eigener Taste** (öffnen dauert gut eine
-    Sekunde, in Etappe 3 erhöht ein offener Schacht die Sichtbarkeit), Schacht
+    Sekunde, in Etappe 3 erhöht ein offener Schacht die Sichtbarkeit; solange die
+    Klappen nicht ganz zu sind, blinkt „BAY OPEN“ im HUD), Schacht
     wählen, auslösen. Auslösen nur bei offenem Schacht, nicht am Boden, bis 60°
     Querlage und mit höchstens acht eigenen Waffen in der Luft; sonst Meldung.
   - Flugbahn: echte Ballistik im Kern statt Neigungsregel – Massenpunkt mit

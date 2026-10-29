@@ -397,6 +397,10 @@ fn warnings(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     if fd.warnings.gear_overspeed {
         show(dl, "GEAR SPEED");
     }
+    // Offener (oder sich bewegender) Waffenschacht verrät das Flugzeug (M-014).
+    if fd.stores.door > 0.0 {
+        show(dl, "BAY OPEN");
+    }
     if fd.warnings.flameout {
         show(dl, "FLAMEOUT");
     } else if fd.warnings.bingo {
