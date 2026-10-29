@@ -14,3 +14,7 @@ f29-terrain.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# Prüft die Shader des Frontends ohne GPU (Version wie in Bevy).
+naga = { version = "30", features = ["wgsl-in"] }

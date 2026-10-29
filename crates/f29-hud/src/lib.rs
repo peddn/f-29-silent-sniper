@@ -19,6 +19,7 @@ pub use canvas::{Align, DisplayList, Ink, Line, Rect};
 use f29_core::FlightData;
 pub use map::MapData;
 pub use mfd::{MapMode, MfdLayout, MfdState, RightPage};
+pub use pages::target_image_rect;
 
 /// Aufteilung des Fensters in 3D-Ansicht (oben) und Instrumentenbrett (unten).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -84,11 +85,14 @@ pub struct HudOptions {
     pub show_panel: bool,
     /// Bedienzustand der MFDs.
     pub mfd: MfdState,
+    /// Das Frontend legt ein gerendertes Kamerabild in das Bildfeld der
+    /// TGT-Seite ([`target_image_rect`]); das Drahtgitter entfällt dann.
+    pub camera_feed: bool,
 }
 
 impl Default for HudOptions {
     fn default() -> Self {
-        Self { show_hud: true, show_panel: true, mfd: MfdState::default() }
+        Self { show_hud: true, show_panel: true, mfd: MfdState::default(), camera_feed: false }
     }
 }
 
@@ -106,7 +110,7 @@ pub fn build(
     }
     if opts.show_panel && layout.panel_fraction > 0.0 {
         dl.set_clip(None);
-        mfd::draw(&mut dl, fd, layout, &opts.mfd, map);
+        mfd::draw(&mut dl, fd, layout, &opts.mfd, map, opts.camera_feed);
     }
     dl.set_clip(None);
     dl

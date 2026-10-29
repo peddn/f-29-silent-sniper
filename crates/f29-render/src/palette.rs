@@ -57,4 +57,27 @@ mod tests {
             );
         }
     }
+
+    /// Die Shader des Frontends parsen und validieren (ohne GPU). Der Import
+    /// des Bevy-Vollbild-Vertexausgangs wird durch dessen Struktur ersetzt.
+    #[test]
+    fn app_shaders_validate() {
+        const VERTEX_OUTPUT: &str = "struct FullscreenVertexOutput { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32>, };";
+        for (name, src) in [
+            ("retro", include_str!("../../f29-app/assets/shaders/retro.wesl")),
+            ("tgt_camera", include_str!("../../f29-app/assets/shaders/tgt_camera.wesl")),
+        ] {
+            let import = "import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput;";
+            assert!(src.contains(import), "{name}: Import erwartet");
+            let wgsl = src.replace(import, VERTEX_OUTPUT);
+            let module = naga::front::wgsl::parse_str(&wgsl)
+                .unwrap_or_else(|e| panic!("{name}: {}", e.emit_to_string(&wgsl)));
+            naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::empty(),
+            )
+            .validate(&module)
+            .unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        }
+    }
 }

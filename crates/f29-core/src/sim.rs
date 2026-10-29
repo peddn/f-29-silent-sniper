@@ -413,22 +413,26 @@ impl Sim {
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
     }
 
-    /// Bedienung der Zielerfassung und Aufschalten (M-013).
+    /// Bedienung der Zielerfassung und Aufschalten (M-013): Radar umschalten,
+    /// Blickrichtung wählen (dieselbe Richtung noch einmal: nächstes Ziel).
     fn update_sensors(&mut self, controls: &ControlFrame) {
-        let mut changed = false;
+        let (pos, heading) = (self.aircraft.position, self.aircraft.attitude.to_euler().0);
+        let mut done = false;
         if controls.has(flags::RADAR_TOGGLE) {
             self.sensors.radar_on = !self.sensors.radar_on;
-            changed = true;
+            self.sensors.update(&self.targets, &self.terrain, pos, heading);
+            done = true;
         }
-        if let Some(look) = LookDir::from_code(controls.look_code())
-            && look != self.sensors.look
-        {
-            self.sensors.look = look;
-            changed = true;
+        if let Some(look) = LookDir::from_code(controls.look_code()) {
+            if look == self.sensors.look {
+                self.sensors.next_target(&self.targets, &self.terrain, pos, heading);
+            } else {
+                self.sensors.look_at(look, &self.targets, &self.terrain, pos, heading);
+            }
+            done = true;
         }
-        if changed || self.tick.is_multiple_of(sensors::UPDATE_TICKS) {
-            let heading = self.aircraft.attitude.to_euler().0;
-            self.sensors.update(&self.targets, &self.terrain, self.aircraft.position, heading);
+        if !done && self.tick.is_multiple_of(sensors::UPDATE_TICKS) {
+            self.sensors.update(&self.targets, &self.terrain, pos, heading);
         }
     }
 

@@ -760,11 +760,22 @@ Format jedes Eintrags:
   - Das Aufschalten ist **immer automatisch**: das nächste intakte Ziel in einem
     Kegel um die gewählte Blickrichtung (I voraus, L rechts, K hinten, J links), wie
     im Original. Zivile Ziele werden mit aufgeschaltet, aber gekennzeichnet.
+  - **Zielwechsel (v0.2.2):** Die Aufschaltung bleibt, solange das Ziel im Kegel
+    liegt und von einem System erfasst wird. Dieselbe Richtungstaste noch einmal
+    schaltet zum nächstweiteren erfassten Ziel dieser Richtung; nach dem weitesten
+    geht es zurück zum nächsten. Eine andere Richtung setzt auf deren nächstes Ziel.
   - Anzeige: Zielrahmen im HUD (durchgekreuzt bei zivilen Zielen, Pfeil am Rand
     außerhalb des Sichtfelds) mit „OPT“ oder „RDR“; Zeile mit Radar, Blickrichtung
-    und Entfernung; neue MFD-Seite TGT mit optischem Zielbild (Drahtgitter, auf das
-    Ziel gezoomt), Name, Klasse, Rolle, Entfernung, Peilung; auf der Karte ist das
-    aufgeschaltete Ziel eingeklammert.
+    und Entfernung; neue MFD-Seite TGT mit optischem Zielbild, Name, Klasse, Rolle,
+    Entfernung, Peilung; auf der Karte ist das aufgeschaltete Ziel eingeklammert.
+  - **Zielkamera (v0.2.2):** Das Zielbild ist eine zweite 3D-Kamera unter dem Rumpf,
+    die auf die Zielmitte blickt und so weit zoomt, dass das Ziel knapp die halbe
+    Bildhöhe füllt. Sie rendert in eine grobe Textur (144 Zeilen); ein eigener
+    Nachbearbeitungseffekt macht daraus ein körniges, leicht grün getöntes
+    Schwarzweißbild mit Zeilenstruktur, gelegentlichem Zeilenversatz und dunklen
+    Rändern. Das Rauschen nimmt mit der Entfernung zu. Die Kamera läuft nur bei
+    offener TGT-Seite und optischer Erfassung. Ohne Grafik (SVG-Ausgabe) bleibt das
+    Drahtgitter als Ersatzbild.
   - Für Etappe 2 festgelegt: Gelenkte Waffen sind **Fire and Forget** wie im
     Original – sie tragen ihren eigenen optischen oder Radar-Suchkopf und brauchen
     nach dem Abschuss keine Verbindung zum Flugzeug. Erste Waffen: Freifallbomben,
@@ -773,7 +784,7 @@ Format jedes Eintrags:
   Erfassung 4-mal pro Sekunde (ein Wechsel von Radar oder Blickrichtung wirkt
   sofort), Sichtlinie in 60-m-Schritten. Reichweiten so gewählt, dass das Radar die
   Kartenstufe 20 NM füllt und die Optik etwa die Sichtweite bei klarem Wetter trifft.
-- **Status:** Erfassung umgesetzt (v0.2.1)
+- **Status:** Erfassung umgesetzt (v0.2.1), Zielwechsel und Zielkamera (v0.2.2)
 
 ### M-020 Radar-/Detektionsmodell (Stealth)
 

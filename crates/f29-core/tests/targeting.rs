@@ -58,6 +58,9 @@ fn radar_locks_the_nearest_target_ahead_and_can_be_switched_off() {
     assert!(!sim.sensors().radar_on, "Radar startet ausgeschaltet");
     step(&mut sim, flags::RADAR_TOGGLE);
     assert!(sim.sensors().radar_on);
+    // Eine bestehende Aufschaltung bleibt; Richtung neu wählen setzt auf das nächste Ziel.
+    step(&mut sim, ControlFrame::look_flags(LookDir::Right.code()));
+    step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()));
     let lock = sim.sensors().lock.expect("Radar schaltet auf");
     assert!(lock.radar);
     assert_eq!(Some(lock.target), nearest_in_cone(&sim, LookDir::Forward, RADAR_RANGE_M));
@@ -78,7 +81,8 @@ fn radar_locks_the_nearest_target_ahead_and_can_be_switched_off() {
 fn look_direction_selects_the_cone() {
     let mut sim = near_primary();
     step(&mut sim, flags::RADAR_TOGGLE);
-    for look in LookDir::ALL {
+    // Mit Rechts beginnen: Vorn ist schon gewählt, dort würde der Tastendruck weiterschalten.
+    for look in [LookDir::Right, LookDir::Aft, LookDir::Left, LookDir::Forward] {
         step(&mut sim, ControlFrame::look_flags(look.code()));
         assert_eq!(sim.sensors().look, look);
         assert_eq!(
@@ -98,7 +102,10 @@ fn optical_lock_needs_line_of_sight_and_is_shorter_ranged() {
     step(&mut sim, flags::RADAR_TOGGLE);
     let (mut optical, mut radar_only) = (0, 0);
     for i in 0..(120 * 120) {
-        step(&mut sim, 0);
+        // Die Aufschaltung hält ein Ziel; ab und zu weiterschalten, damit auch
+        // fernere (reine Radar-)Ziele drankommen.
+        let cycle = i % (sensors::UPDATE_TICKS as usize * 4) == 1;
+        step(&mut sim, if cycle { ControlFrame::look_flags(LookDir::Forward.code()) } else { 0 });
         if i % sensors::UPDATE_TICKS as usize != 0 {
             continue;
         }
@@ -120,4 +127,41 @@ fn optical_lock_needs_line_of_sight_and_is_shorter_ranged() {
         }
     }
     assert!(optical > 0 && radar_only > 0, "optisch {optical}, nur Radar {radar_only}");
+}
+
+/// Dieselbe Richtung noch einmal wählen: zum nächstweiteren Ziel, nach dem
+/// weitesten wieder zum nächsten; die Aufschaltung bleibt zwischen den Tasten.
+#[test]
+fn same_direction_cycles_through_targets_by_range() {
+    let mut sim = near_primary();
+    step(&mut sim, flags::RADAR_TOGGLE);
+    step(&mut sim, ControlFrame::look_flags(LookDir::Right.code()));
+    step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()));
+    let first = sim.sensors().lock.expect("Aufschaltung").target;
+    let range = |sim: &Sim, i: usize| {
+        let c = sim.targets()[i].center_ned();
+        let p = sim.aircraft().position;
+        ((c[0] - p.x).powi(2) + (c[1] - p.y).powi(2) + (c[2] - p.z).powi(2)).sqrt()
+    };
+    let mut seen = vec![first];
+    for _ in 0..40 {
+        let before = sim.sensors().lock.unwrap().target;
+        step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()));
+        let after = sim.sensors().lock.expect("bleibt aufgeschaltet").target;
+        if after == first {
+            break;
+        }
+        assert!(range(&sim, after) >= range(&sim, before) - 50.0, "Weiterschalten springt näher");
+        seen.push(after);
+        // Zwischen den Tastendrücken hält die Erfassung das gewählte Ziel.
+        for _ in 0..(f29_core::sensors::UPDATE_TICKS * 2) {
+            step(&mut sim, 0);
+        }
+        assert_eq!(sim.sensors().lock.unwrap().target, after, "Aufschaltung springt zurück");
+    }
+    assert!(seen.len() >= 2, "nur {} Ziel(e) im Kegel", seen.len());
+    let mut unique = seen.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(unique.len(), seen.len(), "ein Ziel doppelt vor dem Umlauf");
 }

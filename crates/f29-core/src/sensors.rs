@@ -1,7 +1,9 @@
 //! Zielerfassung (M-013): optisches System und Radar.
 //!
 //! Beide schalten automatisch auf das **nächste** intakte Ziel in einem
-//! Kegel um die gewählte Blickrichtung auf (voraus, rechts, hinten, links).
+//! Kegel um die gewählte Blickrichtung auf (voraus, rechts, hinten, links)
+//! und halten es, solange es erfasst bleibt. Erneutes Wählen derselben
+//! Richtung schaltet zum nächstweiteren Ziel weiter.
 //! - **Radar:** große Reichweite, ohne Sichtlinie – es „sieht“ durch Berge.
 //!   Abschaltbar; eingeschaltet erhöht es später die eigene Sichtbarkeit
 //!   (M-020).
@@ -125,14 +127,12 @@ pub fn line_of_sight(height: impl Fn(f64, f64) -> f64, from: [f64; 3], to: [f64;
 }
 
 impl Sensors {
-    /// Schaltet auf das nächste Ziel in der Blickrichtung auf. `pos` ist die
-    /// eigene Position (NED), `heading` der Kurs.
-    pub fn update(&mut self, targets: &[Target], terrain: &Terrain, pos: DVec3, heading: f64) {
+    /// Kandidaten im Kegel der Blickrichtung und in Reichweite des größeren
+    /// Systems, nach Entfernung sortiert: `(Entfernung, Index)`.
+    fn candidates(&self, targets: &[Target], pos: DVec3, heading: f64) -> Vec<(f64, usize)> {
         let look = heading + self.look.offset();
-        let eye = [pos.x, pos.y, -pos.z];
-        // Kandidaten im Kegel und in Reichweite des größeren Systems, nach Entfernung.
         let max_range = if self.radar_on { RADAR_RANGE_M } else { OPTICAL_RANGE_M };
-        let mut candidates: Vec<(f64, usize)> = targets
+        let mut c: Vec<(f64, usize)> = targets
             .iter()
             .enumerate()
             .filter(|(_, t)| t.is_intact())
@@ -140,25 +140,69 @@ impl Sensors {
                 let c = t.center_ned();
                 let (dn, de, dd) = (c[0] - pos.x, c[1] - pos.y, c[2] - pos.z);
                 let range = (dn * dn + de * de + dd * dd).sqrt();
-                let bearing = detmath::atan2(de, dn);
-                let off = detmath::wrap_pi(bearing - look).abs();
+                let off = detmath::wrap_pi(detmath::atan2(de, dn) - look).abs();
                 (range <= max_range && off <= CONE_HALF_RAD).then_some((range, i))
             })
             .collect();
-        candidates.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        c.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        c
+    }
 
-        self.lock = None;
-        for (range, i) in candidates {
-            let t = &targets[i];
-            let c = t.center_ned();
-            let optical = range <= OPTICAL_RANGE_M
-                && line_of_sight(|n, e| terrain.elevation(n, e), eye, [c[0], c[1], -c[2]]);
-            let radar = self.radar_on && range <= RADAR_RANGE_M;
-            if optical || radar {
-                self.lock = Some(Lock { target: i, optical, radar });
-                return;
-            }
+    /// Erfasst ein Kandidat eines der Systeme? Liefert die Aufschaltung.
+    fn detect(
+        &self,
+        targets: &[Target],
+        terrain: &Terrain,
+        pos: DVec3,
+        range: f64,
+        i: usize,
+    ) -> Option<Lock> {
+        let c = targets[i].center_ned();
+        let optical = range <= OPTICAL_RANGE_M
+            && line_of_sight(|n, e| terrain.elevation(n, e), [pos.x, pos.y, -pos.z], [c[0], c[1], -c[2]]);
+        let radar = self.radar_on && range <= RADAR_RANGE_M;
+        (optical || radar).then_some(Lock { target: i, optical, radar })
+    }
+
+    /// Hält die Aufschaltung, solange das Ziel im Kegel liegt und erfasst
+    /// wird; sonst automatisch auf das nächste Ziel der Blickrichtung. `pos`
+    /// ist die eigene Position (NED), `heading` der Kurs.
+    pub fn update(&mut self, targets: &[Target], terrain: &Terrain, pos: DVec3, heading: f64) {
+        let candidates = self.candidates(targets, pos, heading);
+        if let Some(cur) = self.lock
+            && let Some(&(range, i)) = candidates.iter().find(|(_, i)| *i == cur.target)
+            && let Some(lock) = self.detect(targets, terrain, pos, range, i)
+        {
+            self.lock = Some(lock);
+            return;
         }
+        self.lock = candidates.iter().find_map(|&(range, i)| self.detect(targets, terrain, pos, range, i));
+    }
+
+    /// Wählt die Blickrichtung neu und schaltet auf das nächste Ziel dort.
+    pub fn look_at(
+        &mut self,
+        look: LookDir,
+        targets: &[Target],
+        terrain: &Terrain,
+        pos: DVec3,
+        heading: f64,
+    ) {
+        self.look = look;
+        self.lock = None;
+        self.update(targets, terrain, pos, heading);
+    }
+
+    /// Schaltet in der gewählten Blickrichtung zum nächstweiteren erfassten
+    /// Ziel weiter; nach dem weitesten wieder zum nächsten.
+    pub fn next_target(&mut self, targets: &[Target], terrain: &Terrain, pos: DVec3, heading: f64) {
+        let candidates = self.candidates(targets, pos, heading);
+        let start =
+            self.lock.and_then(|l| candidates.iter().position(|(_, i)| *i == l.target)).map_or(0, |k| k + 1);
+        let n = candidates.len();
+        self.lock = (0..n)
+            .map(|k| candidates[(start + k) % n])
+            .find_map(|(range, i)| self.detect(targets, terrain, pos, range, i));
     }
 }
 

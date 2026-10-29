@@ -192,6 +192,7 @@ pub(crate) fn draw(
     layout: &ScreenLayout,
     state: &MfdState,
     map: Option<&MapData>,
+    camera_feed: bool,
 ) {
     let Some(m) = layout.mfd_layout() else {
         return;
@@ -208,7 +209,7 @@ pub(crate) fn draw(
     let rs = m.right_screen;
     match state.right_page {
         RightPage::Mission => crate::pages::mission(dl, fd, rs, map),
-        RightPage::Target => crate::pages::target(dl, fd, rs),
+        RightPage::Target => crate::pages::target(dl, fd, rs, camera_feed),
         RightPage::Weapons => crate::pages::weapons(dl, fd, rs, state.selected_bay),
         RightPage::Engine => crate::pages::engine(dl, fd, rs),
         RightPage::Attitude => crate::pages::attitude(dl, fd, rs),

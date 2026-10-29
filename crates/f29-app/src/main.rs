@@ -23,6 +23,7 @@ mod sim;
 mod sound;
 mod targets;
 mod terrain;
+mod tgt_camera;
 mod view;
 
 use bevy::prelude::*;
@@ -84,6 +85,7 @@ fn main() {
         hud::HudPlugin,
         mfd::MfdPlugin,
         retro::RetroPlugin,
+        tgt_camera::TgtCameraPlugin,
         capture::CapturePlugin { auto: auto_capture },
     ))
     .run();

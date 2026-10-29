@@ -234,7 +234,12 @@ fn fuel_bar_shrinks_with_fuel() {
         fd.fuel_fraction = fraction;
         // Der Treibstoffbalken steht auf der Triebwerksseite.
         let mfd = MfdState { right_page: RightPage::Engine, ..MfdState::default() };
-        let dl = build(&fd, &layout, &HudOptions { show_hud: false, show_panel: true, mfd }, None);
+        let dl = build(
+            &fd,
+            &layout,
+            &HudOptions { show_hud: false, show_panel: true, mfd, camera_feed: false },
+            None,
+        );
         dl.lines
             .iter()
             .filter(|l| {
@@ -298,7 +303,7 @@ fn every_mfd_page_draws_inside_its_screen() {
     let mut seen = Vec::new();
     for _ in 0..RightPage::ALL.len() {
         seen.push(state.right_page);
-        let opts = HudOptions { show_hud: false, show_panel: true, mfd: state };
+        let opts = HudOptions { show_hud: false, show_panel: true, mfd: state, camera_feed: false };
         let dl = build(&fd, &layout, &opts, None);
         let screen = m.right_screen;
         let inside = dl.lines.iter().filter(|l| screen.contains(l.a) && screen.contains(l.b)).count();

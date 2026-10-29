@@ -89,8 +89,13 @@ fn draw_hud(
     transform.translation = Vec3::new(0.0, -h * 0.5 + panel_h * 0.5, -10.0);
 
     let fd = state.sim.flight_data();
-    let opts =
-        HudOptions { show_hud: view.hud && view.mode == ViewMode::Cockpit, show_panel: true, mfd: mfd.0 };
+    // Ein optisch erfasstes Ziel zeigt die Zielkamera (tgt_camera.rs) statt des Drahtgitters.
+    let opts = HudOptions {
+        show_hud: view.hud && view.mode == ViewMode::Cockpit,
+        show_panel: true,
+        mfd: mfd.0,
+        camera_feed: true,
+    };
     let list = f29_hud::build(&fd, &layout, &opts, maps.map.as_deref());
     for line in &list.lines {
         gizmos.line_2d(

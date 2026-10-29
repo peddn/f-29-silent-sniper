@@ -404,7 +404,15 @@ pub(crate) fn systems(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
 
 /// Ziel: optisches Zielbild (Drahtgitter) des aufgeschalteten Ziels, sonst
 /// Radarmarke oder „NO TARGET“; darunter Name, Klasse, Entfernung, Peilung.
-pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
+/// Bildfeld der TGT-Seite im rechten MFD-Bildschirm `screen`.
+pub fn target_image_rect(screen: Rect) -> Rect {
+    let f = frame(screen);
+    Rect { min: [f.x0, screen.max[1] - f.h * 0.53], max: [f.x1, screen.max[1] - f.h * 0.11] }
+}
+
+/// TGT-Seite. Mit `camera_feed` liegt ein gerendertes Kamerabild unter dem
+/// Bildfeld; gezeichnet werden dann nur Rahmen und Fadenkreuz.
+pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, camera_feed: bool) {
     let f = frame(screen);
     title(dl, screen, &f, "TARGET");
     let status = match &fd.target {
@@ -416,7 +424,7 @@ pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, status, Ink::Mfd);
 
     // Bildfeld
-    let img = Rect { min: [f.x0, screen.max[1] - f.h * 0.53], max: [f.x1, screen.max[1] - f.h * 0.11] };
+    let img = target_image_rect(screen);
     dl.rect(img, Ink::MfdDim);
     let c = img.center();
     let half = (img.max[1] - img.min[1]) * 0.5;
@@ -426,6 +434,8 @@ pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
         dl.line(a, [a[0] - dx * tick, a[1] - dy * tick], Ink::MfdDim);
     }
     match &fd.target {
+        // Bild kommt aus dem Frontend (gerenderte Zielkamera).
+        Some(t) if t.optical && camera_feed => {}
         Some(t) if t.optical => {
             dl.set_clip(Some(img));
             target_image(dl, t, c, half);

@@ -66,7 +66,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | G | Y / Dreieck | Fahrwerk aus/ein (am Boden gesperrt) |
 | N | A / Kreuz | nächster Navigationspunkt |
 | V | rechter Stick drücken | Radar ein/aus (schaltet ohne Sichtlinie auf, erhöht später die eigene Sichtbarkeit) |
-| I / L / K / J | Steuerkreuz | Blickrichtung der Zielerfassung: voraus / rechts / hinten / links (schaltet automatisch auf das nächste Ziel) |
+| I / L / K / J | Steuerkreuz | Blickrichtung der Zielerfassung: voraus / rechts / hinten / links (schaltet automatisch auf das nächste Ziel; dieselbe Richtung noch einmal = nächstweiteres Ziel) |
 | Shift+F1 / Shift+F2 | Select | Cockpit / Verfolger |
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
 | Shift+F4 | | HUD ein/aus |
@@ -162,6 +162,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Sekundärziel; Zielerfassung optisch (mit Sichtlinie) und per Radar
       (abschaltbar, durch Berge), automatisch auf das nächste Ziel der
       Blickrichtung; HUD-Zielrahmen und MFD-Seite mit optischem Zielbild (v0.2.1)
+- [x] Ziele einer Richtung durchschalten; Zielbild als gezoomte, verrauschte
+      Kamera (v0.2.2)
 - [ ] Waffenschacht, Bomben mit echter Ballistik, CCIP/CCRP-Zielhilfe im HUD
 - [ ] Wirkungsmatrix Waffe × Zielklasse, Wirkradius, gehärtete Ziele + Toss-Bombing
 - [ ] Bodenziele und Boden-Luft-Bedrohungen (Radar-SAM, Flak)
