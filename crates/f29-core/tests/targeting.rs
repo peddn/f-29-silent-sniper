@@ -152,7 +152,18 @@ fn same_direction_cycles_through_targets_by_range() {
         if after == first {
             break;
         }
-        assert!(range(&sim, after) >= range(&sim, before) - 50.0, "Weiterschalten springt näher");
+        // Näher heißt: Umlauf nach dem weitesten Ziel – dann auf das nächste.
+        // (Im Flug verschieben sich die Entfernungen, das nächste ist nicht
+        // immer das erste.)
+        if range(&sim, after) < range(&sim, before) - 50.0 {
+            let look = sim.sensors().look;
+            assert_eq!(
+                Some(after),
+                nearest_in_cone(&sim, look, f29_core::sensors::RADAR_RANGE_M),
+                "Weiterschalten springt näher, aber nicht auf das nächste Ziel"
+            );
+            break;
+        }
         seen.push(after);
         // Zwischen den Tastendrücken hält die Erfassung das gewählte Ziel.
         for _ in 0..(f29_core::sensors::UPDATE_TICKS * 2) {

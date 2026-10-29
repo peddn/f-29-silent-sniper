@@ -443,6 +443,8 @@ pub struct PingInfo {
     pub signal: f64,
     pub stealth: f64,
     pub hit: bool,
+    /// Typ des pingenden Radars.
+    pub kind: RadarKind,
 }
 
 /// Radarstellung für die Karte.
@@ -696,6 +698,7 @@ impl Sim {
             flaps: a.flaps,
             airbrake: a.airbrake,
             radar_on: self.sensors.radar_on,
+            on_ground: a.on_ground,
         }
     }
 
@@ -753,6 +756,7 @@ impl Sim {
                 signal: p.signal,
                 stealth: p.stealth,
                 hit: p.hit,
+                kind: self.radar.sites[p.site].spec.kind,
             }),
             ping_point: self.radar.latest_ping_point(),
             sites: self

@@ -158,3 +158,30 @@ fn radar_state_is_deterministic() {
     };
     assert_eq!(run(), run());
 }
+
+/// Start auf der Heimatbasis: am Boden unsichtbar, und keine feindliche
+/// Radarstellung steht näher als 35 km an der Basis.
+#[test]
+fn takeoff_roll_stays_undetected() {
+    for seed in [SEED, 1, 77, 1234] {
+        let probe = Sim::new(SimConfig::runway(seed));
+        let home = probe.terrain().runways()[0].center;
+        for s in &probe.radar().sites {
+            let t = &probe.targets()[s.target];
+            let d = (t.north - home[0]).hypot(t.east - home[1]);
+            assert!(
+                d > f29_core::targets::HOME_RADAR_CLEARANCE_M,
+                "Seed {seed}: Radar {d:.0} m von der Basis"
+            );
+        }
+    }
+    let mut sim = Sim::new(SimConfig::runway(SEED));
+    // Vollgas mit Fahrwerk und Klappen, Rollen ohne abzuheben
+    for _ in 0..(20 * TICK_HZ) {
+        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 1.0, flags::GEAR | flags::FLAPS));
+        if !sim.aircraft().on_ground {
+            break;
+        }
+    }
+    assert_eq!(sim.radar().max_alert(), 0);
+}

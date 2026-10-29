@@ -667,8 +667,8 @@ fn hud_modes_show_their_symbology() {
     assert_eq!(HudMode::Nav.next().next().next(), HudMode::Nav);
 }
 
-/// Stealth-Anzeige: Ragt der Impuls über das Stealth-Level, wird sein Balken
-/// rot; Alarmstufen leuchten als Lampen. Entdeckende Stellungen zeigen auf
+/// Stealth-Anzeige: ein Balken für das Stealth-Level; ein Ping erscheint als
+/// Strich, rot, wenn er darüber liegt (Treffer); Alarmstufen als Lampen. Entdeckende Stellungen zeigen auf
 /// der Karte ihren Reichweitenkreis.
 #[test]
 fn signature_gauge_and_radar_circles() {
@@ -699,10 +699,24 @@ fn signature_gauge_and_radar_circles() {
     let mut hidden = base.clone();
     hidden.threat.stealth = 0.6;
     hidden.threat.worst = Some(site(0.4, 0));
-    let mut seen = hidden.clone();
-    seen.threat.worst = Some(site(0.8, 0));
+    let ping = |signal: f64, age_s: f64| {
+        let mut fd = hidden.clone();
+        fd.threat.last_ping = Some(f29_core::PingInfo {
+            tick: 1,
+            age_s,
+            signal,
+            stealth: 0.6,
+            hit: signal > 0.6,
+            kind: RadarKind::Doppler,
+        });
+        fd
+    };
     assert_eq!(red_in(&hidden, m.center), 0);
-    assert!(red_in(&seen, m.center) > 10, "Impuls über Stealth-Level nicht rot");
+    // Ein Ping über dem Stealth-Level: roter Strich; darunter nicht rot;
+    // nach einer Sekunde verschwindet er.
+    assert!(red_in(&ping(0.8, 0.2), m.center) >= 4, "Treffer-Ping nicht rot");
+    assert_eq!(red_in(&ping(0.4, 0.2), m.center), 0);
+    assert_eq!(red_in(&ping(0.8, 1.5), m.center), 0);
     let mut alarmed = hidden.clone();
     alarmed.threat.max_alert = 3;
     assert!(red_in(&alarmed, m.center) >= 12, "Alarmlampen");

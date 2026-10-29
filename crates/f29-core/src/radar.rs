@@ -109,6 +109,8 @@ pub struct Exposure {
     pub airbrake: f64,
     /// Eigenes Radar eingeschaltet.
     pub radar_on: bool,
+    /// Am Boden: in den Bodenechos verborgen, für jedes Radar unsichtbar.
+    pub on_ground: bool,
 }
 
 impl Exposure {
@@ -134,7 +136,7 @@ impl Exposure {
     pub fn signal(&self, spec: &RadarSpec, site: DVec3) -> f64 {
         let to = self.position - site;
         let r = to.length() / spec.range_m;
-        if r >= 1.0 {
+        if r >= 1.0 || self.on_ground {
             return 0.0;
         }
         let base = 1.0 - r;
@@ -330,6 +332,7 @@ mod tests {
             flaps: 0.0,
             airbrake: 0.0,
             radar_on: false,
+            on_ground: false,
         }
     }
 
@@ -342,6 +345,8 @@ mod tests {
         let far = level(-40_000.0, 0.0).signal(&EARLY_WARNING, SITE);
         assert!(near > far && far > 0.0);
         assert_eq!(level(-61_000.0, 0.0).signal(&EARLY_WARNING, SITE), 0.0);
+        // Am Boden in den Bodenechos verborgen
+        assert_eq!(Exposure { on_ground: true, ..x }.signal(&SAM, SITE), 0.0);
     }
 
     #[test]

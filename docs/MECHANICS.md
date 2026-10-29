@@ -1110,7 +1110,10 @@ Format jedes Eintrags:
   - **Pings:** Jede Stellung pingt einmal je Antennenumlauf (versetzt je
     Stellung). Nur dann wird gerechnet.
   - **Impulsstärke** am Flugzeug: fällt linear mit der Entfernung bis zur
-    Reichweitengrenze. Doppler: schwach, wenn das Flugzeug quer zur Stellung
+    Reichweitengrenze. Am Boden ist das Flugzeug für jedes Radar unsichtbar
+    (Bodenechos); feindliche Radare stehen mindestens 35 km von der
+    Heimatbasis entfernt (nach dem ersten Spieltest v0.2.9: entdeckt beim
+    Anrollen). Doppler: schwach, wenn das Flugzeug quer zur Stellung
     fliegt (nur die Bewegung auf sie zu oder von ihr weg zählt). Impuls:
     richtungsunabhängig, im Tiefflug schwach (Bodenechos, glatt zwischen
     50 und 400 m über Grund).
@@ -1126,9 +1129,12 @@ Format jedes Eintrags:
     beim Frühwarnradar mit Langstreckenraketen; kommt mit dem
     Schadensmodell). Ohne Treffer sinkt die Stufe nach 30 s um eins; bei 0
     „LOST CONTACT“.
-  - **Anzeigen:** SIG-Säule zwischen den MFDs (links Stealth-Level, rechts
-    Impuls der gefährlichsten Stellung, rot, wenn er darüber liegt; drei
-    Alarmlampen; Radartyp PLS/DOP), heller Strich beim Ping, Pieps des
+  - **Anzeigen:** SIG-Säule zwischen den MFDs mit **einem** Balken für das
+    Stealth-Level (Spielerwunsch v0.2.9). Jeder Ping erscheint für eine
+    Sekunde als Querstrich in seiner Stärke – rot und über dem Balken ist ein
+    Treffer (Alarmstufe dieses Radars +1), gelb darunter keiner; solange der
+    Strich steht, zeigt der Balken das Stealth-Level gegenüber genau diesem
+    Radar. Drei Alarmlampen, Radartyp PLS/DOP, Pieps des
     Radarwarnempfängers (Treffer doppelt und höher), Reichweitenkreise und
     gemerkter Ping-Ort auf der Karte. Der Zustand geht in den Zustandshash ein.
 - **Unsere Werte:** Frühwarnradar 60 km, Umlauf 10 s; SAM 30 km, Umlauf 5 s.

@@ -13,7 +13,7 @@
 use crate::detmath;
 use crate::nav::Steerpoint;
 use crate::rng::Pcg32;
-use f29_terrain::{Surface, Terrain};
+use f29_terrain::{AirfieldKind, Surface, Terrain};
 
 /// RNG-Strom der Zielplatzierung.
 pub const STREAM_TARGETS: u64 = 0x5447_5453;
@@ -250,6 +250,8 @@ impl Target {
 
 /// Mindestabstand zwischen zwei Zielen (m).
 const MIN_SPACING_M: f64 = 120.0;
+/// Mindestabstand feindlicher Radarstellungen zur Heimatbasis (m).
+pub const HOME_RADAR_CLEARANCE_M: f64 = 35_000.0;
 /// Mindestabstand zu Flugplätzen (m).
 const RUNWAY_CLEARANCE_M: f64 = 2_500.0;
 
@@ -287,7 +289,13 @@ impl Placer<'_> {
         }
         let ok_surface = matches!(surface, Surface::Grass | Surface::Forest | Surface::Beach);
         let flat = 1.0 - self.terrain.normal(n, e)[2] < 0.12;
-        ok_surface && flat
+        // Feindliche Radare nicht in der Nähe der eigenen Heimatbasis.
+        let away_from_home = !class.is_radar()
+            || self.terrain.runways().iter().filter(|r| r.kind == AirfieldKind::Home).all(|r| {
+                let (dn, de) = (r.center[0] - n, r.center[1] - e);
+                dn * dn + de * de > HOME_RADAR_CLEARANCE_M * HOME_RADAR_CLEARANCE_M
+            });
+        ok_surface && flat && away_from_home
     }
 
     fn name(&mut self, class: TargetClass) -> (&'static str, bool) {
@@ -388,7 +396,9 @@ pub fn generate(terrain: &Terrain, seed: u64, route: &[Steerpoint]) -> Vec<Targe
         );
     }
     // Sekundärziel
-    let secondary_class = p.pick(&[TargetClass::Soft, TargetClass::Armored, TargetClass::AirDefense]);
+    // (keine Radarstellung: Der erste Wegpunkt liegt oft nahe der Heimatbasis,
+    // dort stehen keine feindlichen Radare)
+    let secondary_class = p.pick(&[TargetClass::Soft, TargetClass::Armored, TargetClass::Building]);
     if let Some((n, e)) = p.find_spot(secondary_class, secondary_wp[0], secondary_wp[1], 0.0, 2_500.0) {
         p.site(secondary_class, n, e, TargetRole::Secondary, &[TargetClass::Soft, TargetClass::Soft]);
     }
