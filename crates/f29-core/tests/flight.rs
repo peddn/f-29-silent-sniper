@@ -235,22 +235,6 @@ fn stall_warning_precedes_stall() {
 }
 
 #[test]
-fn hard_turn_bleeds_energy() {
-    // 70° Querlage, voll ziehen, 10 s: deutlicher Energieverlust (Höhe + Fahrt),
-    // selbst mit Vollschub. Wer zu hart zieht, spiralt nach unten.
-    let mut sim = high_sim(2_000.0, 180.0, 1.0);
-    let energy = |fd: &f29_core::FlightData| fd.altitude_m + fd.tas_mps * fd.tas_mps / (2.0 * 9.81);
-    let e0 = energy(&sim.flight_data());
-    for _ in 0..ticks(10.0) {
-        let fd = sim.flight_data();
-        let roll = ((70.0_f64.to_radians() - fd.roll) * 3.0).clamp(-1.0, 1.0);
-        sim.step(ControlFrame::from_analog(1.0, roll, 0.0, 1.0, 0));
-    }
-    let lost = e0 - energy(&sim.flight_data());
-    assert!(lost > 300.0, "nur {lost:.0} m Energiehöhe verloren in 10 s harter Kurve");
-}
-
-#[test]
 fn steep_zoom_climb_ends_in_stall() {
     // Steil hochziehen und halten: die Fahrt reicht nicht, die Strömung reißt ab.
     let mut sim = high_sim(3_000.0, 200.0, 1.0);
@@ -426,88 +410,4 @@ fn flaps_lower_stall_speed_and_work_at_any_speed() {
     let mut fast = high_sim(2_000.0, 220.0, 0.8);
     fly(&mut fast, 4.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, flags::FLAPS));
     assert!(fast.flight_data().flaps > 0.99, "Klappen bei 220 m/s nicht ausgefahren");
-}
-
-/// Schnell und am g-Begrenzer: Mit Klappen kostet die Kurve weniger Fahrt,
-/// geradeaus kosten sie etwas Fahrt.
-#[test]
-fn flaps_reduce_energy_loss_in_hard_turns() {
-    use f29_core::controls::flags;
-    let turn = |f: u8| {
-        let mut sim = high_sim(1_500.0, 230.0, 1.0);
-        for _ in 0..ticks(8.0) {
-            let fd = sim.flight_data();
-            let roll = ((80.0_f64.to_radians() - fd.roll) * 3.0).clamp(-1.0, 1.0);
-            sim.step(ControlFrame::from_analog(1.0, roll, 0.0, 1.0, f));
-        }
-        (sim.flight_data().tas_mps, sim.aircraft().stall)
-    };
-    let (v_clean, _) = turn(0);
-    let (v_flaps, stall_flaps) = turn(flags::FLAPS);
-    assert!(v_flaps > v_clean + 5.0, "mit Klappen {v_flaps:.0} m/s, ohne {v_clean:.0} m/s");
-    assert!(stall_flaps < 0.05, "Abriss mit Klappen: {stall_flaps}");
-
-    let cruise = |f: u8| {
-        let mut sim = high_sim(1_500.0, 200.0, 0.7);
-        fly(&mut sim, 20.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, f));
-        sim.flight_data().tas_mps
-    };
-    assert!(cruise(flags::FLAPS) < cruise(0) - 1.0, "Klappen kosten geradeaus keine Fahrt");
-}
-
-/// Langsam: Ohne Klappen kippt das Flugzeug bei halbem Zug ab, mit Klappen
-/// bleibt es beherrschbar (mehr Nickrate, kein Abkippen).
-#[test]
-fn flaps_make_slow_flight_controllable() {
-    use f29_core::controls::flags;
-    // Langsame Kurve mit 45° Querlage und halbem Zug.
-    let probe = |f: u8| {
-        let mut sim = high_sim(1_500.0, 70.0, 0.8);
-        fly(&mut sim, 3.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, f));
-        let (mut q, mut min_pitch) = (0.0_f64, f64::MAX);
-        for i in 0..ticks(10.0) {
-            let c = if i < ticks(4.0) {
-                banked(&sim, 0.785, 0.6, 0.8, f)
-            } else {
-                ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, f)
-            };
-            sim.step(c);
-            q = q.max(sim.aircraft().body_rates.y);
-            min_pitch = min_pitch.min(sim.flight_data().pitch);
-        }
-        (q, min_pitch)
-    };
-    let (q_clean, nose_clean) = probe(0);
-    let (q_flaps, nose_flaps) = probe(flags::FLAPS);
-    // Seit v0.1.16 wirken die Klappen schwächer auf die Ruder (Spielerwunsch).
-    assert!(q_flaps > 1.2 * q_clean, "Nickrate mit Klappen {q_flaps:.3}, ohne {q_clean:.3}");
-    assert!(nose_clean < -0.3, "ohne Klappen kein Abkippen: {:.0}°", nose_clean.to_degrees());
-    // Seit v0.1.16 entschärfen Klappen den Abriss nur noch teilweise: Die Nase
-    // fällt auch mit Klappen, aber deutlich weniger tief.
-    assert!(
-        nose_flaps > nose_clean + 0.35,
-        "Klappen mildern das Abkippen kaum: {:.0}°",
-        nose_flaps.to_degrees()
-    );
-}
-
-/// Hochziehen im Geradeausflug reißt später ab als derselbe Zug in steiler
-/// Kurve: Im Steigflug ist erst die verbrauchte Fahrt das Ende.
-#[test]
-fn hard_turn_stalls_sooner_than_wings_level_pull() {
-    let first_stall = |bank: f64| {
-        let mut sim = high_sim(2_000.0, 95.0, 1.0);
-        for i in 0..ticks(20.0) {
-            let c = banked(&sim, bank, 1.0, 1.0, 0);
-            sim.step(c);
-            if sim.aircraft().is_stalled() {
-                return i as f64 / f64::from(TICK_HZ);
-            }
-        }
-        f64::INFINITY
-    };
-    let turn = first_stall(1.22);
-    let level = first_stall(0.0);
-    assert!(turn < 2.0, "70°-Kurve reißt erst nach {turn:.1} s ab");
-    assert!(level > turn + 2.0, "Hochziehen reißt nach {level:.1} s ab, Kurve nach {turn:.1} s");
 }

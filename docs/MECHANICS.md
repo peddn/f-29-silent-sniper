@@ -264,7 +264,29 @@ Format jedes Eintrags:
   40 ft. Ein Abriss aus 40° Steigflug kostet ohne Klappen etwa 5200 ft
   (vorher 3900 ft), mit Klappen 3500 ft (vorher 340 ft). Wer nach dem Start
   voll gezogen hält, kann jetzt auch mit Klappen abstürzen.
-- **Status:** umgesetzt (v0.1.4, Durchsacken v0.1.15, Einrastung v0.1.16)
+
+  *v0.1.17 – Vereinfachung:* Das Abrissmodell war über viele Versionen
+  gewachsen; jede Abstimmung brauchte mehrere Runden. Jetzt gilt:
+  - Zwei Auslöser: Fahrt unter der Abrissfahrt bei der aus dem Knüppel
+    angeforderten g-Last (bleibt, setzt die Spielerwünsche „harte Kurven
+    reißen schnell ab, Hochziehen erst bei verbrauchter Fahrt“ um), oder
+    Anstellwinkel über dem Abrisswinkel. Einrastung und Erholung wie in v0.1.16.
+  - Klappen wirken auf den Abriss nur noch über einen Regler,
+    `flap_stall_relief` (0,45). Er mildert Einrastung, Abkippen und
+    Durchsacken. Entfallen sind die Klappenwirkung auf Auftriebseinbruch,
+    Ruderverlust und Abriss-Einsatz (`flap_stall_softening` an sechs Stellen),
+    die eigene Durchsacklinderung `flap_sink_relief` und die Ruderhilfe
+    `flap_control_q_factor`. Der Ruderverlust im Abriss ist eine Konstante.
+  - Verhaltenstests prüfen Kennwerte gegen Toleranzbänder
+    (`f29_core::envelope`, `tests/envelope.rs`) statt einzelner Flugbahnen.
+    Die Übersicht liefert `cargo run --release -p f29-core --example
+    flight_report`; es ersetzt die Beispiele `stall_loss`, `stall_trace`,
+    `turn_trace`, `slow_trace` und `bank_stall`.
+  Folgen gegenüber v0.1.16: Mit Klappen kostet ein Abriss etwas mehr Höhe
+  (horizontal ≈ 2800 statt 2200 ft, aus dem Steigflug ≈ 4300 statt 3500 ft).
+  Ohne Klappen bleibt alles gleich.
+- **Status:** umgesetzt (v0.1.4, Durchsacken v0.1.15, Einrastung v0.1.16,
+  vereinfacht v0.1.17)
 
 ### M-009 Treibstoff
 
@@ -447,13 +469,18 @@ Format jedes Eintrags:
     `flap_sink_relief` 0,6 → 0,4 und der Ruderhilfe `flap_control_q_factor`
     0,35 → 0,5. Die Abrissgeschwindigkeit sinkt weiterhin um etwa 15 %. Ein
     Abriss mit Klappen ist milder, aber nicht mehr harmlos (M-004).
-  - Gemessen: Bei 135 kt und halbem Zug kippt das Flugzeug ohne Klappen auf
+  - *v0.1.17 (Vereinfachung):* Die Klappen wirken jetzt über vier Größen:
+    Auftrieb (`flap_cl`, Abrissfahrt etwa −14 %), Widerstand (`flap_cd`),
+    Manöverklappen (`flap_induced_factor`) und Milderung von Abriss und
+    Durchsacken (`flap_stall_relief`). Die Ruderhilfe bei geringer Fahrt ist
+    entfallen. Dazu halbieren sie weiterhin die Turbulenz (M-006).
+  - Gemessen (bis v0.1.15): Bei 135 kt und halbem Zug kippt das Flugzeug ohne Klappen auf
     −78° ab; mit Klappen bleibt die Nase oben, die Nickrate ist doppelt so hoch,
     die Rollrate bei 140 kt steigt von 44°/s auf 126°/s. Bei 450 kt und 8 s am
     g-Begrenzer bleiben mit Klappen ≈ 25 kt mehr Fahrt.
 - **Unsere Werte:** `crates/f29-data/src/aircraft.rs` (Abrissgeschwindigkeit mit
   Klappen ≈ 85 % von ohne).
-- **Status:** umgesetzt (v0.1.4, erweitert v0.1.8)
+- **Status:** umgesetzt (v0.1.4, erweitert v0.1.8, vereinfacht v0.1.17)
 
 ### M-008 Bodenkollisions-Abfanghilfe (geplant)
 

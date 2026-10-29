@@ -167,6 +167,8 @@ const STALL_PATH_ALIGN: f64 = 1.6;
 const STALL_ALPHA_FULL: f64 = 0.2;
 /// Ab diesem Winkel zur Senkrechten (rad) kippt die Nase im Abriss nicht weiter.
 const STALL_DIVE_CONE: f64 = 0.2;
+/// Anteil der Ruderwirkung, der bei vollem Abriss bleibt.
+const STALL_CONTROL_RETAINED: f64 = 0.1;
 /// Zusätzlicher Widerstandsbeiwert bei vollem Abriss.
 const STALL_EXTRA_DRAG: f64 = 0.08;
 /// Abrissstärke, ab der ein Abriss als „merklich“ gilt (Anzeige, Tests).
@@ -223,16 +225,15 @@ pub fn drag_coefficient(spec: &AircraftSpec, alpha: f64, cl: f64, airbrake: f64,
 /// spürt. Ein Zusatzwiderstand von Gewicht × sin(Winkel) verhindert, dass das
 /// Sinken in Fahrt umgesetzt wird: Bei gehaltener Nicklage sinkt das Flugzeug
 /// stetig mit etwa Fahrt × sin(Winkel). Wer die Höhe halten will, nimmt die
-/// Nase höher und braucht mehr Schub. Er wächst quadratisch zur Abrissfahrt hin; Klappen lindern
-/// ihn um `flap_sink_relief`.
+/// Nase höher und braucht mehr Schub. Er wächst quadratisch zur Abrissfahrt
+/// hin; Klappen lindern ihn (siehe [`flap_relief`]).
 pub fn sink_angle(spec: &AircraftSpec, tas: f64, stall_speed_1g: f64, flaps: f64) -> f64 {
     if stall_speed_1g <= 0.0 {
         return 0.0;
     }
     let onset = spec.sink_onset_factor;
     let x = ((onset - tas / stall_speed_1g) / (onset - 1.0)).clamp(0.0, 1.0);
-    let relief = 1.0 - spec.flap_sink_relief * flaps.clamp(0.0, 1.0);
-    spec.sink_angle_max_rad * x * x * relief
+    spec.sink_angle_max_rad * x * x * flap_relief(spec, flaps)
 }
 
 /// Radhöhe (m), unter der das Durchsacken zum Boden hin linear verschwindet
@@ -274,7 +275,7 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
         + spec.gear_cd * s.gear;
     if s.stall > 0.0 {
         // Abgerissene Strömung: Auftrieb bricht ein, Widerstand steigt.
-        cl *= 1.0 + (stall_lift_factor(spec, s.flaps) - 1.0) * s.stall;
+        cl *= 1.0 + (spec.stall_lift_factor - 1.0) * s.stall;
         cd += STALL_EXTRA_DRAG * s.stall;
     }
     let ca = detmath::cos(alpha);
@@ -413,14 +414,14 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
     let v = aero.tas;
 
     // Ruderwirksamkeit sinkt mit dem Staudruck.
-    let eff = control_effectiveness(spec, aero.qbar, s.flaps);
+    let eff = control_effectiveness(spec, aero.qbar);
 
     // --- Nicken ---
     // Ratenkommando: Knüppel neutral ⇒ q = 0. Der Geradeausflug ist damit
     // ein stabiles Gleichgewicht (zu wenig Auftrieb ⇒ Bahn krümmt sich nach
     // unten ⇒ α wächst ⇒ Auftrieb wächst), es braucht keine Kompensation.
     // Im Abriss verlieren die Ruder ihre Wirkung (stetig mit der Abrissstärke).
-    let stall_eff = 1.0 + (stall_control_factor(spec, s.flaps) - 1.0) * aero.stall;
+    let stall_eff = 1.0 + (STALL_CONTROL_RETAINED - 1.0) * aero.stall;
     let mut q_cmd = c.pitch_f() * spec.max_pitch_rate * eff * stall_eff;
     if v > MIN_FBW_SPEED {
         // g-Begrenzer über die Bahnkrümmung n ≈ V·q/g + cosθ·cosφ.
@@ -440,20 +441,21 @@ fn fbw_rate_command(spec: &AircraftSpec, s: &AircraftState, aero: &AeroData, c: 
     DVec3::new(p_cmd, q_cmd, r_cmd) + stall_departure_rates(spec, s)
 }
 
-/// Vom Piloten angeforderte g-Last (aus dem Knüppel, nicht aus dem tatsächlich
-/// erreichten Auftrieb – sonst würde der Auftriebsverlust im Abriss die
-/// Abrissgeschwindigkeit sofort wieder senken und es entstünde ein Pendeln).
-///
-/// Voller Zug fordert höchstens `stall_stick_g` zusätzliche g an – oder
-/// weniger, wenn die Ruder bei geringem Staudruck gar nicht mehr Nickrate
-/// erzeugen können (n = 1 + V·q/g). So lässt sich bei Landefahrt behutsam
-/// abfangen, während harter Zug bei Kampffahrt unverändert früh abreißt.
-///
-/// Die Anforderung hängt außerdem von der Querlage ab: Mit waagerechten
-/// Flächen (Hochziehen, Steigflug, Start) zählt nur der Anteil
-/// `stall_stick_level_factor`, in steiler Kurve die volle Anforderung. Im
-/// Steigflug reißt die Strömung so erst ab, wenn die Fahrt verbraucht ist,
-/// in der harten Kurve dagegen schnell.
+/// Ruderwirksamkeit 0,1..1, steigt mit dem Staudruck.
+pub fn control_effectiveness(spec: &AircraftSpec, qbar: f64) -> f64 {
+    (qbar / spec.control_q_ref_pa).clamp(0.1, 1.0)
+}
+
+/// Vom Piloten angeforderte g-Last aus dem Knüppel (nicht aus dem erreichten
+/// Auftrieb). Sie erhöht die Abrissfahrt (beschleunigter Abriss) und setzt
+/// zwei Spielerwünsche um:
+/// - Harte Kurven reißen schnell ab: Voller Zug fordert bis zu
+///   `stall_stick_g` zusätzliche g – oder weniger, wenn die Ruder bei geringem
+///   Staudruck gar nicht mehr Nickrate erzeugen können (n = 1 + V·q/g).
+/// - Hochziehen mit waagerechten Flächen (Start, Steigflug) reißt erst ab,
+///   wenn die Fahrt verbraucht ist: Dann zählt nur der Anteil
+///   `stall_stick_level_factor`, in steiler Querlage die volle Anforderung
+///   (Gewichtung über sin² der Querlage).
 pub fn demanded_load_factor(
     spec: &AircraftSpec,
     s: &AircraftState,
@@ -469,38 +471,15 @@ pub fn demanded_load_factor(
 
 /// Zusätzliche g-Anforderung pro voller Knüppelauslenkung.
 pub fn stick_g_per_unit(spec: &AircraftSpec, tas: f64, qbar: f64) -> f64 {
-    // Bewusst ohne Klappenverstärkung: Die stärkeren Ruder mit Klappen sollen
-    // den Langsamflug beherrschbar machen, nicht früher abreißen lassen.
-    let rate_g = tas * spec.max_pitch_rate * control_effectiveness(spec, qbar, 0.0) / G0;
+    let rate_g = tas * spec.max_pitch_rate * control_effectiveness(spec, qbar) / G0;
     rate_g.min(spec.stall_stick_g)
 }
 
-/// Ruderwirksamkeit 0,1..1, steigt mit dem Staudruck.
-pub fn control_effectiveness(spec: &AircraftSpec, qbar: f64, flaps: f64) -> f64 {
-    let q_ref = spec.control_q_ref_pa * (1.0 + (spec.flap_control_q_factor - 1.0) * flaps);
-    (qbar / q_ref).clamp(0.1, 1.0)
+/// Faktor 0..1, mit dem Klappen Abriss und Durchsacken mildern: Einrastung,
+/// Abkippen und Durchsackwinkel werden damit multipliziert.
+pub fn flap_relief(spec: &AircraftSpec, flaps: f64) -> f64 {
+    1.0 - spec.flap_stall_relief * flaps.clamp(0.0, 1.0)
 }
-
-/// Anteil 0..1, um den die Klappen den Abriss entschärfen.
-fn stall_softening(spec: &AircraftSpec, flaps: f64) -> f64 {
-    spec.flap_stall_softening * flaps.clamp(0.0, 1.0)
-}
-
-/// Auftriebsanteil bei vollem Abriss; Klappen mildern den Einbruch.
-fn stall_lift_factor(spec: &AircraftSpec, flaps: f64) -> f64 {
-    let soft = stall_softening(spec, flaps);
-    spec.stall_lift_factor + (SOFT_STALL_RETAINED - spec.stall_lift_factor).max(0.0) * soft
-}
-
-/// Ruderanteil bei vollem Abriss; Klappen erhalten mehr Ruderwirkung.
-fn stall_control_factor(spec: &AircraftSpec, flaps: f64) -> f64 {
-    let soft = stall_softening(spec, flaps);
-    spec.stall_control_factor + (SOFT_STALL_RETAINED - spec.stall_control_factor).max(0.0) * soft
-}
-
-/// Auftriebs- bzw. Ruderanteil, dem sich der Abriss mit voll entschärfenden
-/// Klappen annähert.
-const SOFT_STALL_RETAINED: f64 = 0.75;
 
 /// Abrissgeschwindigkeit bei Luftdichte `density` und g-Last `n` (m/s).
 pub fn stall_speed(spec: &AircraftSpec, mass_kg: f64, density: f64, n: f64, flaps: f64) -> f64 {
@@ -513,14 +492,13 @@ pub fn flight_path_angle(s: &AircraftState) -> f64 {
     if v < MIN_AERO_SPEED { 0.0 } else { detmath::asin(-s.velocity.z / v) }
 }
 
-/// Ziel-Abrissstärke 0..1 aus dem relativen Fahrtdefizit.
-fn stall_target(spec: &AircraftSpec, v_stall: f64, tas: f64, flaps: f64) -> f64 {
-    ((v_stall - tas) / (stall_deficit_full(spec, flaps) * v_stall)).clamp(0.0, 1.0)
-}
-
-/// Fahrtdefizit für vollen Abriss; mit Klappen setzt der Abriss allmählicher ein.
-fn stall_deficit_full(spec: &AircraftSpec, flaps: f64) -> f64 {
-    spec.stall_deficit_full * (1.0 + stall_softening(spec, flaps))
+/// Ziel-Abrissstärke 0..1 aus zwei Auslösern: Fahrt unter der Abrissfahrt
+/// `vs` (bei der angeforderten g-Last; Defizit relativ, voll ab
+/// `stall_deficit_full`) oder Anstellwinkel über dem Abrisswinkel.
+pub fn stall_target(spec: &AircraftSpec, vs: f64, tas: f64, wing_alpha: f64) -> f64 {
+    let by_speed = ((vs - tas) / (spec.stall_deficit_full * vs)).clamp(0.0, 1.0);
+    let by_alpha = ((wing_alpha.abs() - spec.alpha_stall_rad) / STALL_ALPHA_FULL).clamp(0.0, 1.0);
+    by_speed.max(by_alpha)
 }
 
 /// Abkippen im Abriss: Drehung, die die Nase aus jeder Lage Richtung
@@ -544,8 +522,7 @@ fn stall_departure_rates(spec: &AircraftSpec, s: &AircraftState) -> DVec3 {
     let dir = if len > 0.05 { axis / len } else { DVec3::new(0.0, -1.0, 0.0) };
     // Weich auslaufen, wenn die Nase fast senkrecht steht
     let fade = ((angle - STALL_DIVE_CONE) / 0.4).min(1.0);
-    let soft = stall_softening(spec, s.flaps);
-    dir * (spec.stall_pitch_break * (1.0 - soft) * fade * s.stall)
+    dir * (spec.stall_pitch_break * flap_relief(spec, s.flaps) * fade * s.stall)
 }
 
 /// Ein Integrationsschritt. `gust` sind Störungen der Drehraten (rad/s, z. B.
@@ -578,8 +555,8 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
             // Flugbahn zur Nase drehen: Kraft senkrecht zur Geschwindigkeit,
             // ändert also nur die Richtung, nicht den Betrag der Fahrt.
             let to_nose = DVec3::X - v_hat * v_hat.x;
-            let soft = stall_softening(spec, s.flaps);
-            force_body += to_nose * (mass * aero.tas * STALL_PATH_ALIGN * (1.0 - soft) * s.stall);
+            let relief = flap_relief(spec, s.flaps);
+            force_body += to_nose * (mass * aero.tas * STALL_PATH_ALIGN * relief * s.stall);
         }
     }
     let force_world = s.attitude.rotate(force_body) + DVec3::new(0.0, 0.0, mass * G0);
@@ -590,32 +567,26 @@ pub fn step(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, gust: 
     s.position += s.velocity * dt;
     s.attitude = (s.attitude * DQuat::from_rotation_vector(s.body_rates * dt)).normalize();
 
-    // Abrissstärke folgt stetig dem Fahrtdefizit gegenüber der (g-abhängigen)
-    // Abrissgeschwindigkeit. Zusätzlich wächst sie jenseits des Abrisswinkels
-    // mit dem Anstellwinkel, damit auch knapp über der Abrissgeschwindigkeit
-    // kein absurder Anstellwinkel entsteht. Die Erholung ist träge: Erst ab
-    // `stall_recovery_factor` × 1-g-Abrissfahrt klingt der Abriss ab, und dann
-    // mit `stall_recovery_time_s`.
-    let (target, recovering) = if aero.tas >= MIN_AERO_SPEED {
+    // Abrissstärke folgt stetig ihrem Ziel (siehe [`stall_target`]). Ein
+    // merklicher Abriss „rastet ein“: Bis die Fahrt `stall_recovery_factor` ×
+    // 1-g-Abrissfahrt erreicht, bleibt er mindestens bei `stall_latch_strength`
+    // (mit Klappen milder). Die Nase fällt deutlich, das Flugzeug verliert Höhe,
+    // auch wenn der Pilot sofort loslässt – und es gibt kein Pendeln zwischen
+    // Abriss und anliegender Strömung. Danach klingt er mit
+    // `stall_recovery_time_s` ab.
+    let target = if aero.tas >= MIN_AERO_SPEED {
+        let vs = spec.stall_speed_1g(mass, aero.density, s.flaps);
         let n = demanded_load_factor(spec, s, c, aero.tas, aero.qbar);
-        let v_stall = stall_speed(spec, mass, aero.density, n, s.flaps);
-        let by_speed = stall_target(spec, v_stall, aero.tas, s.flaps);
-        let by_alpha = ((aero.wing_alpha.abs() - spec.alpha_stall_rad) / STALL_ALPHA_FULL).clamp(0.0, 1.0);
-        // Erholung bezogen auf die 1-g-Abrissfahrt: Wer schnell genug ist,
-        // fängt sich zügig, auch wenn er noch zieht.
-        let v_stall_1g = spec.stall_speed_1g(mass, aero.density, s.flaps);
-        (by_speed.max(by_alpha), aero.tas >= spec.stall_recovery_factor * v_stall_1g)
+        let target = stall_target(spec, vs * n.sqrt(), aero.tas, aero.wing_alpha);
+        // Erholung gegen die 1-g-Abrissfahrt: Wer schnell genug ist, fängt
+        // sich, auch wenn er noch etwas zieht.
+        if s.stall > STALL_NOTICEABLE && aero.tas < spec.stall_recovery_factor * vs {
+            target.max(spec.stall_latch_strength * flap_relief(spec, s.flaps))
+        } else {
+            target
+        }
     } else {
-        (1.0, false)
-    };
-    // Ein merklicher Abriss „rastet ein“: Bis die Fahrt wieder reicht, bleibt
-    // er mindestens bei `stall_latch_strength` (mit Klappen milder) – die Nase
-    // fällt deutlich, das Flugzeug verliert spürbar Höhe, auch wenn der Pilot
-    // sofort loslässt.
-    let target = if s.stall > STALL_NOTICEABLE && !recovering {
-        target.max(spec.stall_latch_strength * (1.0 - stall_softening(spec, s.flaps)))
-    } else {
-        target
+        1.0
     };
     let tau = if target >= s.stall { spec.stall_time_constant_s } else { spec.stall_recovery_time_s };
     s.stall += (target - s.stall) * (dt / tau).min(1.0);
@@ -660,40 +631,7 @@ mod tests {
         let mid = sink_angle(s, 1.2 * vs, vs, 0.0);
         assert!(mid > 0.0 && mid < s.sink_angle_max_rad);
         let flaps = sink_angle(s, 1.2 * vs, vs, 1.0);
-        assert!((flaps - mid * (1.0 - s.flap_sink_relief)).abs() < 1e-12);
-    }
-
-    /// Langsam mit gehaltener Nicklage und mäßigem Schub: Das Flugzeug sackt
-    /// stetig durch, ohne abzureißen. Klappen lindern das, schnell gibt es
-    /// kein Durchsacken.
-    #[test]
-    fn slow_flight_sinks_steadily_and_flaps_relieve_it() {
-        let spec = &F29_SPEC;
-        let rho = atmosphere::isa(1_000.0).density;
-        let vs = spec.stall_speed_1g(spec.full_mass_kg(), rho, 0.0);
-        let fly = |speed: f64, flaps: f64| {
-            let mut st = AircraftState::level(0.0, 0.0, 1_000.0, 0.0, speed);
-            st.flaps = flaps;
-            st.engine = 0.5;
-            // Getrimmt wie beim Spawn: Nase um den nötigen Anstellwinkel heben
-            // (ohne Durchsacken – das soll sich gerade zeigen).
-            let qs = 0.5 * rho * speed * speed * spec.wing_area_m2;
-            let cl_req = st.mass(spec) * G0 / qs - spec.flap_cl * flaps;
-            let alpha = (cl_req - spec.cl0) / spec.cl_alpha;
-            st.attitude = DQuat::from_euler(0.0, alpha, 0.0);
-            st.velocity = DVec3::new(speed, 0.0, 0.0);
-            let f = if flaps > 0.0 { flags::FLAPS } else { 0 };
-            run(&mut st, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.5, f), 20.0);
-            (st.altitude() - 1_000.0, st.velocity.length(), st.stall)
-        };
-        let (dh_clean, v_clean, stall_clean) = fly(1.2 * vs, 0.0);
-        let (dh_flaps, _, stall_flaps) = fly(1.2 * vs, 1.0);
-        let (dh_fast, _, _) = fly(1.8 * vs, 0.0);
-        assert!(dh_clean < -40.0, "kaum Durchsacken: {dh_clean:.0} m");
-        assert!(stall_clean < STALL_NOTICEABLE && stall_flaps < STALL_NOTICEABLE, "Abriss beim Durchsacken");
-        assert!(v_clean > 0.95 * vs, "Fahrt bricht ein: {v_clean:.0} m/s");
-        assert!(dh_flaps > dh_clean + 30.0, "Klappen lindern kaum: {dh_flaps:.0} vs {dh_clean:.0} m");
-        assert!(dh_fast > dh_clean + 30.0, "schnell sackt genauso durch: {dh_fast:.0} m");
+        assert!((flaps - mid * (1.0 - s.flap_stall_relief)).abs() < 1e-12);
     }
 
     /// Simuliert `seconds` mit fester Eingabe und liefert den Zustand.

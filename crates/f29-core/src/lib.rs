@@ -15,6 +15,7 @@ pub mod atmosphere;
 pub mod autopilot;
 pub mod controls;
 pub mod detmath;
+pub mod envelope;
 pub mod flight;
 pub mod math;
 pub mod nav;

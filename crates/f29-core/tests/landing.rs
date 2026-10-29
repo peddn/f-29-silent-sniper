@@ -334,50 +334,6 @@ fn gear_overspeed_buffets_and_warns() {
     assert!(fd.turbulence > 0.05, "kein Rütteln: {}", fd.turbulence);
 }
 
-/// Spielertest: Vollgas und von Anfang an voll gezogen (Tastatur). Direkt
-/// nach dem Abheben darf die Strömung nicht abreißen; wer bei 15° Nicklage
-/// loslässt, steigt normal weiter. Wer dagegen voll gezogen hält, steigt
-/// immer steiler und reißt erst ab, wenn die Fahrt verbraucht ist – hoch über
-/// der Bahn.
-#[test]
-fn full_pull_takeoff_does_not_stall_near_the_ground() {
-    for flap in [0, flags::FLAPS] {
-        for hold in [false, true] {
-            let mut sim = Sim::new(SimConfig::runway(SEED));
-            let mut stick = 0.0_f64;
-            let mut released = false;
-            let mut first_stall_agl = None;
-            let mut max_agl = 0.0_f64;
-            for _ in 0..ticks(60.0) {
-                let fd = sim.flight_data();
-                released |= !hold && !fd.on_ground && fd.pitch > 0.26;
-                let target = if released { 0.0 } else { 1.0 };
-                stick += (target - stick).clamp(-3.0 * DT, 3.0 * DT);
-                sim.step(ControlFrame::from_analog(stick, 0.0, 0.0, 1.0, flags::GEAR | flap));
-                max_agl = max_agl.max(sim.flight_data().radar_altitude_m);
-                if first_stall_agl.is_none() && sim.aircraft().is_stalled() {
-                    first_stall_agl = Some(sim.flight_data().radar_altitude_m);
-                }
-                if sim.status() != Status::Flying {
-                    break;
-                }
-            }
-            if flap != 0 && hold {
-                // Mit Klappen reißt Dauerzug kurz nach dem Abheben nur leicht ab,
-                // das Flugzeug steigt kräftig. Seit v0.1.16 endet weiteres
-                // Ziehen aber im vollen Abriss – ein Absturz ist möglich.
-                assert!(max_agl > 150.0, "kein Steigflug mit Klappen: höchstens {max_agl:.0} m");
-            } else if hold {
-                let agl = first_stall_agl.expect("Dauerzug endet nicht im Abriss");
-                assert!(agl > 60.0, "Abriss schon {agl:.0} m über Grund");
-            } else {
-                assert_eq!(sim.status(), Status::Flying, "Absturz nach Loslassen");
-                assert!(first_stall_agl.is_none(), "Abriss trotz Loslassen bei {first_stall_agl:?} m");
-            }
-        }
-    }
-}
-
 /// Ausgefahrenes Fahrwerk rüttelt in jeder Höhe leicht und bremst.
 #[test]
 fn gear_shakes_at_any_altitude_and_brakes() {

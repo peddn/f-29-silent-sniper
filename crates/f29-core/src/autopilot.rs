@@ -127,11 +127,9 @@ impl Approach {
         // Bei Landefahrt wirken die Ruder schwach: kräftig regeln.
         let gain = if flare { 10.0 } else { 4.0 };
         let mut pitch = ((gamma_cmd - gamma) * gain / spec.max_pitch_rate).clamp(-0.4, 1.0);
-        // Nie so hart ziehen, dass die Abrissfahrt über 90 % der Fahrt steigt.
-        pitch = pitch.min(max_pull(spec, fd, 0.9));
-        if fd.alpha > 0.9 * spec.alpha_warning_rad {
-            pitch = pitch.min(0.0);
-        }
+        // Anstellwinkel unter der Warnschwelle halten: Ziehen weich zurücknehmen,
+        // bevor die Strömung abreißt.
+        pitch = pitch.min(alpha_limited_pull(spec, fd, 0.85));
 
         // Seitlich: Kurs auf die Mittellinie.
         let hdg = rw.heading_deg * (std::f64::consts::PI / 180.0);
@@ -144,13 +142,10 @@ impl Approach {
     }
 }
 
-/// Größter Zug am Knüppel, bei dem die (g-abhängige) Abrissfahrt höchstens
-/// `ratio` × aktuelle Fahrt erreicht.
-pub fn max_pull(spec: &AircraftSpec, fd: &FlightData, ratio: f64) -> f64 {
-    if fd.stall_speed_mps <= 0.0 {
-        return 0.0;
-    }
-    let n_max = (ratio * fd.tas_mps / fd.stall_speed_mps).powi(2);
-    let per_stick = crate::flight::stick_g_per_unit(spec, fd.tas_mps, fd.qbar_pa).max(1e-6);
-    ((n_max - 1.0) / per_stick).clamp(0.0, 1.0)
+/// Größter Zug am Knüppel, der den Anstellwinkel unter `ratio` ×
+/// Warnschwelle hält: voll bis 0,1 rad darunter, dann linear auf null und
+/// darüber leichtes Nachdrücken.
+pub fn alpha_limited_pull(spec: &AircraftSpec, fd: &FlightData, ratio: f64) -> f64 {
+    let room = ratio * spec.alpha_warning_rad - fd.alpha;
+    (room / 0.1).clamp(-0.3, 1.0)
 }

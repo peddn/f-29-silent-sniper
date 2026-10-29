@@ -58,12 +58,10 @@ pub struct AircraftSpec {
     /// Faktor auf den induzierten Widerstand bei voll ausgefahrenen Klappen
     /// (Manöverklappen: in harten Kurven weniger Fahrtverlust).
     pub flap_induced_factor: f64,
-    /// Faktor auf den Bezugsstaudruck der Ruderwirksamkeit bei voll
-    /// ausgefahrenen Klappen (< 1: Ruder wirken bei geringer Fahrt stärker).
-    pub flap_control_q_factor: f64,
-    /// Wie stark voll ausgefahrene Klappen den Abriss entschärfen (0..1):
-    /// weniger Abkippen, weniger Auftriebs- und Ruderverlust, sanfterer Einsatz.
-    pub flap_stall_softening: f64,
+    /// Wie stark voll ausgefahrene Klappen Abriss und Durchsacken mildern
+    /// (0..1): Einrastung, Abkippen und Durchsackwinkel werden mit
+    /// 1 − Wert multipliziert. Der einzige Klappenregler für den Langsamflug.
+    pub flap_stall_relief: f64,
     /// Aus-/Einfahrgeschwindigkeit der Klappen (Anteil pro s).
     pub flap_rate: f64,
 
@@ -76,8 +74,6 @@ pub struct AircraftSpec {
     /// Unterhalb dieses Vielfachen der 1-g-Abrissfahrt setzt das Durchsacken
     /// ein; zur Abrissfahrt hin wächst es quadratisch auf den Größtwert.
     pub sink_onset_factor: f64,
-    /// Anteil, um den voll ausgefahrene Klappen das Durchsacken lindern (0..1).
-    pub flap_sink_relief: f64,
 
     // --- Fahrwerk und Boden ---
     /// Zusätzlicher Widerstandsbeiwert bei ausgefahrenem Fahrwerk.
@@ -121,16 +117,16 @@ pub struct AircraftSpec {
     /// Anstellwinkel, ab dem die Abrisswarnung kommt (muss unter `alpha_stall_rad` liegen).
     /// Es gibt bewusst **keinen** Anstellwinkelbegrenzer: Wer zu hart zieht, reißt ab.
     pub alpha_warning_rad: f64,
-    // --- Strömungsabriss (stetig, Stärke 0..1 aus dem Fahrtdefizit) ---
-    /// Relatives Fahrtdefizit unter der Abrissgeschwindigkeit, bei dem der
-    /// Abriss seine volle Stärke erreicht (z. B. 0,3 = 30 % zu langsam).
+    // --- Strömungsabriss (Stärke 0..1; Auslöser: Fahrt unter der Abrissfahrt
+    // bei angeforderter g-Last oder Anstellwinkel über `alpha_stall_rad`) ---
+    /// Relatives Fahrtdefizit unter der Abrissfahrt, bei dem der Abriss
+    /// seine volle Stärke erreicht (z. B. 0,3 = 30 % zu langsam).
     pub stall_deficit_full: f64,
-    /// Zusätzliche g-Last, die voller Zug am Knüppel für die Abrissgeschwindigkeit
-    /// anfordert (v_s = v_s1g · √(1 + Zug · stall_stick_g)).
+    /// Zusätzliche g-Last, die voller Zug am Knüppel höchstens anfordert
+    /// (Abrissfahrt × √(1 + Zug · g); siehe `flight::demanded_load_factor`).
     pub stall_stick_g: f64,
-    /// Anteil dieser Anforderung bei waagerechten Flächen (0..1). In steiler
-    /// Querlage gilt die volle Anforderung: Harte Kurven reißen früher ab als
-    /// das Hochziehen im Geradeausflug.
+    /// Anteil dieser Anforderung bei waagerechten Flächen (0..1): Hochziehen
+    /// reißt später ab als dieselbe Zug in steiler Kurve.
     pub stall_stick_level_factor: f64,
     /// Zeitkonstante, mit der die Abrissstärke dem Fahrtdefizit folgt (s).
     pub stall_time_constant_s: f64,
@@ -138,15 +134,13 @@ pub struct AircraftSpec {
     /// Abriss ab; darunter bleibt er eingerastet (Höhenverlust wie im Original).
     pub stall_recovery_factor: f64,
     /// Mindeststärke eines eingerasteten Abrisses (0..1, mit Klappen um
-    /// `flap_stall_softening` milder).
+    /// `flap_stall_relief` milder).
     pub stall_latch_strength: f64,
     /// Zeitkonstante, mit der der Abriss danach abklingt (s).
     pub stall_recovery_time_s: f64,
     /// Abkippen bei vollem Abriss: Drehrate (rad/s), mit der die Nase aus
     /// jeder Fluglage Richtung senkrecht nach unten fällt.
     pub stall_pitch_break: f64,
-    /// Anteil der Ruderwirkung, der bei vollem Abriss erhalten bleibt (0..1).
-    pub stall_control_factor: f64,
     /// Anteil des Auftriebs, der bei vollem Abriss bleibt (0..1).
     pub stall_lift_factor: f64,
     /// Verstärkung der Schiebewinkel-Kompensation (Gierdämpfer).
@@ -185,13 +179,11 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     flap_cl: 0.40,
     flap_cd: 0.016,
     flap_induced_factor: 0.6,
-    flap_control_q_factor: 0.5,
-    flap_stall_softening: 0.45,
+    flap_stall_relief: 0.45,
     flap_rate: 0.5,
 
     sink_angle_max_rad: 0.15,
     sink_onset_factor: 1.5,
-    flap_sink_relief: 0.4,
 
     gear_cd: 0.045,
     gear_time_s: 5.0,
@@ -221,7 +213,6 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
     stall_latch_strength: 0.5,
     stall_recovery_time_s: 1.5,
     stall_pitch_break: 1.9,
-    stall_control_factor: 0.1,
     stall_lift_factor: 0.18,
     yaw_damper_gain: 2.5,
 };
@@ -234,7 +225,7 @@ impl AircraftSpec {
             field,
             reason,
         };
-        let positive: [(&'static str, f64); 39] = [
+        let positive: [(&'static str, f64); 38] = [
             ("empty_mass_kg", self.empty_mass_kg),
             ("fuel_capacity_kg", self.fuel_capacity_kg),
             ("fuel_flow_idle_kgps", self.fuel_flow_idle_kgps),
@@ -270,7 +261,6 @@ impl AircraftSpec {
             ("stall_deficit_full", self.stall_deficit_full),
             ("stall_stick_g", self.stall_stick_g),
             ("flap_induced_factor", self.flap_induced_factor),
-            ("flap_control_q_factor", self.flap_control_q_factor),
             ("flap_rate", self.flap_rate),
             ("stall_time_constant_s", self.stall_time_constant_s),
             ("stall_recovery_time_s", self.stall_recovery_time_s),
@@ -303,26 +293,20 @@ impl AircraftSpec {
                 "muss kleiner als alpha_stall_rad sein, sonst kommt die Warnung zu spät".into(),
             ));
         }
-        if !(0.0..=1.0).contains(&self.stall_control_factor) {
-            return Err(err("stall_control_factor", "muss zwischen 0 und 1 liegen".into()));
-        }
-        if !(0.0..=1.0).contains(&self.stall_stick_level_factor) {
-            return Err(err("stall_stick_level_factor", "muss zwischen 0 und 1 liegen".into()));
-        }
-        if !(0.0..=1.0).contains(&self.flap_sink_relief) {
-            return Err(err("flap_sink_relief", "muss zwischen 0 und 1 liegen".into()));
-        }
         if !(self.sink_angle_max_rad.is_finite() && (0.0..0.5).contains(&self.sink_angle_max_rad)) {
             return Err(err("sink_angle_max_rad", "muss in 0..0,5 rad liegen".into()));
         }
         if !(self.sink_onset_factor.is_finite() && self.sink_onset_factor > 1.0) {
             return Err(err("sink_onset_factor", "muss größer als 1 sein".into()));
         }
-        if !(0.0..=1.0).contains(&self.flap_stall_softening) {
-            return Err(err("flap_stall_softening", "muss zwischen 0 und 1 liegen".into()));
+        if !(0.0..=1.0).contains(&self.stall_stick_level_factor) {
+            return Err(err("stall_stick_level_factor", "muss zwischen 0 und 1 liegen".into()));
         }
-        if self.flap_induced_factor > 1.0 || self.flap_control_q_factor > 1.0 {
-            return Err(err("flap_induced_factor", "Klappenfaktoren dürfen höchstens 1 sein".into()));
+        if !(0.0..=1.0).contains(&self.flap_stall_relief) {
+            return Err(err("flap_stall_relief", "muss zwischen 0 und 1 liegen".into()));
+        }
+        if self.flap_induced_factor > 1.0 {
+            return Err(err("flap_induced_factor", "darf höchstens 1 sein".into()));
         }
         if !(0.0..=1.0).contains(&self.stall_latch_strength) {
             return Err(err("stall_latch_strength", "muss zwischen 0 und 1 liegen".into()));
