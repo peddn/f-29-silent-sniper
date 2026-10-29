@@ -224,6 +224,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       erste Waffe in der Wahl GUN, BAY 1–4 (v0.2.8)
 - [x] Joystick statt Gamepad: Logitech Extreme 3D Pro unter Linux, Belegung als
       Textdatei, `--joystick-debug` (v0.2.8)
+- [ ] Joystick am echten Extreme 3D Pro testen (`--joystick-debug`): Achsen,
+      Richtungen und Tastennummern prüfen (vorgemerkt)
 - [ ] Auslöseklammer für Bomben, neu entworfen (vorgemerkt)
 - [x] Bordkanone als eigenes Waffensystem: 600 Schuss (50/s), Rücktaste, 2 %
       Schaden pro Treffer bei jedem Ziel, Kanonenkreuz am Aufschlagpunkt,
