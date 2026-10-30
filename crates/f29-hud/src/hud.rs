@@ -260,7 +260,7 @@ fn launch_circle(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, c
     dl.circle(center, r, 40, Ink::Hud);
 }
 
-/// Feuersignal der Lenkwaffen unten mittig im Glas: „IN RANGE“, solange die
+/// Feuersignal der Lenkwaffen unten mittig im Glas: „LOCKED“, solange die
 /// Waffe das Ziel übernähme, darüber „SHOOT“ (umrahmt), wenn die
 /// vorausberechnete Flugbahn trifft.
 fn shoot_cue(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
@@ -276,8 +276,8 @@ fn shoot_cue(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     }
     let pos = [glass.center()[0], glass.min[1] + TXT * 1.4];
     let zone = t.zone;
-    if matches!(zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
-        dl.text_mid(pos, TXT_SMALL, Align::Center, "IN RANGE", Ink::Hud);
+    if matches!(zone, Some(LaunchZone::Locked | LaunchZone::Good)) {
+        dl.text_mid(pos, TXT_SMALL, Align::Center, "LOCKED", Ink::Hud);
     }
     if zone == Some(LaunchZone::Good) {
         dl.boxed_text([pos[0], pos[1] + TXT * 1.7], TXT, Align::Center, "SHOOT", Ink::HudWarning);
@@ -357,7 +357,7 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
             } else {
                 dl.rect(r, ink);
             }
-            if matches!(zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
+            if matches!(zone, Some(LaunchZone::Locked | LaunchZone::Good)) {
                 // Kräftige Ecken außen um den Rahmen
                 let o = Rect::from_center(p, [s * 1.45, s * 1.45]);
                 let k = s * 0.55;

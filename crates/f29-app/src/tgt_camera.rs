@@ -4,8 +4,13 @@
 //! (`assets/shaders/tgt_camera.wesl`). Das Bild liegt als Sprite im Bildfeld
 //! der Seite, die Linien des MFDs (Rahmen, Fadenkreuz) darüber.
 //!
-//! Die Kamera läuft nur, solange die TGT-Seite offen und das Ziel optisch
-//! erfasst ist; sonst kostet sie nichts.
+//! Dieselbe Kamera liefert das Bild der WPN-CAM-Seite: Sie sitzt dann an
+//! der Waffe mit Fernsehsuchkopf (Maverick) und blickt mit ihrem Suchkopf.
+//! Nach dem Abschuss einer solchen Waffe schaltet das MFD selbst auf diese
+//! Seite.
+//!
+//! Die Kamera läuft nur, solange eine der Seiten offen ist und etwas zu
+//! zeigen hat; sonst kostet sie nichts.
 
 use crate::HUD_LAYER;
 use crate::mfd::MfdView;
@@ -35,6 +40,10 @@ const FOV_MAX_RAD: f32 = 0.35;
 const NEAR_M: f32 = 15.0;
 /// Kameraposition unter dem Rumpf (Y-up, relativ zum Flugzeugzentrum).
 const MOUNT: Vec3 = Vec3::new(0.0, -1.5, -3.0);
+/// Nahebene der Waffenkamera: der eigene Waffenkörper liegt davor.
+const WPN_NEAR_M: f32 = 2.0;
+/// Sichtfeld der Waffenkamera ohne verfolgtes Ziel (rad, vertikal).
+const WPN_FOV_RAD: f32 = 0.12;
 
 pub struct TgtCameraPlugin;
 
@@ -122,7 +131,8 @@ fn update(
     time: Res<Time>,
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
-    view: Res<MfdView>,
+    mut view: ResMut<MfdView>,
+    mut last_cam: Local<Option<u32>>,
     origin: Res<WorldOrigin>,
     image: Res<TgtImage>,
     mut images: ResMut<Assets<Image>>,
@@ -137,9 +147,44 @@ fn update(
     let h = window.height();
     let mfd = layout_for(&window).mfd_layout();
     let fd = state.sim.flight_data();
-    // Dunkle oder flackernde Anzeigen (Schadensmodell) zeigen auch kein Kamerabild.
-    let target = fd.target.filter(|t| t.optical && f29_hud::displays_on(&fd));
-    let (Some(m), Some(t), RightPage::Target) = (mfd, target, view.0.right_page) else {
+    // Neue Waffe mit Kamera abgefeuert: selbst auf die WPN-CAM-Seite schalten.
+    let cam_id = fd.weapon_cam.map(|c| c.id);
+    if cam_id.is_some() && cam_id != *last_cam {
+        view.0.right_page = RightPage::WeaponCam;
+    }
+    *last_cam = cam_id;
+
+    // Augpunkt, Zielpunkt, halbes Sichtfeld und Rauschen je Seite.
+    // Dunkle oder flackernde Anzeigen (Schadensmodell) zeigen kein Kamerabild.
+    let on = f29_hud::displays_on(&fd);
+    let shot = match view.0.right_page {
+        RightPage::Target => fd.target.filter(|t| t.optical && on).map(|t| {
+            let pose = state.render_pose();
+            let [x, y, z, w] = coords::quat_ned_to_yup(pose.attitude);
+            let rot = Quat::from_xyzw(x as f32, y as f32, z as f32, w as f32).normalize();
+            let tgt = &state.sim.targets()[t.index];
+            let [n, e, d] = tgt.center_ned();
+            let aim = Vec3::from_array(coords::relative_yup(f29_core::DVec3::new(n, e, d), origin.0));
+            let eye = rot * MOUNT;
+            let half = (tgt.class.radius() / TARGET_FILL).atan2((aim - eye).length().max(1.0) as f64) as f32;
+            let optical = state.sim.sensors().optical_range().max(1.0);
+            (eye, aim, half, NEAR_M, 0.6 + 0.8 * (t.range / optical) as f32)
+        }),
+        RightPage::WeaponCam => fd.weapon_cam.filter(|_| on).map(|c| {
+            let eye = Vec3::from_array(coords::relative_yup(c.position, origin.0));
+            let aim = Vec3::from_array(coords::relative_yup(c.position + c.look * 100.0, origin.0));
+            let half = match c.tracking {
+                Some((i, range)) => {
+                    let r = state.sim.targets()[i].class.radius();
+                    (r / TARGET_FILL).atan2(range.max(1.0)) as f32
+                }
+                None => WPN_FOV_RAD * 0.5,
+            };
+            (eye, aim, half, WPN_NEAR_M, 0.7)
+        }),
+        _ => None,
+    };
+    let (Some(m), Some((eye, aim, half, near, noise))) = (mfd, shot) else {
         cam.is_active = false;
         **visibility = Visibility::Hidden;
         return;
@@ -158,25 +203,15 @@ fn update(
         img.resize(Extent3d { width, height: LINES_PX, depth_or_array_layers: 1 });
     }
 
-    // Kamera unter dem Rumpf, Blick auf die Zielmitte, Zoom nach Entfernung.
-    let pose = state.render_pose();
-    let [x, y, z, w] = coords::quat_ned_to_yup(pose.attitude);
-    let rot = Quat::from_xyzw(x as f32, y as f32, z as f32, w as f32).normalize();
-    let eye = rot * MOUNT;
-    let tgt = &state.sim.targets()[t.index];
-    let [n, e, d] = tgt.center_ned();
-    let aim = Vec3::from_array(coords::relative_yup(f29_core::DVec3::new(n, e, d), origin.0));
     cam_transform.translation = eye;
     cam_transform.look_at(aim, Vec3::Y);
-    let range = (aim - eye).length().max(1.0) as f64;
-    let half = (tgt.class.radius() / TARGET_FILL).atan2(range) as f32;
     if let Projection::Perspective(p) = &mut **projection {
         p.fov = (2.0 * half).clamp(FOV_MIN_RAD, FOV_MAX_RAD);
+        p.near = near;
     }
     // Mit der Entfernung wird das Bild unruhiger.
     effect.time = time.elapsed_secs_wrapped();
-    let optical = state.sim.sensors().optical_range().max(1.0);
-    effect.noise = 0.6 + 0.8 * (t.range / optical) as f32;
+    effect.noise = noise;
     cam.clear_color = ClearColorConfig::Custom(crate::view::sky_for(state.sim.config().spawn.night));
     cam.is_active = true;
     **visibility = Visibility::Inherited;

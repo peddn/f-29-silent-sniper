@@ -583,6 +583,49 @@ pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, camera
     row(dl, &f, y, &format!("LOOK {}", fd.look.label()), &format!("RADAR {radar}"), ink);
 }
 
+/// WPN-CAM-Seite: Bild der jüngsten Waffe mit Fernsehsuchkopf (Maverick) im
+/// Flug, mit `camera_feed` aus dem Frontend gerendert. Fadenkreuz mit
+/// Zielkästchen, solange der Suchkopf das Ziel verfolgt; ohne Waffe in der
+/// Luft „NO SIGNAL“.
+pub(crate) fn weapon_cam(dl: &mut DisplayList, fd: &FlightData, screen: Rect, camera_feed: bool) {
+    let f = frame(screen);
+    title(dl, screen, &f, "WPN CAM");
+    let cam = fd.weapon_cam;
+    let status = match cam {
+        Some(c) if c.tracking.is_some() => "TRACK",
+        Some(_) => "SEARCH",
+        None => "",
+    };
+    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, status, Ink::Mfd);
+    let img = target_image_rect(screen);
+    dl.rect(img, Ink::MfdDim);
+    let c = img.center();
+    let half = (img.max[1] - img.min[1]) * 0.5;
+    let Some(cam) = cam else {
+        dl.text_mid(c, f.txt, Align::Center, "NO SIGNAL", Ink::MfdDim);
+        return;
+    };
+    // Fadenkreuz mit Lücke in der Mitte
+    for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+        let a = [c[0] + dx * half * 0.15, c[1] + dy * half * 0.15];
+        dl.line(a, [c[0] + dx * half * 0.6, c[1] + dy * half * 0.6], Ink::Mfd);
+    }
+    if cam.tracking.is_some() {
+        dl.rect(Rect::from_center(c, [half * 0.12, half * 0.12]), Ink::Mfd);
+    }
+    if !camera_feed {
+        dl.text_mid([c[0], c[1] - half * 0.4], f.txt * 0.85, Align::Center, "NO VIDEO", Ink::MfdDim);
+    }
+    let step = f.txt * 1.35;
+    let y = img.min[1] - step * 0.9;
+    dl.text_mid([f.x0, y], f.txt, Align::Left, cam.kind.label(), Ink::Mfd);
+    if let Some((i, range)) = cam.tracking {
+        let name = fd.target.filter(|t| t.index == i).map_or("", |t| t.name);
+        dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, name, Ink::Mfd);
+        row(dl, &f, y - step, "RANGE", &format!("{:.1} KM", units::m_to_km(range)), Ink::Mfd);
+    }
+}
+
 /// Drahtgitterbild des Ziels aus Sicht des Flugzeugs, so gezoomt, dass das
 /// Ziel gut die Hälfte des Bildfelds füllt; dazu ein Bodengitter.
 fn target_image(dl: &mut DisplayList, t: &TargetInfo, c: [f32; 2], half: f32) {

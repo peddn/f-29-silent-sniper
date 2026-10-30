@@ -37,6 +37,8 @@ pub enum RightPage {
     Mission,
     /// Aufgeschaltetes Ziel mit optischem Zielbild.
     Target,
+    /// Bild der Waffe mit Fernsehsuchkopf im Flug.
+    WeaponCam,
     /// Waffenschächte und gewählte Waffe.
     Weapons,
     /// Drehzahl, Schub, Verbrauch, Treibstoff.
@@ -49,9 +51,10 @@ pub enum RightPage {
 
 impl RightPage {
     /// Alle Seiten in Umschaltreihenfolge.
-    pub const ALL: [RightPage; 6] = [
+    pub const ALL: [RightPage; 7] = [
         RightPage::Mission,
         RightPage::Target,
+        RightPage::WeaponCam,
         RightPage::Weapons,
         RightPage::Engine,
         RightPage::Attitude,
@@ -63,6 +66,7 @@ impl RightPage {
         match self {
             RightPage::Mission => "MSN",
             RightPage::Target => "TGT",
+            RightPage::WeaponCam => "CAM",
             RightPage::Weapons => "WPN",
             RightPage::Engine => "ENG",
             RightPage::Attitude => "ADI",
@@ -222,6 +226,7 @@ pub(crate) fn draw(
     match state.right_page {
         RightPage::Mission => crate::pages::mission(dl, fd, rs, map),
         RightPage::Target => crate::pages::target(dl, fd, rs, camera_feed),
+        RightPage::WeaponCam => crate::pages::weapon_cam(dl, fd, rs, camera_feed),
         RightPage::Weapons => crate::pages::weapons(dl, fd, rs),
         RightPage::Engine => crate::pages::engine(dl, fd, rs),
         RightPage::Attitude => crate::pages::attitude(dl, fd, rs),

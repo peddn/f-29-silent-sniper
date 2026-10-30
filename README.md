@@ -85,7 +85,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
 | Shift+F4 | | HUD ein/aus |
 | F3 | | Karte (linkes MFD): Gitter ↔ Satellitenbild |
-| F4 | 11 | Rechtes MFD: nächste Seite (Mission → Ziel → Waffen → Triebwerk → Horizont → Systeme) |
+| F4 | 11 | Rechtes MFD: nächste Seite (Mission → Ziel → Waffenkamera → Waffen → Triebwerk → Horizont → Systeme) |
 | Y / X | 10 (reihum) | Karte näher / weiter (5, 10, 20, 40, 80 km) |
 | P | | Pause |
 | F12 | | Screenshot nach `screenshots/` |
@@ -239,6 +239,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Lenkwaffen physikalisch wie im Original: reine Verfolgung, Treffer
       geometrisch (Annäherungszünder), Wirkung gewürfelt; „SHOOT“ aus dem
       vorausberechneten Flug statt Sweet Spot (v0.2.9)
+- [x] Feuersignal „LOCKED“/„SHOOT“; Waffenkamera der Maverick auf der Seite
+      WPN CAM, nach dem Abschuss automatisch aufgeschaltet (v0.2.9)
 - [ ] Boden-Luft-Raketen ab Stufe 3: SAM-Stellungen und Langstreckenraketen
       der Frühwarnradare – zusammen mit dem Schadensmodell
 - [ ] Täuschkörper (Düppel, Fackeln) gegen Langstreckenraketen

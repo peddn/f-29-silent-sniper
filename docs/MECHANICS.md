@@ -935,7 +935,7 @@ Format jedes Eintrags:
       mit derselben Übergabe und demselben Flug wie beim echten Auslösen,
       Sichtlinie und Laser als gehalten angenommen. Daraus die Zone: übernähme
       nicht (außer Reichweite, nicht im Abschusskreis), übernähme, aber
-      verfehlte (in Reichweite), träfe (gut). Der frühere Sweet Spot (feste
+      verfehlte („LOCKED“), träfe („SHOOT“). Der frühere Sweet Spot (feste
       Wunschentfernung) und die Startgüte entfallen.
   - **Zielrahmen** (wie im Original: erfasst, näher dran Farbwechsel; keine
     Mindestreichweite): außer Reichweite einfacher Rahmen, in Reichweite der
@@ -963,10 +963,20 @@ Format jedes Eintrags:
     zeitbasierter Anzeige (Sekunden bis zum Auslösen) und nichtlinearem
     Maßstab; die Längs- und Querablage liefert der Kern schon
     (`BombAim::target_offset`).
-  - **Feuersignal** der Lenkwaffen unten mittig im HUD-Glas: „IN RANGE“, wenn
-    die Waffe das Ziel übernähme, darüber zusätzlich „SHOOT“ (umrahmt), wenn
+  - **Feuersignal** der Lenkwaffen unten mittig im HUD-Glas: „LOCKED“, wenn
+    die Waffe das Ziel übernähme (bis v0.2.9 „IN RANGE“, umbenannt, weil es
+    nicht mehr die Entfernung meint – Spielerwunsch), darüber zusätzlich „SHOOT“ (umrahmt), wenn
     die Vorausberechnung trifft (Spielerwunsch v0.2.7, seit v0.2.9 aus dem
     vorausberechneten Flug).
+  - **Waffenkamera** (Spielerwunsch v0.2.9): Waffen mit Fernsehsuchkopf
+    (Maverick) senden ihr Bild auf die eigene Seite „WPN CAM“ (Kurzname CAM)
+    des rechten MFDs; nach dem Abschuss schaltet das MFD selbst dorthin. Das
+    Bild kommt von einer zweiten 3D-Kamera an der Waffe (derselbe körnige
+    Schwarzweiß-Effekt wie das Zielbild), Blick zur Zielmitte, solange der
+    Suchkopf verfolgt („TRACK“, Zielkästchen), sonst in Flugrichtung
+    („SEARCH“). Mit dem Einschlag reißt das Bild ab („NO SIGNAL“). Die GBU-12
+    hat wie das reale Vorbild nur einen Lasersensor und keine Kamera; ihren
+    Einschlag zeigt das Zielbild des Flugzeugs (TGT).
   - **HUD-Warnfarbe blau** (Spielerwunsch v0.2.7): Warnungen und
     Hervorhebungen im HUD (z. B. „TOO LOW“, Zielrahmen bei erwartetem
     Treffer, „SHOOT“) sind blau statt rot; die MFDs bleiben bei Rot.

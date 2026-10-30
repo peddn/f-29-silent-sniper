@@ -167,7 +167,7 @@ fn launch_zones_follow_the_range() {
             .and_then(|t| t.zone)
     };
     assert_eq!(zone(8_000.0, agm(), false), Some(LaunchZone::Good));
-    assert_eq!(zone(20_000.0, agm(), true), Some(LaunchZone::OutOfRange));
+    assert_eq!(zone(20_000.0, agm(), true), Some(LaunchZone::NoLock));
     let arm = Loadout([Some(WeaponKind::AntiRadar), None, None, None]);
     assert_eq!(zone(5_000.0, arm, false), Some(LaunchZone::NoEffect));
     // Ungelenkte Waffe gewählt: keine Zone.
@@ -275,7 +275,7 @@ fn laser_bomb_falls_ballistic_when_the_designation_ends() {
 fn laser_bomb_needs_energy_to_reach_the_target() {
     let (mut sim, _) =
         (1..=20_u64).find_map(|s| lined_up_at(s, TargetClass::Soft, 8_000.0, 900.0, lgb())).expect("Anflug");
-    assert_eq!(sim.flight_data().target.and_then(|t| t.zone), Some(LaunchZone::OutOfRange));
+    assert_eq!(sim.flight_data().target.and_then(|t| t.zone), Some(LaunchZone::NoLock));
     let events = shoot(&mut sim);
     assert!(!events.iter().any(|e| matches!(e, WeaponEvent::Acquired { .. })), "{events:?}");
 }
@@ -307,4 +307,36 @@ fn lock_stays_on_the_wreck_until_a_new_target_is_chosen() {
         step(&mut sim, ControlFrame::look_flags(look.code()), 0);
         assert_ne!(sim.sensors().lock.map(|l| l.target), Some(target), "Wrack wieder gewählt");
     }
+}
+
+/// Waffenkamera: Die Maverick sendet ihr Bild, solange sie fliegt, mit Blick
+/// zum verfolgten Ziel; die Laserbombe hat keine Kamera.
+#[test]
+fn maverick_sends_its_seeker_image() {
+    let (mut sim, target) = (1..=40_u64)
+        .filter_map(|s| lined_up_at(s, TargetClass::Soft, 8_000.0, 300.0, agm()))
+        .find(|(sim, _)| sim.flight_data().target.and_then(|t| t.zone) == Some(LaunchZone::Good))
+        .expect("Anflug");
+    assert!(sim.flight_data().weapon_cam.is_none());
+    step(&mut sim, 0, weapon_flags::BAY_DOORS);
+    for _ in 0..ticks(weapons::DOOR_TIME_S + 0.1) {
+        step(&mut sim, 0, 0);
+    }
+    step(&mut sim, 0, weapon_flags::RELEASE);
+    for _ in 0..ticks(1.0) {
+        step(&mut sim, 0, 0);
+    }
+    let cam = sim.flight_data().weapon_cam.expect("Kamerabild");
+    assert_eq!(cam.tracking.map(|(i, _)| i), Some(target));
+    let c = sim.targets()[target].center_ned();
+    let to = f29_core::DVec3::new(c[0], c[1], c[2]) - cam.position;
+    assert!(cam.look.dot(to.normalize_or_zero()) > 0.9999);
+    for _ in 0..ticks(60.0) {
+        step(&mut sim, 0, 0);
+        if sim.weapons_in_flight().is_empty() {
+            break;
+        }
+    }
+    assert!(sim.flight_data().weapon_cam.is_none());
+    assert!(!WeaponKind::GuidedBomb.has_camera());
 }

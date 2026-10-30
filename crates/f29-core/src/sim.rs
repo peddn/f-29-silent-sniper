@@ -11,7 +11,7 @@ use crate::rng::Pcg32;
 use crate::sensors::{self, LookDir, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
-use crate::weapons::{self, Bay, ImpactResult, LaunchZone, Loadout, Stores, Weapon, WeaponEvent};
+use crate::weapons::{self, Bay, ImpactResult, LaunchZone, Loadout, Stores, Weapon, WeaponEvent, WeaponKind};
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_terrain::{AirfieldKind, Terrain};
 
@@ -412,6 +412,8 @@ pub struct FlightData {
     pub bomb_aim: Option<BombAim>,
     /// Waffen in der Luft für die Karte: eigene und (ab Etappe 3) feindliche.
     pub munitions: Vec<MunitionInfo>,
+    /// Bild der jüngsten eigenen Waffe mit Fernsehsuchkopf in der Luft.
+    pub weapon_cam: Option<WeaponCam>,
     /// Bordkanone: Munition, Abzug und Aufschlagpunkt.
     pub gun: GunInfo,
     /// Lage gegenüber den feindlichen Radaren (M-020).
@@ -508,6 +510,20 @@ pub struct MunitionInfo {
     /// Feindliche Waffe (Boden-Luft- oder Luft-Luft-Rakete). Noch gibt es
     /// keine; die Karte kann sie schon darstellen.
     pub hostile: bool,
+}
+
+/// Suchkopfbild einer Waffe im Flug (WPN-CAM-Seite).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WeaponCam {
+    pub id: u32,
+    pub kind: WeaponKind,
+    /// NED (m).
+    pub position: DVec3,
+    /// Blickrichtung (NED, Einheitsvektor): zur Zielmitte, solange der
+    /// Suchkopf das Ziel verfolgt, sonst in Flugrichtung.
+    pub look: DVec3,
+    /// Verfolgtes Ziel und Entfernung zu seiner Mitte (m).
+    pub tracking: Option<(usize, f64)>,
 }
 
 /// Die Simulation.
@@ -1273,6 +1289,16 @@ impl Sim {
                     hostile: false,
                 })
                 .collect(),
+            weapon_cam: self.stores.in_flight.iter().rev().find(|w| w.kind.has_camera()).map(|w| {
+                let aim = w.aim_point(&self.targets).map(|p| p - w.position);
+                WeaponCam {
+                    id: w.id,
+                    kind: w.kind,
+                    position: w.position,
+                    look: aim.unwrap_or(w.velocity).normalize_or_zero(),
+                    tracking: w.target.zip(aim).map(|(i, d)| (i, d.length())),
+                }
+            }),
             destroyed_targets: (0..self.targets.len()).filter(|&i| !self.targets[i].is_intact()).collect(),
             warnings,
         }

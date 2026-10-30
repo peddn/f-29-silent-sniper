@@ -35,7 +35,7 @@ pub use math::{DQuat, DVec3};
 pub use sim::{
     BombAim, CrashCause, DT, FlightData, GunAim, GunInfo, MunitionInfo, PingInfo, RadarSiteInfo, Sim,
     SimConfig, SpawnKind, Status, StoresInfo, TICK_HZ, TargetInfo, ThreatInfo, ThreatSite, Touchdown,
-    WeaponMessage,
+    WeaponCam, WeaponMessage,
 };
 
 pub use f29_data as data;

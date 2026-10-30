@@ -286,6 +286,11 @@ impl WeaponKind {
         self.spec().seeker != Seeker::None
     }
 
+    /// Fernsehsuchkopf: Die Waffe sendet ihr Bild (WPN-CAM-Seite).
+    pub fn has_camera(self) -> bool {
+        self.spec().seeker == Seeker::Optical
+    }
+
     /// Kennwort für `--loadout` und Replays.
     pub fn code(self) -> &'static str {
         match self {
@@ -354,9 +359,9 @@ pub enum LaunchZone {
     NoEffect,
     /// Die Waffe würde das Ziel nicht übernehmen (Reichweite, Abschusskreis,
     /// keine optische Aufschaltung).
-    OutOfRange,
+    NoLock,
     /// Sie würde es übernehmen, aber laut Vorausberechnung verfehlen.
-    InRange,
+    Locked,
     /// Die Vorausberechnung trifft: gute Abschussbedingungen („SHOOT“).
     Good,
 }
@@ -371,7 +376,7 @@ pub fn launch_zone(kind: WeaponKind, l: &Launch<'_>, i: usize) -> LaunchZone {
     }
     let mut w = Weapon::launched(0, kind, l);
     if w.target != Some(i) {
-        return LaunchZone::OutOfRange;
+        return LaunchZone::NoLock;
     }
     let dt = l.dt * PREDICT_STEPS;
     let mut step = 0_u32;
@@ -386,9 +391,9 @@ pub fn launch_zone(kind: WeaponKind, l: &Launch<'_>, i: usize) -> LaunchZone {
             Fate::Ground(p) => {
                 let (dn, de) = (t.north - p.x, t.east - p.y);
                 let near = (dn * dn + de * de).sqrt() - t.class.radius() < kind.spec().lethal_radius_m;
-                return if near { LaunchZone::Good } else { LaunchZone::InRange };
+                return if near { LaunchZone::Good } else { LaunchZone::Locked };
             }
-            Fate::Expired => return LaunchZone::InRange,
+            Fate::Expired => return LaunchZone::Locked,
         }
     }
 }
@@ -529,7 +534,7 @@ impl Weapon {
 
     /// Punkt, den die Waffe gerade anfliegt: die Zielmitte, solange der
     /// Suchkopf sie hat.
-    fn aim_point(&self, targets: &[Target]) -> Option<DVec3> {
+    pub fn aim_point(&self, targets: &[Target]) -> Option<DVec3> {
         let t = targets.get(self.target?).filter(|_| self.tracking)?;
         let c = t.center_ned();
         Some(DVec3::new(c[0], c[1], c[2]))

@@ -438,10 +438,10 @@ fn target_box_shows_the_launch_zone() {
         (dl.lines.len(), dl.lines.iter().filter(|l| l.ink == Ink::HudWarning).count())
     };
     let (plain, plain_red) = lines(None);
-    let (in_range, _) = lines(Some(LaunchZone::InRange));
+    let (in_range, _) = lines(Some(LaunchZone::Locked));
     let (good, good_red) = lines(Some(LaunchZone::Good));
     let (none, _) = lines(Some(LaunchZone::NoEffect));
-    assert_eq!(lines(Some(LaunchZone::OutOfRange)).0, plain);
+    assert_eq!(lines(Some(LaunchZone::NoLock)).0, plain);
     assert_eq!(in_range, plain + 8, "acht Eckstriche");
     assert!(good_red > plain_red + 8, "gute Zone blau");
     assert_eq!(good, in_range);
@@ -510,8 +510,8 @@ fn launch_circle_only_for_missiles() {
     assert_eq!(lines(WeaponKind::AntiRadar), lines(WeaponKind::AirToGround));
 }
 
-/// Feuersignal: „SHOOT“ im Sweet Spot (rot), „IN RANGE“ sonst; bei Raketen
-/// nur „SHOOT“, wenn das Ziel im Abschusskreis liegt.
+/// Feuersignal: „SHOOT“ (blau), wenn die Vorausberechnung trifft, sonst nur
+/// „LOCKED“.
 #[test]
 fn shoot_cue_follows_the_zone() {
     use f29_core::weapons::{Bay, LaunchZone, WeaponKind};
@@ -542,10 +542,10 @@ fn shoot_cue_follows_the_zone() {
         dl.lines.iter().filter(|l| l.ink == Ink::HudWarning).count()
     };
     let lgb_good = red(WeaponKind::GuidedBomb, LaunchZone::Good, 25.0);
-    let lgb_in = red(WeaponKind::GuidedBomb, LaunchZone::InRange, 25.0);
+    let lgb_in = red(WeaponKind::GuidedBomb, LaunchZone::Locked, 25.0);
     assert!(lgb_good > lgb_in + 10, "kein SHOOT für die Laserbombe");
     let agm_good = red(WeaponKind::AirToGround, LaunchZone::Good, 4.0);
-    let agm_out = red(WeaponKind::AirToGround, LaunchZone::OutOfRange, 4.0);
+    let agm_out = red(WeaponKind::AirToGround, LaunchZone::NoLock, 4.0);
     assert!(agm_good > agm_out + 10, "kein SHOOT für die Rakete");
 }
 
