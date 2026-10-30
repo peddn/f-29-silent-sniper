@@ -8,8 +8,8 @@
 //! 1. **Entdeckt** – die Stellung kennt das Flugzeug („RADAR DETECTED“).
 //! 2. **Verfolgt** – sie merkt sich den Ort des Pings (Ziel späterer
 //!    Patrouillen).
-//! 3. **Radar ID** – bei jedem weiteren Treffer startet die Stellung eine
-//!    Boden-Luft-Rakete (M-021), wenn sie kann.
+//! 3. **Radar ID** – damit und bei jedem weiteren Treffer startet die
+//!    Stellung eine Boden-Luft-Rakete (M-021), wenn sie kann.
 //!
 //! Ob der letzte Umlauf ein Treffer war (`painted`), entscheidet außerdem,
 //! ob die Stellung ihre Rakete auf große Entfernung lenkt (halbaktiv).
@@ -19,7 +19,7 @@
 //!
 //! Das Stealth-Level ist wie im Original ein Wert für alle Radare: tief und
 //! waagerecht ist am unauffälligsten; Höhe über Grund, Querlage, offener
-//! Schacht und eigenes Radar kosten. Ganz unten (auch am Boden) bleibt ein
+//! Schacht, eigenes Radar und Störsender kosten. Ganz unten (auch am Boden) bleibt ein
 //! kleiner Grundwert – ganz unsichtbar ist das Flugzeug nie.
 //!
 //! Zwei Radartypen unterscheiden sich im Impuls:
@@ -103,6 +103,9 @@ pub const SIG_BAY: f64 = 0.15;
 /// Eigenes Radar an: ein kleiner Verlust wie der offene Schacht
 /// (Spielerentscheidung v0.2.8).
 pub const SIG_RADAR: f64 = 0.15;
+/// Störsender (ECM) an: so viel sichtbarer wie der offene Schacht (wie im
+/// Original ein fester Zuschlag).
+pub const SIG_ECM: f64 = 0.15;
 
 /// Was das Radar über das Flugzeug wissen muss.
 #[derive(Debug, Clone, Copy)]
@@ -116,6 +119,8 @@ pub struct Exposure {
     pub door: f64,
     /// Eigenes Radar eingeschaltet.
     pub radar_on: bool,
+    /// Störsender (ECM) eingeschaltet.
+    pub ecm: bool,
     /// Testoption: voll sichtbar (Stealth-Level 0).
     pub visible: bool,
 }
@@ -134,7 +139,9 @@ impl Exposure {
         let bank = detmath::wrap_pi(self.roll).abs();
         let bank = if bank > std::f64::consts::FRAC_PI_2 { std::f64::consts::PI - bank } else { bank };
         let bank = SIG_BANK * bank / std::f64::consts::FRAC_PI_2;
-        let extra = SIG_BAY * self.door.clamp(0.0, 1.0) + if self.radar_on { SIG_RADAR } else { 0.0 };
+        let extra = SIG_BAY * self.door.clamp(0.0, 1.0)
+            + if self.radar_on { SIG_RADAR } else { 0.0 }
+            + if self.ecm { SIG_ECM } else { 0.0 };
         (SIG_BASE + altitude + bank + extra).clamp(0.0, 1.0)
     }
 
@@ -304,6 +311,11 @@ impl RadarNet {
                         s.ping_point = Some(x.position);
                     }
                     self.log(tick, RadarEvent::Alert { site: k, level });
+                    // Schon mit „RADAR ID“ starten (Spielerentscheidung
+                    // v0.2.9; im Original erst bei der nächsten Bewertung).
+                    if level == MAX_ALERT {
+                        self.log(tick, RadarEvent::Fire { site: k });
+                    }
                 } else {
                     s.ping_point = Some(x.position);
                     self.log(tick, RadarEvent::Fire { site: k });
@@ -348,6 +360,7 @@ mod tests {
             height_agl_m: 1_000.0,
             door: 0.0,
             radar_on: false,
+            ecm: false,
             visible: false,
         }
     }

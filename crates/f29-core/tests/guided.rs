@@ -13,7 +13,7 @@ fn ticks(s: f64) -> usize {
     (s * f64::from(TICK_HZ)) as usize
 }
 
-fn step(sim: &mut Sim, f: u8, w: u8) {
+fn step(sim: &mut Sim, f: u8, w: u16) {
     sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, f).with_weapons(w));
 }
 

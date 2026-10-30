@@ -81,6 +81,8 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | O | 4 | Schachtklappen auf/zu |
 | C | (frei belegbar: `chaff`) | Düppel abwerfen (gegen radargelenkte Raketen SA-6, SA-5) |
 | T | (frei belegbar: `flare`) | Fackel abwerfen (gegen die infrarotgelenkte SA-13) |
+| M | (frei belegbar: `ecm`) | Störsender (ECM) ein/aus: Radarraketen verlieren außerhalb von 2 km die Lenkung; sichtbarer wie ein offener Schacht |
+| U | (frei belegbar: `ir_jammer`) | Infrarotstörer für 30 s: Infrarotraketen verlieren außerhalb von 2 km die Lenkung |
 | Tab | 3 | nächste Waffe: GUN → BAY 1 → … → BAY 4 → GUN (Start: GUN) |
 | Leertaste | 2 | gewählte Waffe auslösen (Schachtwaffen nur bei offenem Schacht; die Kanone feuert, solange die Taste gehalten wird) |
 | Rücktaste (gehalten) | 1 (Abzug) | Bordkanone feuern, gleich welche Waffe gewählt ist (nicht am Boden) |
@@ -259,6 +261,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       je 20; Kurzstrecken-SAM als SA-13 mit Infrarotsuchkopf (gemeinsamer
       optischer Suchkopf mit der Maverick); Ziele der Lenkwaffen als
       Bodenziel/Flugzeug/Täuschkörper (v0.2.9)
+- [x] Störer: ECM (M, ein/aus, sichtbarer) und Infrarotstörer (U, 30 s);
+      stärkere SAMs, Start schon mit „RADAR ID“ (v0.2.9)
 - ~~Flak~~ (gestrichen, Spielerentscheidung v0.2.9)
 
 ### v0.3: Missionen

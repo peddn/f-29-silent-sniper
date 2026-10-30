@@ -400,6 +400,10 @@ pub struct FlightData {
     pub steerpoint: Option<SteerpointInfo>,
     /// Radar eingeschaltet.
     pub radar_on: bool,
+    /// Störsender (ECM) an.
+    pub ecm: bool,
+    /// Restliche Wirkdauer des Infrarotstörers (s, 0 = aus).
+    pub ir_jammer_s: f64,
     /// Blickrichtung der Zielerfassung.
     pub look: LookDir,
     /// Aufgeschaltetes Ziel.
@@ -600,6 +604,10 @@ pub struct Sim {
     bomb_prediction: Option<(DVec3, f64)>,
     /// Vorausberechnete Abschusslage der gewählten Lenkwaffe: (Ziel, Zone).
     launch_zone: Option<(sensors::Lock, weapons::LaunchZone)>,
+    /// Störsender (ECM) an.
+    ecm: bool,
+    /// Restliche Wirkdauer des Infrarotstörers (s).
+    ir_jammer_s: f64,
     /// Ziele, die die eigenen Sensoren erfassen (sonst nur AWACS-Datalink);
     /// reihum aktualisiert, abgeleitet, nicht Teil des Zustandshashes.
     own_contacts: Vec<bool>,
@@ -680,6 +688,8 @@ impl Sim {
             gun_prediction: None,
             bomb_prediction: None,
             launch_zone: None,
+            ecm: false,
+            ir_jammer_s: 0.0,
             own_contacts: Vec::new(),
             contact_cursor: 0,
         };
@@ -799,6 +809,7 @@ impl Sim {
             height_agl_m: a.height_agl_m,
             door: self.stores.door,
             radar_on: self.sensors.radar_on,
+            ecm: self.ecm,
             visible: self.config.spawn.visible,
         }
     }
@@ -904,6 +915,14 @@ impl Sim {
         let gun_trigger = controls.has_weapon(weapon_flags::TRIGGER) && self.stores.gun_selected;
         let fire = (controls.has_weapon(weapon_flags::GUN) || gun_trigger) && !a.on_ground;
         self.gun.trigger(self.tick, fire, a.position, a.velocity, a.attitude, DT);
+        // Störer: ECM ein/aus, Infrarotstörer für seine Wirkdauer
+        if controls.has_weapon(weapon_flags::ECM) {
+            self.ecm = !self.ecm;
+        }
+        if controls.has_weapon(weapon_flags::IR_JAMMER) {
+            self.ir_jammer_s = weapons::IR_JAMMER_S;
+        }
+        self.ir_jammer_s = (self.ir_jammer_s - DT).max(0.0);
         // Täuschkörper (nicht am Boden)
         for (flag, kind) in [(weapon_flags::CHAFF, DecoyKind::Chaff), (weapon_flags::FLARE, DecoyKind::Flare)]
         {
@@ -934,6 +953,8 @@ impl Sim {
             designated: self.sensors.lock.filter(|l| l.optical).map(|l| l.target),
             flying: self.status == Status::Flying,
             painting: &painting,
+            ecm: self.ecm,
+            ir_jammer: self.ir_jammer_s > 0.0,
         };
         // Die Aufschaltung bleibt auch auf einem zerstörten Ziel, bis der
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
@@ -1346,6 +1367,8 @@ impl Sim {
             stall_speed_mps: self.spec.stall_speed_1g(mass, aero.density, a.flaps),
             steerpoint,
             radar_on: self.sensors.radar_on,
+            ecm: self.ecm,
+            ir_jammer_s: self.ir_jammer_s,
             look: self.sensors.look,
             target,
             stores: StoresInfo {
@@ -1626,7 +1649,8 @@ impl Sim {
             h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1);
             h.u64(w.owner.map_or(u64::MAX, |o| o as u64));
         }
-        h.u64(u64::from(st.chaff) | u64::from(st.flares) << 8);
+        h.u64(u64::from(st.chaff) | u64::from(st.flares) << 8 | u64::from(self.ecm) << 16);
+        h.f64(self.ir_jammer_s);
         for d in &st.decoys {
             h.u64(u64::from(d.id));
             h.f64(d.age_s);

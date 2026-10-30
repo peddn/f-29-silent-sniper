@@ -1314,6 +1314,19 @@ Format jedes Eintrags:
     bzw. Infrarot (Kegel, Reichweite, Sichtlinie), halbaktives Radar (weit weg
     nur mit Beleuchtung), Laser. Luft-Luft-Raketen beider Seiten werden damit
     zu Tabelleneinträgen.
+  - **Störer** (v0.2.9, nach dem Original; dort zeitgesteuert mit Vorrat):
+    **ECM** (Taste M) ein/aus gegen Radarlenkung, **Infrarotstörer** (Taste U)
+    für 30 s gegen Infrarotlenkung, ohne Vorrat (Spielerentscheidung). Eine
+    Rakete der gestörten Lenkart verliert die Lenkung auf das Flugzeug, solange
+    sie weiter als 2 km entfernt ist (wie im Original: nah brennt sie durch);
+    Täuschkörper lenken sie weiterhin ab. ECM macht so sichtbarer wie der
+    offene Schacht (wie im Original ein fester Zuschlag), der Infrarotstörer
+    kostet nichts. Dass die Alarmstufen bei ECM langsamer steigen (Original),
+    ist bewusst weggelassen (Aufwand ohne großen Nutzen). Anzeige im HUD
+    „ECM“ bzw. „IRJ 25“.
+  - **Stärkere Raketen** (v0.2.9, damit sich Störer und Täuschkörper lohnen):
+    Wirkradius ×1,5 (SA-13 18 m, SA-6 30 m, SA-5 45 m), Drehrate SA-6 30°/s,
+    SA-13 40°/s; Start schon mit „RADAR ID“ statt beim nächsten Treffer.
   - **Täuschkörper** (wie im Original, v0.2.9): **Düppel** (Taste C) gegen
     Radarlenkung (SA-6, SA-5), **Fackeln** (Taste T) gegen Infrarotlenkung
     (SA-13). Je 20 Stück, höchstens drei gleichzeitig in der Luft, leer meldet

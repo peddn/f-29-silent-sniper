@@ -32,7 +32,7 @@ fn near_site(class: TargetClass, north_off: f64, east_off: f64, height: f64, hea
     (sim, site)
 }
 
-fn fly(sim: &mut Sim, seconds: f64, w: u8, f: u8) {
+fn fly(sim: &mut Sim, seconds: f64, w: u16, f: u8) {
     for _ in 0..(seconds * f64::from(TICK_HZ)) as usize {
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, f).with_weapons(w));
     }
@@ -101,7 +101,7 @@ fn flying_across_a_doppler_radar_stays_hidden() {
 #[test]
 fn open_bay_and_own_radar_give_us_away() {
     let seconds = radar::EARLY_WARNING.sweep_s * 2.0 + 0.5;
-    let run = |w: u8, f: u8| {
+    let run = |w: u16, f: u8| {
         // 20 km südlich des Frühwarnradars, Kurs Ost (Flanke zum Radar)
         let (mut sim, site) =
             near_site(TargetClass::EarlyWarning, -20_000.0, 0.0, 1_500.0, std::f64::consts::FRAC_PI_2);

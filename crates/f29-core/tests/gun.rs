@@ -10,7 +10,7 @@ fn air() -> Sim {
     Sim::new(SimConfig { seed: 0x0F29, spawn: Spawn::default() })
 }
 
-fn hold(sim: &mut Sim, seconds: f64, w: u8) {
+fn hold(sim: &mut Sim, seconds: f64, w: u16) {
     for _ in 0..(seconds * f64::from(TICK_HZ)) as usize {
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(w));
     }

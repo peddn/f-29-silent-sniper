@@ -516,8 +516,14 @@ fn selected_weapon(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
         None => ("NO STORE".to_string(), Ink::HudDim),
     };
     dl.text_mid([x, y + TXT_SMALL * 1.7], TXT_SMALL, Align::Left, &text, ink);
-    // Täuschkörper: Düppel und Fackeln
-    let decoys = format!("CH {} FL {}", st.chaff, st.flares);
+    // Täuschkörper (Düppel, Fackeln) und laufende Störer
+    let mut decoys = format!("CH {} FL {}", st.chaff, st.flares);
+    if fd.ecm {
+        decoys += " ECM";
+    }
+    if fd.ir_jammer_s > 0.0 {
+        decoys += &format!(" IRJ {:.0}", fd.ir_jammer_s.ceil());
+    }
     let ink = if st.chaff == 0 || st.flares == 0 { Ink::HudWarning } else { Ink::HudDim };
     dl.text_mid([x, y + TXT_SMALL * 3.4], TXT_SMALL, Align::Left, &decoys, ink);
     let door = if st.door >= 1.0 {

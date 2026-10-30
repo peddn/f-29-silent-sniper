@@ -203,7 +203,7 @@ fn long_range_sam_climbs_and_lofts() {
 
 /// Wartet auf den Start, dann fliegt geradeaus und wirft `decoy`, sobald die
 /// Rakete näher als `at_m` ist. Liefert die Ereignisse danach.
-fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u8, at_m: f64) -> Vec<WeaponEvent> {
+fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) -> Vec<WeaponEvent> {
     let (mut sim, _) = toward_site_with(class, dist, height, true);
     assert!(fly_until(&mut sim, 40.0, |s| launched(s).is_some()), "kein Start");
     let t0 = sim.flight_data().tick;
@@ -242,13 +242,20 @@ fn chaff_decoys_the_radar_missile() {
 fn flare_decoys_the_infrared_missile_but_chaff_does_not() {
     // Hoch genug für freie Sicht (Infrarot braucht sie).
     let chaff = decoy_run(TargetClass::ShortRangeSam, 8_000.0, 3_000.0, weapon_flags::CHAFF, 1_500.0);
-    assert!(!chaff.iter().any(|e| matches!(e, WeaponEvent::Decoyed { .. })), "{chaff:?}");
+    // (Andere Stellungen schießen mit; es zählt nur die SA-13.)
+    let decoyed = |ev: &[WeaponEvent]| {
+        ev.iter().find_map(|e| match e {
+            WeaponEvent::Decoyed { kind: WeaponKind::ShortRangeSam, id } => Some(*id),
+            _ => None,
+        })
+    };
+    assert_eq!(decoyed(&chaff), None, "{chaff:?}");
     let flare = decoy_run(TargetClass::ShortRangeSam, 8_000.0, 3_000.0, weapon_flags::FLARE, 1_500.0);
+    let id = decoyed(&flare).expect("SA-13 abgelenkt");
     assert!(
-        flare.iter().any(|e| matches!(e, WeaponEvent::Decoyed { kind: WeaponKind::ShortRangeSam, .. })),
+        !flare.iter().any(|e| matches!(e, WeaponEvent::AircraftHit { id: x, .. } if *x == id)),
         "{flare:?}"
     );
-    assert!(!flare.iter().any(|e| matches!(e, WeaponEvent::AircraftHit { .. })), "{flare:?}");
 }
 
 /// Vorrat 20 je Art, höchstens drei gleichzeitig; leer meldet sich.
@@ -271,4 +278,23 @@ fn decoy_stock_is_limited() {
             .iter()
             .any(|(_, e)| *e == WeaponEvent::DecoyEmpty(f29_core::weapons::DecoyKind::Flare))
     );
+}
+
+/// ECM: ein/aus, macht sichtbarer; Infrarotstörer: 30 s, ohne Zuschlag.
+#[test]
+fn jammers_switch_and_cost_stealth() {
+    let (mut sim, _) = toward_site(TargetClass::AirDefense, 30_000.0, 4_000.0);
+    let stealth = |s: &Sim| s.flight_data().threat.stealth;
+    let before = stealth(&sim);
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::ECM));
+    assert!(sim.flight_data().ecm);
+    assert!(stealth(&sim) < before - 0.1, "ECM kostet Stealth");
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::ECM));
+    assert!(!sim.flight_data().ecm);
+    let off = stealth(&sim);
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::IR_JAMMER));
+    assert!(sim.flight_data().ir_jammer_s > 29.0);
+    assert!((stealth(&sim) - off).abs() < 0.01, "Infrarotstörer ohne Zuschlag");
+    fly_until(&mut sim, 30.5, |_| false);
+    assert_eq!(sim.flight_data().ir_jammer_s, 0.0);
 }

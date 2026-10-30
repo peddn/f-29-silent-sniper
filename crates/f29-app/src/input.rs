@@ -37,7 +37,7 @@ pub struct PilotInput {
     /// Blickrichtung der Zielerfassung wählen (Kennung, einmalig; 0 = keine).
     pub(crate) look: u8,
     /// Waffenbedienung (einmalig, siehe `weapon_flags`).
-    pub(crate) weapons: u8,
+    pub(crate) weapons: u16,
     /// Abzug der Bordkanone (gehalten).
     pub(crate) gun: bool,
     /// Abzug der gewählten Waffe (gehalten; feuert die gewählte Kanone).
@@ -178,13 +178,15 @@ pub(crate) fn flight_input(keys: Res<ButtonInput<KeyCode>>, time: Res<Time>, mut
     pilot.trigger = keys.pressed(KeyCode::Space);
 
     // Waffen: Leertaste auslösen, O Schacht auf/zu, Tab nächste Waffe (GUN,
-    // BAY 1–4); C Düppel, T Fackel
+    // BAY 1–4); C Düppel, T Fackel, M Störsender ein/aus, U Infrarotstörer
     for (key, flag) in [
         (KeyCode::Space, weapon_flags::RELEASE),
         (KeyCode::KeyO, weapon_flags::BAY_DOORS),
         (KeyCode::Tab, weapon_flags::NEXT_BAY),
         (KeyCode::KeyC, weapon_flags::CHAFF),
         (KeyCode::KeyT, weapon_flags::FLARE),
+        (KeyCode::KeyM, weapon_flags::ECM),
+        (KeyCode::KeyU, weapon_flags::IR_JAMMER),
     ] {
         if keys.just_pressed(key) {
             pilot.weapons |= flag;

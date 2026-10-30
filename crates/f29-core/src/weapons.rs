@@ -99,6 +99,11 @@ const SAM_DIRECT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
 const MAX_LEAD_S: f64 = 10.0;
 /// Startgeschwindigkeit der Boden-Luft-Raketen (m/s).
 const SAM_LAUNCH_MPS: f64 = 60.0;
+/// Störer (ECM bzw. Infrarot): Raketen der gestörten Lenkart verlieren die
+/// Lenkung, solange sie weiter als so weg sind (m) – wie im Original.
+pub const BURN_THROUGH_M: f64 = 2_000.0;
+/// Wirkdauer des Infrarotstörers (s).
+pub const IR_JAMMER_S: f64 = 30.0;
 /// Täuschkörper: Vorrat je Art, höchstens so viele gleichzeitig, Brenndauer (s).
 pub const DECOY_STOCK: u8 = 20;
 pub const MAX_DECOYS: usize = 3;
@@ -287,14 +292,14 @@ const SAM: WeaponSpec = WeaponSpec {
     seeker: Seeker::SemiActive,
     cruise_mps: 650.0,
     accel_mps2: 250.0,
-    turn_rate_rad: deg(22.0),
+    turn_rate_rad: deg(30.0),
     launch_rad: deg(45.0),
     boost_s: 1.5,
     loft: 0.1,
     max_range_m: 25_000.0,
     // Suchkegel wie im Original
     seeker_cone_rad: deg(22.0),
-    lethal_radius_m: 20.0,
+    lethal_radius_m: 30.0,
     frag_radius_m: 0.0,
     life_s: 50.0,
     ..MISSILE
@@ -372,7 +377,7 @@ const SPECS: [WeaponSpec; 9] = [
         boost_s: 4.0,
         loft: 0.25,
         max_range_m: 60_000.0,
-        lethal_radius_m: 30.0,
+        lethal_radius_m: 45.0,
         life_s: 150.0,
         ..SAM
     },
@@ -388,12 +393,12 @@ const SPECS: [WeaponSpec; 9] = [
         mass_kg: 130.0,
         cruise_mps: 900.0,
         accel_mps2: 400.0,
-        turn_rate_rad: deg(30.0),
+        turn_rate_rad: deg(40.0),
         launch_rad: 0.0,
         boost_s: 0.0,
         loft: 0.0,
         max_range_m: 10_000.0,
-        lethal_radius_m: 12.0,
+        lethal_radius_m: 18.0,
         life_s: 20.0,
         ..SAM
     },
@@ -543,6 +548,7 @@ pub fn launch_zone(kind: WeaponKind, l: &Launch<'_>, i: usize) -> LaunchZone {
         aircraft: None,
         decoys: &[],
         painted: false,
+        jammed: (false, false),
         los: false,
     };
     let dt = l.dt * PREDICT_STEPS;
@@ -893,6 +899,9 @@ pub struct World<'a> {
     /// Radarstellungen (Index in `Sim::targets`), die das Flugzeug beim letzten
     /// Umlauf erfasst haben: Sie beleuchten es für ihre Raketen.
     pub painting: &'a [usize],
+    /// Störsender (gegen Radarlenkung) bzw. Infrarotstörer laufen.
+    pub ecm: bool,
+    pub ir_jammer: bool,
 }
 
 /// Was der Abschuss über Flugzeug und Ziel wissen muss.
@@ -1131,6 +1140,7 @@ impl Stores {
                 aircraft: world.flying.then_some((world.aircraft, world.aircraft_velocity)),
                 decoys: &decoys,
                 painted: w.owner.is_some_and(|o| world.painting.contains(&o)),
+                jammed: (world.ecm, world.ir_jammer),
                 los: true,
             };
             if w.kind.is_guided() && (world.tick + u64::from(w.id)).is_multiple_of(SEEKER_TICKS) {
@@ -1287,6 +1297,8 @@ struct View<'a> {
     /// Die Stellung dieser (feindlichen) Rakete hat das Flugzeug beim letzten
     /// Umlauf erfasst (halbaktive Beleuchtung).
     painted: bool,
+    /// Das Flugzeug stört Radar- bzw. Infrarotlenkung.
+    jammed: (bool, bool),
     /// Sichtlinie prüfen (die Vorausberechnung spart sie sich).
     los: bool,
 }
@@ -1377,18 +1389,28 @@ fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
                 return None;
             }
             let decoy = matches!(track, Track::Decoy(_));
-            let sees = match s.seeker {
-                Seeker::SemiActive => decoy || v.painted || to.length() <= SEMI_ACTIVE_M,
-                _ => {
-                    to.length() <= s.max_range_m
-                        && (!v.los
-                            || line_of_sight(
-                                |n, e| v.terrain.elevation(n, e),
-                                [w.position.x, w.position.y, -w.position.z],
-                                [p.x, p.y, -p.z],
-                            ))
-                }
-            };
+            // Gestört: außerhalb kurzer Entfernung keine Lenkung auf das Flugzeug.
+            let (ecm, ir) = v.jammed;
+            let jammed = !decoy
+                && to.length() > BURN_THROUGH_M
+                && match s.seeker {
+                    Seeker::SemiActive => ecm,
+                    Seeker::Optical => ir,
+                    _ => false,
+                };
+            let sees = !jammed
+                && match s.seeker {
+                    Seeker::SemiActive => decoy || v.painted || to.length() <= SEMI_ACTIVE_M,
+                    _ => {
+                        to.length() <= s.max_range_m
+                            && (!v.los
+                                || line_of_sight(
+                                    |n, e| v.terrain.elevation(n, e),
+                                    [w.position.x, w.position.y, -w.position.z],
+                                    [p.x, p.y, -p.z],
+                                ))
+                    }
+                };
             w.tracking = off <= s.seeker_cone_rad && sees;
             None
         }
@@ -1706,7 +1728,16 @@ mod tests {
 
     /// Sicht auf Bodenziele für die Tests (ohne Flugzeug, ohne Täuschkörper).
     fn ground_view<'a>(targets: &'a [Target], terrain: &'a Terrain) -> View<'a> {
-        View { targets, terrain, designated: None, aircraft: None, decoys: &[], painted: false, los: true }
+        View {
+            targets,
+            terrain,
+            designated: None,
+            aircraft: None,
+            decoys: &[],
+            painted: false,
+            jammed: (false, false),
+            los: true,
+        }
     }
 
     #[test]
@@ -1772,8 +1803,29 @@ mod tests {
             aircraft: Some((at, DVec3::ZERO)),
             decoys,
             painted,
+            jammed: (false, false),
             los: true,
         }
+    }
+
+    /// Störer wie im Original: Die gestörte Lenkart verliert außerhalb kurzer
+    /// Entfernung die Lenkung, die andere nicht.
+    #[test]
+    fn jammers_break_their_kind_of_guidance_beyond_burn_through() {
+        let terrain = Terrain::new(1);
+        let (far, near) = (DVec3::new(5_000.0, 0.0, -9_000.0), DVec3::new(1_500.0, 0.0, -9_000.0));
+        let check = |kind, at: DVec3, jammed| {
+            let mut w = sam(kind);
+            w.position = DVec3::new(0.0, 0.0, -9_000.0);
+            seek(&mut w, &View { jammed, ..air_view(&terrain, at, true, &[]) });
+            w.tracking
+        };
+        let (radar, ir) = (WeaponKind::MediumRangeSam, WeaponKind::ShortRangeSam);
+        assert!(!check(radar, far, (true, false)), "ECM stört die Radarrakete");
+        assert!(check(radar, near, (true, false)), "nah brennt sie durch");
+        assert!(check(ir, far, (true, false)), "ECM stört kein Infrarot");
+        assert!(!check(ir, far, (false, true)), "Infrarotstörer stört Infrarot");
+        assert!(check(radar, far, (false, true)));
     }
 
     /// Halbaktiv: Weit weg lenkt die Boden-Luft-Rakete nur, solange ihre

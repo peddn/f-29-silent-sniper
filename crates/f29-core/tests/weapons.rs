@@ -13,7 +13,7 @@ fn ticks(s: f64) -> usize {
 }
 
 /// Geradeausflug mit Schub 0,7; `w` sind die Waffenbits.
-fn step(sim: &mut Sim, w: u8) {
+fn step(sim: &mut Sim, w: u16) {
     sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(w));
 }
 
@@ -214,7 +214,7 @@ fn retarded_bomb_avoids_the_frag_warning_at_low_level() {
             },
         });
         // Höhe halten (einfacher Regler auf Höhe und Steigrate).
-        let hold = |sim: &mut Sim, w: u8| {
+        let hold = |sim: &mut Sim, w: u16| {
             let fd = sim.flight_data();
             let pull = (0.02 * (70.0 - fd.altitude_m) - 0.08 * fd.vertical_speed_mps).clamp(-0.4, 0.4);
             sim.step(ControlFrame::from_analog(pull, -0.5 * fd.roll, 0.0, 0.8, 0).with_weapons(w));

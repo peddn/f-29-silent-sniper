@@ -23,23 +23,28 @@ pub mod flags {
     pub const LOOK_MASK: u8 = 0b111 << LOOK_SHIFT;
 }
 
-/// Bitflags der Waffenbedienung (eigenes Byte; Flanken bis auf `GUN`).
+/// Bitflags der Waffenbedienung (eigenes Wort; Flanken bis auf `GUN` und
+/// `TRIGGER`).
 pub mod weapon_flags {
     /// Waffe des gewählten Schachts auslösen.
-    pub const RELEASE: u8 = 1 << 0;
+    pub const RELEASE: u16 = 1 << 0;
     /// Schachtklappen öffnen bzw. schließen.
-    pub const BAY_DOORS: u8 = 1 << 1;
+    pub const BAY_DOORS: u16 = 1 << 1;
     /// Nächste Waffe wählen (GUN, BAY 1–4).
-    pub const NEXT_BAY: u8 = 1 << 2;
+    pub const NEXT_BAY: u16 = 1 << 2;
     /// Bordkanone feuern, gleich welche Waffe gewählt ist (gehalten).
-    pub const GUN: u8 = 1 << 3;
+    pub const GUN: u16 = 1 << 3;
     /// Abzug der gewählten Waffe gehalten: feuert die Kanone, wenn sie gewählt
     /// ist (Schachtwaffen lösen über die Flanke `RELEASE` aus).
-    pub const TRIGGER: u8 = 1 << 4;
+    pub const TRIGGER: u16 = 1 << 4;
     /// Düppel abwerfen.
-    pub const CHAFF: u8 = 1 << 5;
+    pub const CHAFF: u16 = 1 << 5;
     /// Fackel abwerfen.
-    pub const FLARE: u8 = 1 << 6;
+    pub const FLARE: u16 = 1 << 6;
+    /// Störsender (ECM) gegen Radarlenkung ein/aus.
+    pub const ECM: u16 = 1 << 7;
+    /// Infrarotstörer für seine Wirkdauer einschalten.
+    pub const IR_JAMMER: u16 = 1 << 8;
 }
 
 /// Ein Tick Steuereingabe, quantisiert.
@@ -55,7 +60,7 @@ pub struct ControlFrame {
     pub throttle: u16,
     pub flags: u8,
     /// Waffenbedienung, siehe [`weapon_flags`].
-    pub weapons: u8,
+    pub weapons: u16,
 }
 
 const AXIS_MAX: f64 = i16::MAX as f64;
@@ -86,11 +91,11 @@ impl ControlFrame {
     }
 
     /// Dieselbe Eingabe mit Waffenbedienung.
-    pub fn with_weapons(self, weapons: u8) -> Self {
+    pub fn with_weapons(self, weapons: u16) -> Self {
         Self { weapons, ..self }
     }
 
-    pub fn has_weapon(&self, flag: u8) -> bool {
+    pub fn has_weapon(&self, flag: u16) -> bool {
         self.weapons & flag != 0
     }
 
