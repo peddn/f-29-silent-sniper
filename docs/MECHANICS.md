@@ -625,9 +625,10 @@ Format jedes Eintrags:
   - **Ansagen „PULL UP“ und „OVER G“:** alle 1,6 s, solange die Warnung
     anliegt; die Bodenwarnung hat Vorrang. *v0.2.9 (Spielerwunsch):* einfache
     Samples statt der früheren Formant-Sprachsynthese (entfernt):
-    `crates/f29-audio/sounds/pull_up.wav` und `over_g.wav`, eingebettet. Erzeugt
-    mit espeak-ng (Stimme en-us+f3), dann auf Bordfunk gefiltert (300–3400 Hz,
-    leicht gesättigt). Ersetzbar durch frei lizenzierte Aufnahmen.
+    `crates/f29-audio/sounds/pull_up.wav` und `over_g.wav`, eingebettet. Vorerst
+    CC0-Platzhalter aus Kenneys Voiceover Pack („Look out!“, „Hold!“), weil
+    keine freie Aufnahme mit dem richtigen Wortlaut zu finden war (Herkunft in
+    `sounds/README.md`). Ersetzbar durch frei lizenzierte Aufnahmen.
   - Hörproben rendern Einzelklänge ohne Triebwerk (Klanggruppen Triebwerk,
     Systeme, Ereignisse, Ansagen lassen sich getrennt pegeln).
   - Pause schaltet weich stumm. Startparameter `--volume 0..100` und

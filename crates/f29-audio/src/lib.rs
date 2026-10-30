@@ -38,7 +38,7 @@ use std::sync::Arc;
 pub const SAMPLE_RATE: u32 = 44_100;
 /// Abstand der Ansagen (s, von Beginn zu Beginn).
 pub const PULL_UP_REPEAT_S: f32 = 1.6;
-/// Eingebettete Ansagen (PCM-WAV, mit espeak-ng erzeugt und bearbeitet).
+/// Eingebettete Ansagen (PCM-WAV, CC0-Platzhalter, siehe `sounds/README.md`).
 const PULL_UP_WAV: &[u8] = include_bytes!("../sounds/pull_up.wav");
 const OVER_G_WAV: &[u8] = include_bytes!("../sounds/over_g.wav");
 /// Tonhöhe des Abriss-Alarms (Hz) und seine Pulsfrequenz (Hz).

@@ -116,8 +116,9 @@ Leserecht auf `/dev/input/event*` (Gruppe `input`).
 ## Klang
 
 Die Klänge entstehen zur Laufzeit per Synthese im Retro-Stil. Nur die beiden
-Ansagen „PULL UP“ und „OVER G“ sind Samples: `crates/f29-audio/sounds/*.wav`
-(PCM, eingebettet; mit espeak-ng erzeugt und auf Bordfunk gefiltert). Wer sie
+Ansagen für „PULL UP“ und „OVER G“ sind Samples: `crates/f29-audio/sounds/*.wav`
+(PCM, eingebettet). Vorerst CC0-Platzhalter aus Kenneys Voiceover Pack
+(„Look out!“, „Hold!“), Herkunft in `crates/f29-audio/sounds/README.md`. Wer sie
 ersetzen will, legt dort eine andere PCM-WAV-Datei ab (8/16 Bit, beliebige
 Abtastrate; nur frei lizenzierte Aufnahmen, keine aus anderen Spielen).
 Hörproben ohne Spiel: `cargo run -p f29-headless -- sound --out sounds`.
