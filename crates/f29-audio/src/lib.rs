@@ -29,6 +29,7 @@ pub mod voice;
 pub mod wav;
 
 use dsp::{Noise, OnePole, Phase, pulse, saw, sine, triangle};
+pub use f29_core::BlastKind;
 use f29_core::{FlightData, Status};
 use std::sync::Arc;
 
@@ -60,6 +61,21 @@ pub struct PingCue {
     pub hit: bool,
 }
 
+/// Eine Detonation, die einen Klang auslöst.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BlastCue {
+    /// Eindeutige Kennung – dieselbe Detonation klingt nur einmal.
+    pub id: u64,
+    pub kind: BlastKind,
+    /// Lautstärke nach Entfernung 0..1 (Treffer am Flugzeug immer 1).
+    pub gain: f32,
+}
+
+/// Entfernung (m), in der eine Detonation nur noch halb so laut ist.
+const BLAST_HALF_M: f64 = 1_500.0;
+/// Leiser als so klingt eine ferne Detonation nicht.
+const BLAST_MIN_GAIN: f32 = 0.15;
+
 /// Momentaufnahme der Simulation für den Klang.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct AudioInput {
@@ -82,6 +98,8 @@ pub struct AudioInput {
     pub ping: Option<PingCue>,
     /// Raketenwarnung: Eine feindliche Rakete verfolgt das Flugzeug.
     pub missile_warning: bool,
+    /// Jüngste Detonation.
+    pub blast: Option<BlastCue>,
     pub crashed: bool,
     /// Pause: alles verstummt weich.
     pub paused: bool,
@@ -102,6 +120,15 @@ impl AudioInput {
             touchdown: fd.touchdown.map(|t| TouchdownCue { id: t.tick, hard: t.hard }),
             ping: fd.threat.last_ping.filter(|p| p.age_s < 0.5).map(|p| PingCue { id: p.tick, hit: p.hit }),
             missile_warning: fd.warnings.missile,
+            blast: fd.blast.map(|b| BlastCue {
+                id: b.id,
+                kind: b.kind,
+                gain: if b.kind == BlastKind::AircraftHit {
+                    1.0
+                } else {
+                    ((1.0 / (1.0 + b.distance_m / BLAST_HALF_M)) as f32).max(BLAST_MIN_GAIN)
+                },
+            }),
             crashed: matches!(fd.status, Status::Crashed { .. }),
             paused,
         }
@@ -149,6 +176,9 @@ enum OneShot {
     Sample { pos: usize, gain: f32 },
     /// Piepton des Radarwarnempfängers.
     Beep { t: f32, freq: f32, gain: f32, dur: f32, phase: Phase },
+    /// Detonation: gefiltertes Rauschen mit tiefem Grollen; `ring` > 0 gibt
+    /// einen metallischen Klang dazu (Treffer am eigenen Flugzeug).
+    Boom { t: f32, gain: f32, decay: f32, cutoff: f32, ring: f32, lp: OnePole },
 }
 
 /// Der Synthesizer. Ein Exemplar pro Datenstrom.
@@ -183,6 +213,7 @@ pub struct Synth {
     prev_airbrake: f32,
     last_touchdown: Option<u64>,
     last_ping: Option<u64>,
+    last_blast: Option<u64>,
     crashed: bool,
     pull_up_timer: f32,
     missile_timer: f32,
@@ -226,6 +257,7 @@ impl Synth {
             prev_airbrake: f32::NAN,
             last_touchdown: None,
             last_ping: None,
+            last_blast: None,
             crashed: false,
             pull_up_timer: 0.0,
             missile_timer: 0.0,
@@ -317,6 +349,28 @@ impl Synth {
                         phase: Phase::default(),
                     });
                 }
+            }
+        }
+        // Detonationen: Treffer am Ziel lang und kräftig, Fehlschuss kurz und
+        // dumpf, Treffer am eigenen Flugzeug laut, scharf und metallisch.
+        if let Some(b) = input.blast
+            && self.last_blast != Some(b.id)
+        {
+            self.last_blast = Some(b.id);
+            if !first {
+                let lp = OnePole::default();
+                let g = b.gain;
+                self.shots.push(match b.kind {
+                    BlastKind::TargetHit => {
+                        OneShot::Boom { t: 0.0, gain: 1.1 * g, decay: 1.1, cutoff: 1_100.0, ring: 0.0, lp }
+                    }
+                    BlastKind::Miss => {
+                        OneShot::Boom { t: 0.0, gain: 0.6 * g, decay: 0.35, cutoff: 450.0, ring: 0.0, lp }
+                    }
+                    BlastKind::AircraftHit => {
+                        OneShot::Boom { t: 0.0, gain: 1.4, decay: 0.6, cutoff: 2_800.0, ring: 640.0, lp }
+                    }
+                });
             }
         }
         if input.crashed && !self.crashed && !first {
@@ -469,6 +523,18 @@ impl Synth {
                         *t += dt;
                         v
                     }
+                    OneShot::Boom { t, gain, decay, cutoff, ring, lp } => {
+                        let rumble = lp.process(n, OnePole::coeff(*cutoff, sr)) * (-*t / *decay).exp() * 1.6
+                            + sine(*t * 42.0) * (-*t / (*decay * 0.4)).exp() * 0.6;
+                        let metal = if *ring > 0.0 {
+                            (sine(*t * *ring) + 0.5 * sine(*t * *ring * 2.76)) * (-*t / 0.4).exp() * 0.35
+                        } else {
+                            0.0
+                        };
+                        let v = (rumble + metal) * *gain;
+                        *t += dt;
+                        v
+                    }
                     OneShot::Sample { pos, gain } => {
                         let v = self.pull_up_voice.get(*pos).copied().unwrap_or(0.0) * *gain * mix.voice;
                         *pos += 1;
@@ -503,6 +569,7 @@ fn shot_finished(s: &OneShot, voice_len: usize) -> bool {
         OneShot::Hiss { t, dur, .. } => *t >= *dur,
         OneShot::Squeal { t, .. } => *t >= 0.32,
         OneShot::Crash { t, .. } => *t > 3.0,
+        OneShot::Boom { t, decay, .. } => *t > *decay * 7.0,
         OneShot::Sample { pos, .. } => *pos >= voice_len,
         OneShot::Beep { t, dur, .. } => *t >= *dur,
     }
@@ -578,6 +645,29 @@ mod tests {
         run(&mut s, 1.5);
         s.set_input(AudioInput { gear: 1.0, on_ground: true, touchdown: td, ..flying(0.0) });
         assert_eq!(s.active_one_shots(), 0, "dasselbe Aufsetzen klingt nur einmal");
+    }
+
+    /// Detonationen: jede klingt einmal; Treffer am Flugzeug lauter als ein
+    /// ferner Fehlschuss.
+    #[test]
+    fn blasts_sound_once_and_by_kind() {
+        let level = |kind: BlastKind, gain: f32| {
+            let mut s = Synth::with_default_voice();
+            s.set_mix(Mix::WITHOUT_ENGINE);
+            s.set_input(flying(0.6));
+            run(&mut s, 0.1);
+            let cue = Some(BlastCue { id: 7, kind, gain });
+            s.set_input(AudioInput { blast: cue, ..flying(0.6) });
+            assert_eq!(s.active_one_shots(), 1);
+            let v = rms(&run(&mut s, 0.5));
+            s.set_input(AudioInput { blast: cue, ..flying(0.6) });
+            assert_eq!(s.active_one_shots(), 1, "dieselbe Detonation klingt nur einmal");
+            v
+        };
+        let hit = level(BlastKind::AircraftHit, 1.0);
+        let target = level(BlastKind::TargetHit, 0.5);
+        let miss = level(BlastKind::Miss, 0.2);
+        assert!(hit > target && target > miss && miss > 0.0, "{hit} {target} {miss}");
     }
 
     #[test]

@@ -95,6 +95,9 @@ fn missile_hit_damages_two_systems() {
     assert!(fly_until(&mut sim, 60.0, |s| hit(s).is_some()), "kein Treffer");
     let systems = hit(&sim).unwrap();
     assert_ne!(systems[0], systems[1]);
+    // Klang: Treffer am eigenen Flugzeug
+    let blast = sim.flight_data().blast.expect("Detonation");
+    assert_eq!(blast.kind, f29_core::BlastKind::AircraftHit);
     for s in System::ALL {
         let damaged = !sim.systems().get(s).is_ok();
         assert_eq!(damaged, systems.contains(&s), "{s:?}");

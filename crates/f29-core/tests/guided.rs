@@ -296,10 +296,13 @@ fn lock_stays_on_the_wreck_until_a_new_target_is_chosen() {
         .find_map(|seed| {
             let (mut sim, target) = lined_up_at(seed, TargetClass::Soft, 8_000.0, 300.0, agm())?;
             let events = shoot(&mut sim);
-            matches!(impact(&events), Some(ImpactResult::Destroyed { target: t, .. }) if t == target)
-                .then_some((sim, target))
+            // Klang: Treffer am Ziel
+            let sound = sim.flight_data().blast.map(|b| b.kind);
+            (matches!(impact(&events), Some(ImpactResult::Destroyed { target: t, .. }) if t == target)
+                && sound == Some(f29_core::BlastKind::TargetHit))
+            .then_some((sim, target))
         })
-        .expect("ein Treffer");
+        .expect("ein Treffer mit Treffer-Klang");
     for _ in 0..ticks(2.0) {
         step(&mut sim, 0, 0);
     }

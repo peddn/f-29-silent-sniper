@@ -420,6 +420,8 @@ pub struct FlightData {
     pub munitions: Vec<MunitionInfo>,
     /// Bild der jüngsten eigenen Waffe mit Fernsehsuchkopf in der Luft.
     pub weapon_cam: Option<WeaponCam>,
+    /// Jüngste Detonation (Klang).
+    pub blast: Option<BlastInfo>,
     /// Bordkanone: Munition, Abzug und Aufschlagpunkt.
     pub gun: GunInfo,
     /// Lage gegenüber den feindlichen Radaren (M-020).
@@ -457,6 +459,27 @@ pub struct ThreatSite {
     pub signal: f64,
     pub alert: u8,
     pub range_m: f64,
+}
+
+/// Eine Detonation für den Klang (jüngste der letzten halben Sekunde).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BlastInfo {
+    /// Eindeutig je Detonation (Tick und Waffennummer).
+    pub id: u64,
+    pub kind: BlastKind,
+    /// Entfernung vom Flugzeug (m).
+    pub distance_m: f64,
+}
+
+/// Art der Detonation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlastKind {
+    /// Eigene Waffe hat ein Ziel beschädigt oder zerstört.
+    TargetHit,
+    /// Eine Waffe (eigene oder feindliche) hat verfehlt oder nicht gewirkt.
+    Miss,
+    /// Eine feindliche Rakete hat das Flugzeug getroffen.
+    AircraftHit,
 }
 
 /// Letzter Ping.
@@ -1328,6 +1351,7 @@ impl Sim {
                 }),
             },
             threat: self.threat_info(),
+            blast: self.blast(),
             munitions: self
                 .stores
                 .in_flight
@@ -1352,6 +1376,24 @@ impl Sim {
             destroyed_targets: (0..self.targets.len()).filter(|&i| !self.targets[i].is_intact()).collect(),
             warnings,
         }
+    }
+
+    /// Jüngste Detonation der letzten halben Sekunde: Treffer am Ziel,
+    /// Fehlschuss (auch feindliche Raketen) oder Treffer am eigenen Flugzeug.
+    fn blast(&self) -> Option<BlastInfo> {
+        let recent = self.tick.saturating_sub((0.5 / DT) as u64);
+        self.stores.events.iter().rev().take_while(|(t, _)| *t >= recent).find_map(|&(tick, e)| {
+            let (id, kind, at) = match e {
+                WeaponEvent::Impact { id, position, result, .. } => {
+                    let hit = matches!(result, ImpactResult::Destroyed { .. } | ImpactResult::Damaged(_));
+                    (id, if hit { BlastKind::TargetHit } else { BlastKind::Miss }, position)
+                }
+                WeaponEvent::AircraftHit { id, .. } => (id, BlastKind::AircraftHit, self.aircraft.position),
+                _ => return None,
+            };
+            let distance_m = (at - self.aircraft.position).length();
+            Some(BlastInfo { id: tick << 16 | u64::from(id & 0xFFFF), kind, distance_m })
+        })
     }
 
     /// Zielhilfe aus der zuletzt berechneten Aufschlagvorhersage.

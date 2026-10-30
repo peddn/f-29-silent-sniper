@@ -110,81 +110,100 @@ fn landing_demo() -> Vec<f32> {
 pub fn render_all(dir: &Path) -> Result<Vec<String>, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let td = |id: u64, hard: bool| Some(TouchdownCue { id, hard });
-    let clips: Vec<(&str, Vec<f32>)> = vec![
-        (
-            "01_triebwerk",
-            render(12.0, ENGINE_ONLY, |t| {
-                let up = ramp(t, 2.0, 5.0) - ramp(t, 8.0, 11.0);
-                cruise(up, 40.0 + 180.0 * ramp(t, 2.0, 9.0))
-            }),
-        ),
-        (
-            "02_fahrwerk",
-            render(13.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
-                gear: ramp(t, 1.0, 6.0) - ramp(t, 7.5, 12.5),
-                ..cruise(0.55, 120.0)
-            }),
-        ),
-        (
-            "03_klappen",
-            render(6.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
-                flaps: ramp(t, 0.5, 2.5) - ramp(t, 3.5, 5.5),
-                ..cruise(0.55, 120.0)
-            }),
-        ),
-        (
-            "04_luftbremse",
-            render(6.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
-                airbrake: ramp(t, 1.0, 1.8) - ramp(t, 4.0, 4.8),
-                ..cruise(0.6, 200.0)
-            }),
-        ),
-        (
-            "05_aufsetzen",
-            render(8.0, Mix::WITHOUT_ENGINE, |t| {
-                let (on_ground, touchdown) = if t >= 4.5 {
-                    (true, td(2, true))
-                } else if t >= 1.0 {
-                    (t < 3.5, td(1, false))
-                } else {
-                    (false, None)
-                };
-                AudioInput { gear: 1.0, flaps: 1.0, on_ground, touchdown, ..cruise(0.05, 70.0 - 6.0 * t) }
-            }),
-        ),
-        (
-            "06b_bodenwarnung_pull_up",
-            render(6.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
-                pull_up_warning: (1.0..4.5).contains(&t),
-                ..cruise(0.8, 200.0)
-            }),
-        ),
-        (
-            "06_abrisswarnung",
-            render(7.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
-                stall_warning: (1.0..5.5).contains(&t),
-                ..cruise(0.8, 75.0)
-            }),
-        ),
-        (
-            "07_absturz",
-            render(4.0, Mix::WITHOUT_ENGINE, |t| AudioInput { crashed: t > 1.0, ..cruise(0.9, 200.0) }),
-        ),
-        (
-            "07b_radarping",
-            render(8.0, Mix::WITHOUT_ENGINE, |t| {
-                // Pings alle 2 s: zwei schwache, dann zwei Treffer
-                let k = (t / 2.0) as u64;
-                let fresh = t - k as f32 * 2.0 < 0.3;
-                AudioInput {
-                    ping: fresh.then_some(f29_audio::PingCue { id: k + 1, hit: k >= 2 }),
-                    ..cruise(0.0, 200.0)
-                }
-            }),
-        ),
-        ("08_flug_start_abriss", flight_demo()),
-        ("09_flug_landung", landing_demo()),
-    ];
+    let clips: Vec<(&str, Vec<f32>)> =
+        vec![
+            (
+                "01_triebwerk",
+                render(12.0, ENGINE_ONLY, |t| {
+                    let up = ramp(t, 2.0, 5.0) - ramp(t, 8.0, 11.0);
+                    cruise(up, 40.0 + 180.0 * ramp(t, 2.0, 9.0))
+                }),
+            ),
+            (
+                "02_fahrwerk",
+                render(13.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
+                    gear: ramp(t, 1.0, 6.0) - ramp(t, 7.5, 12.5),
+                    ..cruise(0.55, 120.0)
+                }),
+            ),
+            (
+                "03_klappen",
+                render(6.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
+                    flaps: ramp(t, 0.5, 2.5) - ramp(t, 3.5, 5.5),
+                    ..cruise(0.55, 120.0)
+                }),
+            ),
+            (
+                "04_luftbremse",
+                render(6.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
+                    airbrake: ramp(t, 1.0, 1.8) - ramp(t, 4.0, 4.8),
+                    ..cruise(0.6, 200.0)
+                }),
+            ),
+            (
+                "05_aufsetzen",
+                render(8.0, Mix::WITHOUT_ENGINE, |t| {
+                    let (on_ground, touchdown) = if t >= 4.5 {
+                        (true, td(2, true))
+                    } else if t >= 1.0 {
+                        (t < 3.5, td(1, false))
+                    } else {
+                        (false, None)
+                    };
+                    AudioInput { gear: 1.0, flaps: 1.0, on_ground, touchdown, ..cruise(0.05, 70.0 - 6.0 * t) }
+                }),
+            ),
+            (
+                "06b_bodenwarnung_pull_up",
+                render(6.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
+                    pull_up_warning: (1.0..4.5).contains(&t),
+                    ..cruise(0.8, 200.0)
+                }),
+            ),
+            (
+                "06_abrisswarnung",
+                render(7.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
+                    stall_warning: (1.0..5.5).contains(&t),
+                    ..cruise(0.8, 75.0)
+                }),
+            ),
+            (
+                "07_absturz",
+                render(4.0, Mix::WITHOUT_ENGINE, |t| AudioInput { crashed: t > 1.0, ..cruise(0.9, 200.0) }),
+            ),
+            (
+                "07b_radarping",
+                render(8.0, Mix::WITHOUT_ENGINE, |t| {
+                    // Pings alle 2 s: zwei schwache, dann zwei Treffer
+                    let k = (t / 2.0) as u64;
+                    let fresh = t - k as f32 * 2.0 < 0.3;
+                    AudioInput {
+                        ping: fresh.then_some(f29_audio::PingCue { id: k + 1, hit: k >= 2 }),
+                        ..cruise(0.0, 200.0)
+                    }
+                }),
+            ),
+            (
+                "07c_detonationen",
+                render(9.0, Mix::WITHOUT_ENGINE, |t| {
+                    // Fehlschuss fern, Fehlschuss nah, Treffer am Ziel, Treffer am Flugzeug
+                    use f29_audio::BlastKind as K;
+                    let shots = [
+                        (0.5, K::Miss, 0.2),
+                        (2.0, K::Miss, 0.8),
+                        (3.5, K::TargetHit, 0.6),
+                        (6.0, K::AircraftHit, 1.0),
+                    ];
+                    let blast =
+                        shots.iter().enumerate().rev().find(|(_, (at, _, _))| t >= *at).map(
+                            |(k, &(_, kind, gain))| f29_audio::BlastCue { id: k as u64 + 1, kind, gain },
+                        );
+                    AudioInput { blast, ..cruise(0.0, 200.0) }
+                }),
+            ),
+            ("08_flug_start_abriss", flight_demo()),
+            ("09_flug_landung", landing_demo()),
+        ];
     let mut written = Vec::new();
     for (name, samples) in clips {
         let path = dir.join(format!("{name}.wav"));
