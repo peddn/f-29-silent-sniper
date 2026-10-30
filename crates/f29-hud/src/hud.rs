@@ -614,6 +614,9 @@ fn warnings(dl: &mut DisplayList, fd: &FlightData, glass: &Rect, mode: HudMode) 
         }
         y -= TXT * 2.2;
     };
+    if fd.warnings.missile {
+        show(dl, "MISSILE");
+    }
     if fd.warnings.pull_up {
         show(dl, "PULL UP");
     }

@@ -22,6 +22,9 @@ pub const FUEL_LEAK_MAX_KGPS: f64 = 3.0;
 /// Verbleibende Ruderwirkung bei ausgefallener Flugsteuerung.
 pub const CONTROL_BACKUP: f64 = 0.3;
 
+/// Restleistung eines Systems nach dem ersten Treffer.
+pub const HIT_CAPABILITY: f64 = 0.5;
+
 /// Ein Bordsystem.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum System {
@@ -126,6 +129,17 @@ impl Systems {
 
     pub fn capability(&self, s: System) -> f64 {
         self.get(s).capability()
+    }
+
+    /// Treffer auf ein System: intakt → halbe Leistung, eingeschränkt →
+    /// ausgefallen. Wiederholte Treffer verschärfen so die Folgen (wie im
+    /// Original mit der Trefferzahl).
+    pub fn hit(&mut self, s: System) {
+        let next = match self.get(s) {
+            Condition::Ok => Condition::Degraded(HIT_CAPABILITY),
+            _ => Condition::Failed,
+        };
+        self.set(s, next);
     }
 
     /// Mindestens ein System ist nicht intakt.

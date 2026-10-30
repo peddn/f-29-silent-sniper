@@ -1055,7 +1055,9 @@ Format jedes Eintrags:
 - **Unsere Werte:** Leck bis 3 kg/s (volle Tanks in knapp 30 min leer),
   Notsteuerung 30 % Drehrate. Welche Treffer welche Systeme wie stark beschädigen,
   folgt mit Etappe 4.
-- **Status:** Gerüst umgesetzt (v0.2.4), Schadensquellen geplant (Etappe 4)
+- **Status:** Gerüst umgesetzt (v0.2.4); erste Schadensquelle: Treffer
+  feindlicher Raketen beschädigen zwei zufällige Systeme, intakt → halbe
+  Leistung → ausgefallen (v0.2.9, M-021); Splitter eigener Bomben folgen
 
 ### M-016 Bordkanone
 
@@ -1223,13 +1225,39 @@ Format jedes Eintrags:
     Aufschaltung, und die Alarmstufen der Stellungen steigen nur halb so
     schnell (M-020). Ein Störer für Infrarot wirkt entsprechend.
 
-- **Unser Design (Entwurf):** Start bei Alarmstufe 3 (M-020): SAM-Stellungen
-  mit mittlerer Reichweite, Frühwarnradare mit Langstreckenraketen, die auch
-  aus großer Entfernung treffen können – Täuschkörper müssen geopfert werden
-  (Spielerwunsch v0.2.9). Lenkflugkörper mit Proportionalnavigation;
-  Täuschkörper über eigene Wahrscheinlichkeitsmodelle. Kommt zusammen mit dem
-  Schadensmodell.
-- **Status:** geplant (v0.2)
+- **Unser Design (v0.2.9, nach dem Original):** Die feindlichen Raketen sind
+  dieselben physikalischen Flugkörper wie die eigenen (M-014) – gleiche Liste,
+  gleicher Flug, gleicher Annäherungszünder; Ziel ist das Flugzeug.
+  - **Start:** Jeder weitere Treffer einer Stellung, die schon auf Stufe 3
+    („RADAR ID“) steht, ist ein Startwunsch. Gestartet wird, wenn das Flugzeug
+    in der Reichweite des Raketentyps ist, die Stellung keine Rakete mehr in
+    der Luft hat und nicht schon vier feindliche fliegen. Die Rakete hebt 10°
+    über der Linie zum Flugzeug ab (im Suchkegel) und lenkt nach 0,4 s ein.
+    Meldung „MISSILE LAUNCH SA-6 - <Stellung>“.
+  - **Typen:** SAM-Stellungen starten die **SA-6 Gainful** (25 km, 750 m/s,
+    22°/s, Wirkradius 20 m, 45 s), Frühwarnradare die **SA-5 Gammon** (60 km,
+    1000 m/s, träge 10°/s, Wirkradius 30 m, 90 s) – sie trifft auch aus großer
+    Entfernung (Spielerwunsch). Suchkegel beider ±22° wie im Original.
+  - **Lenkung halbaktiv:** reine Verfolgung wie die eigenen Raketen. Weiter als
+    5 km lenkt die Rakete nur, solange ihre Stellung das Flugzeug beim
+    **letzten Antennenumlauf erfasst** hat (Ping-Treffer, „painted“) – Stealth
+    wirkt also auch während des Anflugs: tief, waagerecht, Schacht zu, quer zum
+    Dopplerradar. Näher lenkt ihr eigener Suchkopf. In jedem Fall nur, wenn das
+    Flugzeug im Suchkegel liegt; sonst fliegt sie geradeaus weiter. Liegt es
+    mehr als 135° hinter ihr, gibt sie auf.
+  - **Treffer** geometrisch (Annäherungszünder) – Folgen **nur über die
+    Bordsysteme** (M-015): Jeder Treffer trifft zwei zufällige, verschiedene
+    Systeme; ein intaktes fällt auf halbe Leistung, ein eingeschränktes fällt
+    aus. Wiederholte Treffer verschärfen so die Folgen wie im Original mit der
+    Trefferzahl. Kein Lebensbalken – das Flugzeug geht über die Folgen
+    verloren. Meldung „SA-6 HIT“.
+  - **Raketenwarnung:** Solange eine feindliche Rakete das Flugzeug verfolgt,
+    blinkt „MISSILE“ im HUD und ein schneller Wechselton warnt. Auf der Karte
+    erscheinen feindliche Raketen als roter Strich, in der 3D-Ansicht mit
+    Rauchspur.
+  - Täuschkörper folgen mit Etappe 4 (Düppel auf „.“, Fackeln später mit den
+    Infrarotraketen).
+- **Status:** Boden-Luft-Raketen umgesetzt (v0.2.9), Täuschkörper geplant
 
 ### M-031 Einsatzgebiete und Missionsgenerator
 

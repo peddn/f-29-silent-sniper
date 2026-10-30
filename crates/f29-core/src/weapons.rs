@@ -20,6 +20,11 @@
 //!   solange das Flugzeug es optisch aufgeschaltet hält (Laser).
 //! - Ob ein Schuss treffen würde, rechnet [`launch_zone`] mit genau diesem Flug
 //!   voraus („SHOOT“).
+//! - **Feindliche Boden-Luft-Raketen** (M-021) fliegen in derselben Liste und
+//!   mit demselben Flug, Ziel ist das Flugzeug: Startet eine Radarstellung,
+//!   lenkt die Rakete halbaktiv – weit weg nur, solange die Stellung das
+//!   Flugzeug beim letzten Umlauf erfasst hat, nah mit eigenem Suchkopf. Ein
+//!   Treffer beschädigt zufällige Bordsysteme (keine Trefferpunkte).
 //!
 //! Werte: eigene Größenordnungen aus öffentlichen Daten realer Waffen und
 //! Spielbalance, siehe M-014.
@@ -29,6 +34,7 @@ use crate::detmath;
 use crate::math::{DQuat, DVec3};
 use crate::rng::Pcg32;
 use crate::sensors::line_of_sight;
+use crate::systems::System;
 use crate::targets::{Target, TargetClass, TargetState};
 use f29_terrain::Terrain;
 
@@ -72,6 +78,21 @@ const SEEKER_TICKS: u64 = 12;
 const GIVE_UP_RAD: f64 = 3.0 * std::f64::consts::FRAC_PI_4;
 /// Vorausberechnung: so viele Simulationsschritte auf einmal.
 const PREDICT_STEPS: f64 = 4.0;
+/// Feindliche Raketen höchstens so viele gleichzeitig in der Luft (je
+/// Stellung eine, wie im Original).
+pub const MAX_HOSTILE: usize = 4;
+/// Näher als so (m) lenkt eine Boden-Luft-Rakete mit eigenem Suchkopf, weiter
+/// weg nur mit der Beleuchtung ihrer Stellung (halbaktiv).
+pub const SEMI_ACTIVE_M: f64 = 5_000.0;
+/// Startrichtung der Boden-Luft-Raketen: so steil über der Linie zum
+/// Flugzeug (rad, 10° – innerhalb des Suchkegels), dann lenkt sie ein.
+const SAM_LOFT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
+/// Startgeschwindigkeit der Boden-Luft-Raketen (m/s).
+const SAM_LAUNCH_MPS: f64 = 60.0;
+/// So viele Bordsysteme beschädigt ein Raketentreffer (Original: Konflikt-
+/// stufe plus eins; Schwierigkeitsgrade folgen).
+pub const HIT_SYSTEMS: usize = 2;
+
 /// Abschusskreis um die Flugzeugnase (halber Öffnungswinkel, rad, 8°): Nur ein
 /// Ziel darin übernimmt eine Rakete (Spielerentscheidung v0.2.7).
 pub const LAUNCH_CIRCLE_RAD: f64 = 8.0 * std::f64::consts::PI / 180.0;
@@ -92,6 +113,10 @@ pub enum WeaponKind {
     AntiRadar,
     /// Seezielrakete: fliegt nur Schiffe an.
     AntiShip,
+    /// Boden-Luft-Rakete mittlerer Reichweite (SAM-Stellungen).
+    SurfaceToAir,
+    /// Langstrecken-Boden-Luft-Rakete (Frühwarnradare).
+    LongRangeSam,
 }
 
 /// Suchkopf einer gelenkten Waffe.
@@ -107,6 +132,8 @@ pub enum Seeker {
     Radiation,
     /// Aktives Radar gegen Schiffe, ohne Sichtlinie.
     Naval,
+    /// Halbaktives Radar gegen das Flugzeug (Boden-Luft-Raketen).
+    SemiActive,
 }
 
 impl Seeker {
@@ -117,6 +144,7 @@ impl Seeker {
             Seeker::Optical | Seeker::Laser => true,
             Seeker::Radiation => class.is_radar(),
             Seeker::Naval => class.is_naval(),
+            Seeker::SemiActive => false,
         }
     }
 }
@@ -206,7 +234,27 @@ const MISSILE: WeaponSpec = WeaponSpec {
     life_s: 70.0,
 };
 
-const SPECS: [WeaponSpec; 6] = [
+/// Boden-Luft-Rakete mittlerer Reichweite (Vorbild SA-6).
+const SAM: WeaponSpec = WeaponSpec {
+    kind: WeaponKind::SurfaceToAir,
+    label: "SA-6",
+    name: "SA-6 GAINFUL",
+    mass_kg: 600.0,
+    per_bay: 0,
+    seeker: Seeker::SemiActive,
+    cruise_mps: 750.0,
+    accel_mps2: 250.0,
+    turn_rate_rad: deg(22.0),
+    max_range_m: 25_000.0,
+    // Suchkegel wie im Original
+    seeker_cone_rad: deg(22.0),
+    lethal_radius_m: 20.0,
+    frag_radius_m: 0.0,
+    life_s: 45.0,
+    ..MISSILE
+};
+
+const SPECS: [WeaponSpec; 8] = [
     BOMB,
     WeaponSpec {
         kind: WeaponKind::Retarded,
@@ -262,9 +310,26 @@ const SPECS: [WeaponSpec; 6] = [
         life_s: 160.0,
         ..MISSILE
     },
+    SAM,
+    // Langstreckenrakete der Frühwarnradare (Vorbild SA-5): trifft auch aus
+    // großer Entfernung, dreht aber träge.
+    WeaponSpec {
+        kind: WeaponKind::LongRangeSam,
+        label: "SA-5",
+        name: "SA-5 GAMMON",
+        mass_kg: 7_000.0,
+        cruise_mps: 1_000.0,
+        accel_mps2: 150.0,
+        turn_rate_rad: deg(10.0),
+        max_range_m: 60_000.0,
+        lethal_radius_m: 30.0,
+        life_s: 90.0,
+        ..SAM
+    },
 ];
 
 impl WeaponKind {
+    /// Die Waffen für die Schächte (ohne die feindlichen Raketen).
     pub const ALL: [WeaponKind; 6] = [
         WeaponKind::FreeFall,
         WeaponKind::Retarded,
@@ -300,6 +365,8 @@ impl WeaponKind {
             WeaponKind::AirToGround => "agm",
             WeaponKind::AntiRadar => "arm",
             WeaponKind::AntiShip => "ship",
+            WeaponKind::SurfaceToAir => "sa6",
+            WeaponKind::LongRangeSam => "sa5",
         }
     }
 
@@ -308,6 +375,15 @@ impl WeaponKind {
             // Ältere Replays (bis v0.2.6: Gleitbombe)
             "glide" => Some(WeaponKind::GuidedBomb),
             _ => Self::ALL.into_iter().find(|k| k.code() == code),
+        }
+    }
+
+    /// Boden-Luft-Rakete, die eine Radarstellung der Klasse startet.
+    pub fn sam_for(class: TargetClass) -> Option<Self> {
+        match class {
+            TargetClass::AirDefense => Some(WeaponKind::SurfaceToAir),
+            TargetClass::EarlyWarning => Some(WeaponKind::LongRangeSam),
+            _ => None,
         }
     }
 
@@ -324,6 +400,7 @@ impl WeaponKind {
         use WeaponKind as W;
         let steep = impact_rad >= HARDENED_MIN_IMPACT_RAD;
         match (self, class) {
+            (W::SurfaceToAir | W::LongRangeSam, _) => 0.0,
             (W::AntiRadar, C::AirDefense | C::EarlyWarning) => 1.0,
             (W::AntiRadar, _) => 0.0,
             (W::AntiShip, C::ShipSmall) => 1.0,
@@ -385,7 +462,8 @@ pub fn launch_zone(kind: WeaponKind, l: &Launch<'_>, i: usize) -> LaunchZone {
             seek(&mut w, l.targets, l.terrain, Some(i), false);
         }
         step += 1;
-        match advance(&mut w, l.targets, l.terrain, dt) {
+        let aim = w.aim_point(l.targets);
+        match advance(&mut w, aim, l.terrain, dt) {
             Fate::Flying => {}
             Fate::Fuze(_) => return LaunchZone::Good,
             Fate::Ground(p) => {
@@ -472,6 +550,11 @@ pub struct Weapon {
     /// Richtung, in der die Rakete ohne Ziel weiterfliegt: die Abschusslage
     /// (Flugzeugnase).
     pub boresight: DVec3,
+    /// Feindliche Rakete: gestartet von der Radarstellung mit diesem Index in
+    /// `Sim::targets`; `None` = eigene Waffe.
+    pub owner: Option<usize>,
+    /// Feindliche Rakete verfolgt noch das Flugzeug (aufgegeben: `false`).
+    pub chasing: bool,
 }
 
 impl Weapon {
@@ -486,6 +569,8 @@ impl Weapon {
             tracking: false,
             searching: false,
             boresight: velocity.normalize_or_zero(),
+            owner: None,
+            chasing: false,
         }
     }
 
@@ -608,6 +693,19 @@ pub enum WeaponEvent {
         kind: WeaponKind,
         id: u32,
     },
+    /// Eine Radarstellung (Index in `Sim::targets`) hat eine Rakete gestartet.
+    SamLaunch {
+        kind: WeaponKind,
+        id: u32,
+        site: usize,
+    },
+    /// Eine feindliche Rakete hat das Flugzeug getroffen und diese Systeme
+    /// beschädigt.
+    AircraftHit {
+        kind: WeaponKind,
+        id: u32,
+        systems: [System; HIT_SYSTEMS],
+    },
 }
 
 /// Bestand und Zustand der Waffen.
@@ -641,6 +739,11 @@ pub struct World<'a> {
     pub aircraft: DVec3,
     /// Optisch aufgeschaltetes Ziel des Flugzeugs (Laserbeleuchtung).
     pub designated: Option<usize>,
+    /// Das Flugzeug fliegt (Ziel der feindlichen Raketen).
+    pub flying: bool,
+    /// Radarstellungen (Index in `Sim::targets`), die das Flugzeug beim letzten
+    /// Umlauf erfasst haben: Sie beleuchten es für ihre Raketen.
+    pub painting: &'a [usize],
 }
 
 /// Was der Abschuss über Flugzeug und Ziel wissen muss.
@@ -780,7 +883,9 @@ impl Stores {
             Some(_) if bay.count == 0 => Some(WeaponEvent::BayEmpty),
             None => Some(WeaponEvent::BayEmpty),
             _ if roll.abs() > MAX_RELEASE_BANK_RAD => Some(WeaponEvent::BankLimit),
-            _ if self.in_flight.len() >= MAX_IN_FLIGHT => Some(WeaponEvent::Busy),
+            _ if self.in_flight.iter().filter(|w| w.owner.is_none()).count() >= MAX_IN_FLIGHT => {
+                Some(WeaponEvent::Busy)
+            }
             _ => None,
         };
         if let Some(e) = event {
@@ -800,25 +905,77 @@ impl Stores {
         kind.spec().mass_kg
     }
 
+    /// Startet eine Boden-Luft-Rakete der Radarstellung `site` (Index in
+    /// `Sim::targets`, Startpunkt `from`) auf das Flugzeug bei `aircraft` –
+    /// wenn es in Reichweite ist, die Stellung keine Rakete mehr in der Luft
+    /// hat und nicht schon [`MAX_HOSTILE`] fliegen (wie im Original).
+    pub fn launch_sam(
+        &mut self,
+        tick: u64,
+        kind: WeaponKind,
+        site: usize,
+        from: DVec3,
+        aircraft: DVec3,
+    ) -> bool {
+        let to = aircraft - from;
+        let hostile = self.in_flight.iter().filter(|w| w.owner.is_some());
+        if to.length() > kind.spec().max_range_m
+            || hostile.clone().any(|w| w.owner == Some(site))
+            || hostile.count() >= MAX_HOSTILE
+        {
+            return false;
+        }
+        // Schräg nach oben über der Linie zum Flugzeug abheben.
+        let flat = DVec3::new(to.x, to.y, 0.0).normalize_or_zero();
+        let elev = (detmath::atan2(-to.z, to.x.hypot(to.y)) + SAM_LOFT_RAD).min(std::f64::consts::FRAC_PI_2);
+        let dir = flat * elev.cos() + DVec3::new(0.0, 0.0, -elev.sin());
+        let id = self.next_id;
+        self.next_id += 1;
+        let mut w = Weapon::new(id, kind, from, dir * SAM_LAUNCH_MPS);
+        w.owner = Some(site);
+        w.chasing = true;
+        self.in_flight.push(w);
+        self.log(tick, WeaponEvent::SamLaunch { kind, id, site });
+        true
+    }
+
     /// Alle Waffen im Flug einen Zeitschritt weiterbewegen; Zünder und
     /// Einschläge auswerten.
     pub fn step(&mut self, world: &mut World<'_>) {
         let mut i = 0;
         while i < self.in_flight.len() {
             let mut w = self.in_flight[i];
+            let aircraft = world.flying.then_some(world.aircraft);
             if w.kind.is_guided() && (world.tick + u64::from(w.id)).is_multiple_of(SEEKER_TICKS) {
-                let had = w.tracking;
-                if let Some(e) = seek(&mut w, world.targets, world.terrain, world.designated, true) {
-                    self.log(world.tick, e);
-                }
-                if had && !w.tracking && w.kind.spec().seeker == Seeker::Laser {
-                    self.log(world.tick, WeaponEvent::LaserLost { kind: w.kind, id: w.id });
+                if w.owner.is_some() {
+                    let painted = w.owner.is_some_and(|o| world.painting.contains(&o));
+                    seek_aircraft(&mut w, aircraft, painted);
+                } else {
+                    let had = w.tracking;
+                    if let Some(e) = seek(&mut w, world.targets, world.terrain, world.designated, true) {
+                        self.log(world.tick, e);
+                    }
+                    if had && !w.tracking && w.kind.spec().seeker == Seeker::Laser {
+                        self.log(world.tick, WeaponEvent::LaserLost { kind: w.kind, id: w.id });
+                    }
                 }
             }
-            match advance(&mut w, world.targets, world.terrain, world.dt) {
+            let aim =
+                if w.owner.is_some() { aircraft.filter(|_| w.tracking) } else { w.aim_point(world.targets) };
+            match advance(&mut w, aim, world.terrain, world.dt) {
                 Fate::Flying => {
                     self.in_flight[i] = w;
                     i += 1;
+                }
+                Fate::Fuze(_) if w.owner.is_some() => {
+                    self.in_flight.remove(i);
+                    let systems = self.pick_systems();
+                    self.log(world.tick, WeaponEvent::AircraftHit { kind: w.kind, id: w.id, systems });
+                }
+                Fate::Ground(p) if w.owner.is_some() => {
+                    self.in_flight.remove(i);
+                    let result = ImpactResult::Ground;
+                    self.log(world.tick, WeaponEvent::Impact { kind: w.kind, id: w.id, position: p, result });
                 }
                 Fate::Fuze(p) | Fate::Ground(p) => {
                     self.in_flight.remove(i);
@@ -830,6 +987,12 @@ impl Stores {
                 }
             }
         }
+    }
+
+    /// Zufällige, verschiedene Bordsysteme für einen Raketentreffer.
+    fn pick_systems(&mut self) -> [System; HIT_SYSTEMS] {
+        let mut pool = System::ALL.to_vec();
+        std::array::from_fn(|_| pool.remove(self.rng.next_u32() as usize % pool.len()))
     }
 
     /// Schaden ohne kritischen Treffer (Bordkanone).
@@ -977,20 +1140,39 @@ fn seek(
     Some(WeaponEvent::Acquired { kind: w.kind, id: w.id, target: i })
 }
 
+/// Suchkopf einer feindlichen Rakete prüfen (halbaktiv, wie im Original):
+/// Liegt das Flugzeug weit hinter ihr, gibt sie auf. Sonst lenkt sie, wenn es
+/// in ihrem Suchkegel liegt und – weiter als [`SEMI_ACTIVE_M`] – ihre Stellung
+/// es beim letzten Umlauf erfasst hat (`painted`).
+fn seek_aircraft(w: &mut Weapon, aircraft: Option<DVec3>, painted: bool) {
+    if w.age_s < GUIDANCE_DELAY_S {
+        return;
+    }
+    let Some(to) = aircraft.filter(|_| w.chasing).map(|a| a - w.position) else {
+        w.tracking = false;
+        return;
+    };
+    let off = angle_between(w.velocity, to);
+    w.chasing = off <= GIVE_UP_RAD;
+    w.tracking =
+        w.chasing && off <= w.kind.spec().seeker_cone_rad && (painted || to.length() <= SEMI_ACTIVE_M);
+}
+
 /// Ein Zeitschritt einer Waffe (gemeinsam für den echten Flug und die
 /// Vorausberechnung): bewegen, dann Annäherungszünder (Raketen: kürzester
-/// Abstand der Strecke zur Zielmitte unter dem Wirkradius), Bodenaufschlag
-/// und Flugzeit prüfen.
-fn advance(w: &mut Weapon, targets: &[Target], terrain: &Terrain, dt: f64) -> Fate {
+/// Abstand der Strecke zum Zielpunkt `aim` unter dem Wirkradius),
+/// Bodenaufschlag und Flugzeit prüfen. `aim` ist der Punkt, den der Suchkopf
+/// gerade hat (Zielmitte bzw. Flugzeug), sonst `None`.
+fn advance(w: &mut Weapon, aim: Option<DVec3>, terrain: &Terrain, dt: f64) -> Fate {
     let before = w.position;
     let s = w.kind.spec();
     match s.seeker {
         Seeker::None => fly(w, dt),
-        Seeker::Laser => steer_bomb(w, targets, dt),
-        _ => guide(w, targets, dt),
+        Seeker::Laser => steer_bomb(w, aim, dt),
+        _ => guide(w, aim, dt),
     }
     if s.cruise_mps > 0.0
-        && let Some(aim) = w.aim_point(targets)
+        && let Some(aim) = aim
     {
         let d = w.position - before;
         let k = if d.length() > 1e-9 { ((aim - before).dot(d) / d.dot(d)).clamp(0.0, 1.0) } else { 0.0 };
@@ -1109,12 +1291,12 @@ fn turn_towards(from: DVec3, to: DVec3, max_angle: f64) -> DVec3 {
 /// Laserbombe: fällt physikalisch (Schwerkraft, Widerstand) und dreht mit
 /// ihren Steuerflächen die Flugbahn mit begrenzter Rate zum Ziel, solange es
 /// beleuchtet ist; sonst fällt sie wie eine normale Bombe.
-fn steer_bomb(w: &mut Weapon, targets: &[Target], dt: f64) {
+fn steer_bomb(w: &mut Weapon, aim: Option<DVec3>, dt: f64) {
     fly(w, dt);
     if w.age_s < GUIDANCE_DELAY_S {
         return;
     }
-    if let Some(aim) = w.aim_point(targets) {
+    if let Some(aim) = aim {
         let speed = w.velocity.length();
         let dir = w.velocity / speed.max(1.0);
         let wanted = (aim - w.position).normalize_or_zero();
@@ -1126,7 +1308,7 @@ fn steer_bomb(w: &mut Weapon, targets: &[Target], dt: f64) {
 /// begrenzter Drehrate auf das Ziel drehen (reine Verfolgung wie im Original)
 /// und auf Marschfahrt gehen. Ohne Ziel fliegt sie geradeaus in ihrer
 /// Abschusslage (`boresight`).
-fn guide(w: &mut Weapon, targets: &[Target], dt: f64) {
+fn guide(w: &mut Weapon, aim: Option<DVec3>, dt: f64) {
     if w.age_s < GUIDANCE_DELAY_S {
         fly(w, dt);
         return;
@@ -1134,9 +1316,9 @@ fn guide(w: &mut Weapon, targets: &[Target], dt: f64) {
     let s = w.kind.spec();
     let speed = w.velocity.length().max(1.0);
     let dir = w.velocity / speed;
-    let wanted = match w.aim_point(targets) {
+    let wanted = match aim {
         Some(aim) => (aim - w.position).normalize_or_zero(),
-        None if w.target.is_some() => dir,
+        None if w.target.is_some() || w.owner.is_some() => dir,
         None => w.boresight,
     };
     let new_dir = turn_towards(dir, wanted, s.turn_rate_rad * dt);
@@ -1268,7 +1450,8 @@ mod tests {
             if k % 12 == 0 {
                 seek(&mut w, &targets, &terrain, None, true);
             }
-            fate = advance(&mut w, &targets, &terrain, 1.0 / 120.0);
+            let aim = w.aim_point(&targets);
+            fate = advance(&mut w, aim, &terrain, 1.0 / 120.0);
             if fate != Fate::Flying {
                 break;
             }
@@ -1287,11 +1470,35 @@ mod tests {
         // Lange genug, um auf Marschfahrt zu kommen (gemächliche Beschleunigung).
         for _ in 0..(120 * 12) {
             seek(&mut w, &none, &terrain, None, true);
-            guide(&mut w, &none, 1.0 / 120.0);
+            guide(&mut w, None, 1.0 / 120.0);
         }
         let dir = w.velocity.normalize_or_zero();
         assert!(angle_between(dir, nose) < 0.01, "weicht {:.3} rad ab", angle_between(dir, nose));
         assert!((w.velocity.length() - w.kind.spec().cruise_mps).abs() < 1.0);
+    }
+
+    /// Halbaktiv: Weit weg lenkt die Boden-Luft-Rakete nur, solange ihre
+    /// Stellung das Flugzeug erfasst; nah mit eigenem Suchkopf. Außerhalb des
+    /// Suchkegels lenkt sie nicht, weit hinter ihr gibt sie auf.
+    #[test]
+    fn sam_guidance_is_semi_active() {
+        let mut w = Weapon::new(0, WeaponKind::SurfaceToAir, DVec3::ZERO, DVec3::new(700.0, 0.0, 0.0));
+        w.owner = Some(0);
+        w.chasing = true;
+        w.age_s = 1.0;
+        let far = Some(DVec3::new(10_000.0, 0.0, 0.0));
+        seek_aircraft(&mut w, far, true);
+        assert!(w.tracking);
+        seek_aircraft(&mut w, far, false);
+        assert!(!w.tracking && w.chasing, "ohne Beleuchtung blind, aber noch dran");
+        seek_aircraft(&mut w, Some(DVec3::new(3_000.0, 0.0, 0.0)), false);
+        assert!(w.tracking, "nah: eigener Suchkopf");
+        seek_aircraft(&mut w, Some(DVec3::new(3_000.0, 3_000.0, 0.0)), true);
+        assert!(!w.tracking && w.chasing, "45° neben der Flugrichtung: außerhalb des Kegels");
+        seek_aircraft(&mut w, Some(DVec3::new(-3_000.0, 0.0, 0.0)), true);
+        assert!(!w.chasing, "hinter ihr: aufgegeben");
+        seek_aircraft(&mut w, far, true);
+        assert!(!w.tracking, "aufgegeben bleibt aufgegeben");
     }
 
     /// Wie im Original: Ein Ziel weit hinter der Rakete gibt sie auf.

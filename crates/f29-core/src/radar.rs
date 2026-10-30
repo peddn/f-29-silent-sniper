@@ -8,8 +8,11 @@
 //! 1. **Entdeckt** – die Stellung kennt das Flugzeug („RADAR DETECTED“).
 //! 2. **Verfolgt** – sie merkt sich den Ort des Pings (Ziel späterer
 //!    Patrouillen).
-//! 3. **Radar ID** – Auslöser für den Raketenstart (kommt mit dem
-//!    Schadensmodell).
+//! 3. **Radar ID** – bei jedem weiteren Treffer startet die Stellung eine
+//!    Boden-Luft-Rakete (M-021), wenn sie kann.
+//!
+//! Ob der letzte Umlauf ein Treffer war (`painted`), entscheidet außerdem,
+//! ob die Stellung ihre Rakete auf große Entfernung lenkt (halbaktiv).
 //!
 //! Ohne Treffer sinkt die Stufe nach [`DECAY_S`] um eins. Radare sehen durch
 //! das Gelände (keine Sichtlinie, Spielerentscheidung v0.2.8).
@@ -172,6 +175,9 @@ pub struct RadarSite {
     pub last_change_tick: u64,
     /// Ort des Pings ab Stufe 2 (NED) – Ziel späterer Patrouillen.
     pub ping_point: Option<DVec3>,
+    /// Der letzte Umlauf hat das Flugzeug erfasst: Die Stellung beleuchtet
+    /// es für ihre Rakete.
+    pub painted: bool,
 }
 
 impl RadarSite {
@@ -199,6 +205,8 @@ pub enum RadarEvent {
     Alert { site: usize, level: u8 },
     /// Alle Stufen abgeklungen: Kontakt verloren.
     Lost { site: usize },
+    /// Treffer auf Stufe 3: Die Stellung will eine Rakete starten.
+    Fire { site: usize },
 }
 
 /// Alle Radarstellungen.
@@ -224,6 +232,7 @@ impl RadarNet {
                     alert: 0,
                     last_change_tick: 0,
                     ping_point: None,
+                    painted: false,
                 };
                 s.phase_ticks = (i as u64).wrapping_mul(977) % s.sweep_ticks();
                 Some(s)
@@ -245,6 +254,7 @@ impl RadarNet {
                     self.sites[k].alert = 0;
                     self.sites[k].ping_point = None;
                 }
+                self.sites[k].painted = false;
                 continue;
             }
             // Abklingen ohne Treffer
@@ -268,11 +278,13 @@ impl RadarNet {
             let c = t.center_ned();
             let at = DVec3::new(c[0], c[1], c[2]);
             let signal = x.signal(&site.spec, at);
+            self.sites[k].painted = false;
             if signal <= 0.0 {
                 continue;
             }
             let stealth = x.stealth();
             let hit = signal > stealth;
+            self.sites[k].painted = hit;
             self.last_ping = Some(Ping { tick, site: k, signal, stealth, hit });
             if hit {
                 let s = &mut self.sites[k];
@@ -286,6 +298,7 @@ impl RadarNet {
                     self.log(tick, RadarEvent::Alert { site: k, level });
                 } else {
                     s.ping_point = Some(x.position);
+                    self.log(tick, RadarEvent::Fire { site: k });
                 }
             }
         }

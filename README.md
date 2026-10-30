@@ -243,8 +243,10 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       und einfachere Zielsymbole (v0.2.9)
 - [x] Feuersignal „LOCKED“/„SHOOT“; Waffenkamera der Maverick auf der Seite
       WPN CAM, nach dem Abschuss automatisch aufgeschaltet (v0.2.9)
-- [ ] Boden-Luft-Raketen ab Stufe 3: SAM-Stellungen und Langstreckenraketen
-      der Frühwarnradare – zusammen mit dem Schadensmodell
+- [x] Boden-Luft-Raketen ab „RADAR ID“: SA-6 der SAM-Stellungen, SA-5 der
+      Frühwarnradare; halbaktiv (weit weg nur, solange die Stellung uns
+      erfasst), Treffer beschädigen zwei Bordsysteme; Raketenwarnung mit Ton,
+      Rauchspur (v0.2.9)
 - [ ] Täuschkörper (Düppel, Fackeln) gegen Langstreckenraketen
 - ~~Flak~~ (gestrichen, Spielerentscheidung v0.2.9)
 

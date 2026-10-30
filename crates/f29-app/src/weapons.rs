@@ -1,6 +1,7 @@
 //! Waffen in der 3D-Ansicht (M-014): Bomben und Flugkörper im Flug, der
 //! Bremsschirm der Fallschirmbombe und ein kurzer Blitz beim Einschlag;
-//! dazu die Leuchtspur der Bordkanone und kleine Einschlagwölkchen (M-016).
+//! dazu die Leuchtspur der Bordkanone und kleine Einschlagwölkchen (M-016)
+//! sowie die Rauchspur feindlicher Raketen (M-021).
 
 use crate::sim::{SimState, SimSystems};
 use crate::view::WorldOrigin;
@@ -37,6 +38,11 @@ const MIN_ANGULAR: f32 = 0.004;
 const PUFF_S: f32 = 0.6;
 const PUFF_GROUND_M: f32 = 6.0;
 const PUFF_HIT_M: f32 = 8.0;
+/// Rauchspur feindlicher Raketen: alle so viele Meter ein Wölkchen, das so
+/// lange (s) stehen bleibt, mit diesem Radius (m).
+const SMOKE_STEP_M: f64 = 40.0;
+const SMOKE_S: f32 = 4.0;
+const SMOKE_M: f32 = 5.0;
 
 /// Dauer des Einschlagblitzes (s) und größter Radius (m).
 const BLAST_S: f32 = 1.2;
@@ -63,6 +69,9 @@ struct WeaponVisuals {
     tracers: Vec<Entity>,
     /// Zuletzt ausgewerteter Kanoneneinschlag (Tick).
     last_gun_tick: u64,
+    smoke: Handle<StandardMaterial>,
+    /// Feindliche Rakete → Ort des letzten Rauchwölkchens.
+    smoke_at: BTreeMap<u32, DVec3>,
 }
 
 #[derive(Component)]
@@ -74,6 +83,8 @@ struct Puff {
     at: DVec3,
     age: f32,
     radius: f32,
+    /// Lebensdauer (s).
+    life: f32,
 }
 
 #[derive(Component)]
@@ -113,6 +124,7 @@ fn setup(
     // Staub hell, damit er sich vom Gelände abhebt.
     visuals.puff_ground = materials.add(StandardMaterial { base_color: color(14), unlit: true, ..default() });
     visuals.puff_hit = materials.add(StandardMaterial { base_color: color(15), unlit: true, ..default() });
+    visuals.smoke = materials.add(StandardMaterial { base_color: color(13), unlit: true, ..default() });
 }
 
 /// Leuchtspur: eine Entität je Patrone im Flug, in Flugrichtung gestreckt.
@@ -158,7 +170,8 @@ fn sync_tracers(
     }
 }
 
-/// Für jeden neuen Kanoneneinschlag ein kleines Wölkchen.
+/// Für jeden neuen Kanoneneinschlag ein kleines Wölkchen, für feindliche
+/// Raketen eine Rauchspur aus Wölkchen.
 fn spawn_puffs(mut commands: Commands, state: Res<SimState>, mut visuals: ResMut<WeaponVisuals>) {
     let impacts = &state.sim.gun().impacts;
     let newest = impacts.last().map_or(0, |i| i.tick);
@@ -176,10 +189,26 @@ fn spawn_puffs(mut commands: Commands, state: Res<SimState>, mut visuals: ResMut
             Mesh3d(visuals.sphere.clone()),
             MeshMaterial3d(material),
             Transform::from_scale(Vec3::splat(0.1)),
-            Puff { at: i.position, age: 0.0, radius },
+            Puff { at: i.position, age: 0.0, radius, life: PUFF_S },
         ));
     }
     visuals.last_gun_tick = visuals.last_gun_tick.max(newest);
+    // Rauchspur der feindlichen Raketen
+    let flying = state.sim.weapons_in_flight();
+    visuals.smoke_at.retain(|id, _| flying.iter().any(|w| w.id == *id));
+    for w in flying.iter().filter(|w| w.owner.is_some()) {
+        let last = visuals.smoke_at.get(&w.id).copied();
+        if last.is_some_and(|p| (w.position - p).length() < SMOKE_STEP_M) {
+            continue;
+        }
+        visuals.smoke_at.insert(w.id, w.position);
+        commands.spawn((
+            Mesh3d(visuals.sphere.clone()),
+            MeshMaterial3d(visuals.smoke.clone()),
+            Transform::from_scale(Vec3::splat(0.1)),
+            Puff { at: w.position, age: 0.0, radius: SMOKE_M, life: SMOKE_S },
+        ));
+    }
 }
 
 fn animate_puffs(
@@ -192,7 +221,7 @@ fn animate_puffs(
     let dt = if state.paused { 0.0 } else { time.delta_secs() };
     for (e, mut puff, mut t) in &mut puffs {
         puff.age += dt;
-        let k = puff.age / PUFF_S;
+        let k = puff.age / puff.life;
         if k >= 1.0 {
             commands.entity(e).despawn();
             continue;

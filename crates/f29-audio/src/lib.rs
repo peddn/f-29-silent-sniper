@@ -39,6 +39,9 @@ pub const PULL_UP_REPEAT_S: f32 = 1.6;
 /// Tonhöhe des Abriss-Alarms (Hz) und seine Pulsfrequenz (Hz).
 pub const STALL_ALARM_HZ: f32 = 1_250.0;
 pub const STALL_PULSE_HZ: f32 = 6.0;
+/// Raketenwarnung: Wechselton in diesem Takt (s je Ton) und Frequenzen.
+const MISSILE_BEEP_S: f32 = 0.12;
+const MISSILE_TONES_HZ: [f32; 2] = [2_100.0, 1_500.0];
 
 /// Ein Aufsetzen, das einen Klang auslöst.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +80,8 @@ pub struct AudioInput {
     pub touchdown: Option<TouchdownCue>,
     /// Jüngster Radarping (Radarwarnempfänger).
     pub ping: Option<PingCue>,
+    /// Raketenwarnung: Eine feindliche Rakete verfolgt das Flugzeug.
+    pub missile_warning: bool,
     pub crashed: bool,
     /// Pause: alles verstummt weich.
     pub paused: bool,
@@ -96,6 +101,7 @@ impl AudioInput {
             pull_up_warning: fd.warnings.pull_up,
             touchdown: fd.touchdown.map(|t| TouchdownCue { id: t.tick, hard: t.hard }),
             ping: fd.threat.last_ping.filter(|p| p.age_s < 0.5).map(|p| PingCue { id: p.tick, hit: p.hit }),
+            missile_warning: fd.warnings.missile,
             crashed: matches!(fd.status, Status::Crashed { .. }),
             paused,
         }
@@ -179,6 +185,8 @@ pub struct Synth {
     last_ping: Option<u64>,
     crashed: bool,
     pull_up_timer: f32,
+    missile_timer: f32,
+    missile_tone: usize,
     alarm: Phase,
     alarm_pulse: Phase,
     alarm_gate: OnePole,
@@ -220,6 +228,8 @@ impl Synth {
             last_ping: None,
             crashed: false,
             pull_up_timer: 0.0,
+            missile_timer: 0.0,
+            missile_tone: 0,
             alarm: Phase::default(),
             alarm_pulse: Phase::default(),
             alarm_gate: OnePole::default(),
@@ -349,6 +359,24 @@ impl Synth {
                 self.pull_up_timer = PULL_UP_REPEAT_S;
                 self.shots.push(OneShot::Sample { pos: 0, gain: 0.6 });
             }
+        }
+        // Raketenwarnung: schneller Wechselton aus kurzen Piepsern
+        if inp.missile_warning && !inp.paused && !inp.crashed {
+            self.missile_timer -= out.len() as f32 * dt;
+            if self.missile_timer <= 0.0 {
+                self.missile_timer += MISSILE_BEEP_S;
+                self.missile_tone ^= 1;
+                let freq = MISSILE_TONES_HZ[self.missile_tone];
+                self.shots.push(OneShot::Beep {
+                    t: 0.0,
+                    freq,
+                    gain: 0.09,
+                    dur: MISSILE_BEEP_S * 0.8,
+                    phase: Phase::default(),
+                });
+            }
+        } else {
+            self.missile_timer = 0.0;
         }
         let alarm_on = inp.stall_warning && !inp.paused && !inp.crashed;
         let a_gate = OnePole::coeff_time(0.004, sr);
@@ -550,6 +578,19 @@ mod tests {
         run(&mut s, 1.5);
         s.set_input(AudioInput { gear: 1.0, on_ground: true, touchdown: td, ..flying(0.0) });
         assert_eq!(s.active_one_shots(), 0, "dasselbe Aufsetzen klingt nur einmal");
+    }
+
+    #[test]
+    fn missile_warning_beeps_only_while_active() {
+        let mut s = Synth::with_default_voice();
+        s.set_mix(Mix::WITHOUT_ENGINE);
+        s.set_input(flying(0.6));
+        assert!(rms(&run(&mut s, 0.5)) < 1e-4);
+        s.set_input(AudioInput { missile_warning: true, ..flying(0.6) });
+        assert!(rms(&run(&mut s, 1.0)) > 0.02);
+        s.set_input(flying(0.6));
+        run(&mut s, 0.3);
+        assert!(rms(&run(&mut s, 0.5)) < 1e-4);
     }
 
     #[test]

@@ -167,7 +167,7 @@ pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
                 Seeker::Optical => "TV",
                 Seeker::Laser => "LASER",
                 Seeker::Radiation => "ANTI-RADAR",
-                Seeker::Naval => "RADAR",
+                Seeker::Naval | Seeker::SemiActive => "RADAR",
             };
             let kg = s.mass_kg * f64::from(bay.count);
             (s.name.to_string(), bay.count.to_string(), format!("{kg:.0} KG"), guidance)

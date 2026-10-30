@@ -203,6 +203,8 @@ pub struct Warnings {
     pub gear_overspeed: bool,
     /// Im Landeanflug, aber Fahrwerk nicht ausgefahren.
     pub gear_up: bool,
+    /// Eine feindliche Rakete verfolgt das Flugzeug (Raketenwarnung, M-021).
+    pub missile: bool,
 }
 
 /// Das aufgeschaltete Ziel (M-013).
@@ -507,8 +509,7 @@ pub struct MunitionInfo {
     pub velocity: DVec3,
     /// Rakete (mit Antrieb) statt Bombe: Die Karte zeigt sie als Strich.
     pub missile: bool,
-    /// Feindliche Waffe (Boden-Luft- oder Luft-Luft-Rakete). Noch gibt es
-    /// keine; die Karte kann sie schon darstellen.
+    /// Feindliche Waffe (Boden-Luft-Rakete).
     pub hostile: bool,
 }
 
@@ -709,6 +710,7 @@ impl Sim {
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
         let exposure = self.exposure();
         self.radar.step(self.tick, &self.targets, Some(&exposure));
+        self.launch_sams();
         // Neu aufgeschaltet: Abschusslage sofort, sonst im Takt der Bombenanzeige.
         let guided = self.stores.selected_weapon().is_some_and(|k| k.is_guided());
         let lock = self.sensors.lock.filter(|l| self.targets[l.target].is_intact());
@@ -721,6 +723,27 @@ impl Sim {
             } else {
                 gun::predict_impact(a.position, a.velocity, a.attitude, &self.terrain)
             };
+        }
+    }
+
+    /// Radarstellungen, die in diesem Tick feuern wollen, starten ihre
+    /// Boden-Luft-Rakete (M-021).
+    fn launch_sams(&mut self) {
+        let fire: Vec<usize> = self
+            .radar
+            .events
+            .iter()
+            .filter(|(t, _)| *t == self.tick)
+            .filter_map(|(_, e)| match e {
+                RadarEvent::Fire { site } => Some(self.radar.sites[*site].target),
+                _ => None,
+            })
+            .collect();
+        for i in fire {
+            let t = &self.targets[i];
+            let Some(kind) = WeaponKind::sam_for(t.class) else { continue };
+            let from = DVec3::new(t.north, t.east, -t.elevation - t.class.height());
+            self.stores.launch_sam(self.tick, kind, i, from, self.aircraft.position);
         }
     }
 
@@ -850,6 +873,7 @@ impl Sim {
         if self.stores.in_flight.is_empty() {
             return;
         }
+        let painting: Vec<usize> = self.radar.sites.iter().filter(|s| s.painted).map(|s| s.target).collect();
         let mut world = weapons::World {
             terrain: &self.terrain,
             targets: &mut self.targets,
@@ -857,10 +881,30 @@ impl Sim {
             dt: DT,
             aircraft: self.aircraft.position,
             designated: self.sensors.lock.filter(|l| l.optical).map(|l| l.target),
+            flying: self.status == Status::Flying,
+            painting: &painting,
         };
         // Die Aufschaltung bleibt auch auf einem zerstörten Ziel, bis der
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
         self.stores.step(&mut world);
+        // Raketentreffer: Folgen nur über die Bordsysteme (M-015).
+        let hits: Vec<System> = self
+            .stores
+            .events
+            .iter()
+            .filter(|(t, _)| *t == self.tick)
+            .filter_map(|(_, e)| match e {
+                WeaponEvent::AircraftHit { systems, .. } => Some(*systems),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        if !hits.is_empty() {
+            for s in hits {
+                self.systems.hit(s);
+            }
+            self.apply_systems();
+        }
     }
 
     /// Bedienung der Zielerfassung und Aufschalten (M-013): Radar umschalten,
@@ -1204,6 +1248,7 @@ impl Sim {
             flameout: !crashed && a.flamed_out(),
             gear_overspeed: airborne && a.gear > 0.05 && aero.tas > self.spec.gear_max_speed_mps,
             gear_up: airborne && !a.gear_down() && approach,
+            missile: airborne && self.stores.in_flight.iter().any(|w| w.owner.is_some() && w.chasing),
         };
 
         FlightData {
@@ -1286,7 +1331,7 @@ impl Sim {
                     position: w.position,
                     velocity: w.velocity,
                     missile: w.kind.spec().cruise_mps > 0.0,
-                    hostile: false,
+                    hostile: w.owner.is_some(),
                 })
                 .collect(),
             weapon_cam: self.stores.in_flight.iter().rev().find(|w| w.kind.has_camera()).map(|w| {
@@ -1351,6 +1396,10 @@ impl Sim {
                     WeaponEvent::Busy => ("WEAPONS BUSY".to_string(), true),
                     WeaponEvent::FragWarning => ("FRAG WARNING".to_string(), true),
                     WeaponEvent::Expired { kind, .. } => (format!("{} LOST", kind.label()), false),
+                    WeaponEvent::SamLaunch { kind, site, .. } => {
+                        (format!("MISSILE LAUNCH {} - {}", kind.label(), name(site)), true)
+                    }
+                    WeaponEvent::AircraftHit { kind, .. } => (format!("{} HIT", kind.label()), true),
                     WeaponEvent::Acquired { kind, target, .. } => {
                         (format!("{} LOCK {}", kind.label(), name(target)), self.targets[target].civilian)
                     }
@@ -1385,6 +1434,7 @@ impl Sim {
                     RadarEvent::Alert { site, level: 2 } => (format!("TRACKED - {}", site_name(site)), true),
                     RadarEvent::Alert { site, .. } => (format!("RADAR ID - {}", site_name(site)), true),
                     RadarEvent::Lost { site } => (format!("{} LOST CONTACT", site_name(site)), false),
+                    RadarEvent::Fire { .. } => return None,
                 };
                 Some((tick, WeaponMessage { text, warning, age_s }))
             }))
@@ -1478,11 +1528,12 @@ impl Sim {
             }
             h.f64(w.age_s);
             h.u64(w.target.map_or(u64::MAX, |t| t as u64));
-            h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1);
+            h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1 | u64::from(w.chasing) << 2);
+            h.u64(w.owner.map_or(u64::MAX, |o| o as u64));
         }
         for s in &self.radar.sites {
             h.u64(u64::from(s.alert));
-            h.u64(s.last_change_tick);
+            h.u64(s.last_change_tick | u64::from(s.painted) << 63);
             if let Some(p) = s.ping_point {
                 h.f64(p.x);
                 h.f64(p.y);
