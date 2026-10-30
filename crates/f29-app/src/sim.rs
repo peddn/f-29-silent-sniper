@@ -126,6 +126,10 @@ fn step_simulation(time: Res<Time>, mut state: ResMut<SimState>, mut pilot: ResM
     state.accumulator += time.delta_secs_f64().min(0.25);
     let mut steps = 0;
     while state.accumulator >= DT && steps < MAX_STEPS_PER_FRAME {
+        // Beschädigtes Triebwerk: Der Hebel fällt auf den verfügbaren
+        // Höchstschub zurück und lässt sich nicht darüber schieben.
+        let cap = state.sim.systems().capability(f29_core::systems::System::Engine);
+        pilot.throttle = pilot.throttle.min(cap);
         let frame = pilot.take_frame();
         state.prev = state.curr;
         state.sim.step(frame);

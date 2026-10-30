@@ -1292,7 +1292,9 @@ Format jedes Eintrags:
     verloren. Meldung „SA-6 HIT“.
   - **Schubhebel:** Ist das Triebwerk beschädigt, sperrt eine rote Marke den
     nicht mehr verfügbaren Bereich der Kulisse, daneben „MAX 92“ in Rot
-    (Spielerwunsch v0.2.9).
+    (Spielerwunsch v0.2.9). Im Moment des Schadens fällt der Hebel auf die
+    Sperre zurück und lässt sich nicht darüber schieben; das Triebwerk läuft
+    wie im Original höchstens bis zur Sperre hoch.
   - **Raketenwarnung:** Solange eine feindliche Rakete das Flugzeug verfolgt,
     blinkt „MISSILE“ im HUD und ein schneller Wechselton warnt. Auf der Karte
     erscheinen feindliche Raketen als roter Strich, in der 3D-Ansicht mit

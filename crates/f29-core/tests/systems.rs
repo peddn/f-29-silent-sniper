@@ -48,6 +48,9 @@ fn engine_damage_cuts_thrust() {
     }
     let (a, b, c) = (ok.flight_data(), weak.flight_data(), dead.flight_data());
     assert!(b.thrust_n < a.thrust_n * 0.6, "Schub {:.0} vs {:.0}", b.thrust_n, a.thrust_n);
+    // Wie im Original: Die Triebwerksstellung selbst fällt auf den
+    // verfügbaren Höchstschub, auch bei Vollgas.
+    assert!((b.engine - 0.5).abs() < 0.01, "Triebwerk {:.2}", b.engine);
     assert!(c.thrust_n <= 0.0, "ausgefallen noch {:.0} N", c.thrust_n);
     assert!(b.tas_mps < a.tas_mps && c.tas_mps < b.tas_mps);
 }

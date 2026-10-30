@@ -8,7 +8,7 @@
 //!
 //! | System | Wirkung |
 //! |---|---|
-//! | Triebwerk | Höchstschub × Leistung, ausgefallen = kein Schub; nach Raketentreffern 4 % je Treffer weniger |
+//! | Triebwerk | Triebwerksstellung höchstens Leistung (auch bei Vollgas), ausgefallen = kein Schub; nach Raketentreffern 4 % je Treffer weniger |
 //! | Treibstoff | Leck: bis [`FUEL_LEAK_MAX_KGPS`] zusätzlich |
 //! | Hydraulik | Klappen, Fahrwerk, Schachtklappen langsamer; ausgefallen = blockiert |
 //! | Flugsteuerung | Drehraten × Leistung, ausgefallen = Notsteuerung ([`CONTROL_BACKUP`]) |

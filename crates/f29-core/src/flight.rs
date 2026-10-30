@@ -257,10 +257,7 @@ pub fn aero_data(spec: &AircraftSpec, s: &AircraftState) -> AeroData {
     let gross = if s.flamed_out() {
         0.0
     } else {
-        spec.thrust_max_n
-            * s.health.thrust
-            * s.engine
-            * detmath::powf(air.density / RHO0, spec.thrust_density_exponent)
+        spec.thrust_max_n * s.engine * detmath::powf(air.density / RHO0, spec.thrust_density_exponent)
     };
     let thrust = gross - spec.idle_ram_drag * s.velocity.length() * (1.0 - s.engine);
     if tas < MIN_AERO_SPEED {
@@ -321,7 +318,9 @@ pub fn fuel_flow(spec: &AircraftSpec, engine: f64, density: f64) -> f64 {
 fn update_systems(spec: &AircraftSpec, s: &mut AircraftState, c: &ControlFrame, aero: &AeroData, dt: f64) {
     // Triebwerk: ohne Treibstoff läuft es aus.
     let spool = (dt / spec.engine_spool_time_s).min(1.0);
-    let target = if s.flamed_out() { 0.0 } else { c.throttle_f() };
+    // Beschädigt läuft es höchstens auf den verfügbaren Höchstschub (wie im
+    // Original: die Triebwerksstellung wird begrenzt, auch bei Vollgas).
+    let target = if s.flamed_out() { 0.0 } else { c.throttle_f().min(s.health.thrust) };
     s.engine += (target - s.engine) * spool;
     if !s.flamed_out() {
         s.fuel_kg = (s.fuel_kg - fuel_flow(spec, s.engine, aero.density) * dt).max(0.0);
