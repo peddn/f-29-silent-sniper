@@ -8,7 +8,7 @@
 //!
 //! | System | Wirkung |
 //! |---|---|
-//! | Triebwerk | Höchstschub × Leistung, ausgefallen = kein Schub |
+//! | Triebwerk | Höchstschub × Leistung, ausgefallen = kein Schub; nach Raketentreffern 4 % je Treffer weniger |
 //! | Treibstoff | Leck: bis [`FUEL_LEAK_MAX_KGPS`] zusätzlich |
 //! | Hydraulik | Klappen, Fahrwerk, Schachtklappen langsamer; ausgefallen = blockiert |
 //! | Flugsteuerung | Drehraten × Leistung, ausgefallen = Notsteuerung ([`CONTROL_BACKUP`]) |
@@ -24,6 +24,9 @@ pub const CONTROL_BACKUP: f64 = 0.3;
 
 /// Restleistung eines Systems nach dem ersten Treffer.
 pub const HIT_CAPABILITY: f64 = 0.5;
+/// Ist das Triebwerk beschädigt, kostet jeder Raketentreffer so viel
+/// Höchstschub (wie im Original: 4 % je Treffer, ausfallen kann es nicht).
+pub const THRUST_LOSS_PER_HIT: f64 = 0.04;
 
 /// Ein Bordsystem.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -116,35 +119,48 @@ impl Default for Health {
 
 /// Zustand aller Bordsysteme.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Systems([Condition; 8]);
+pub struct Systems {
+    conditions: [Condition; 8],
+    /// Raketentreffer bisher.
+    pub hits: u32,
+}
 
 impl Systems {
     pub fn get(&self, s: System) -> Condition {
-        self.0[s as usize]
+        self.conditions[s as usize]
     }
 
     pub fn set(&mut self, s: System, c: Condition) {
-        self.0[s as usize] = c;
+        self.conditions[s as usize] = c;
     }
 
     pub fn capability(&self, s: System) -> f64 {
         self.get(s).capability()
     }
 
-    /// Treffer auf ein System: intakt → halbe Leistung, eingeschränkt →
-    /// ausgefallen. Wiederholte Treffer verschärfen so die Folgen (wie im
-    /// Original mit der Trefferzahl).
-    pub fn hit(&mut self, s: System) {
-        let next = match self.get(s) {
-            Condition::Ok => Condition::Degraded(HIT_CAPABILITY),
-            _ => Condition::Failed,
-        };
-        self.set(s, next);
+    /// Ein Raketentreffer auf die Systeme `hit`: intakt → halbe Leistung,
+    /// eingeschränkt → ausgefallen. Das Triebwerk ist wie im Original nur
+    /// „beschädigt“: Dann kostet jeder Treffer – auch spätere auf andere
+    /// Systeme – [`THRUST_LOSS_PER_HIT`] Höchstschub.
+    pub fn missile_hit(&mut self, hit: &[System]) {
+        self.hits += 1;
+        for &s in hit {
+            let next = match self.get(s) {
+                _ if s == System::Engine => Condition::Degraded(1.0),
+                Condition::Ok => Condition::Degraded(HIT_CAPABILITY),
+                _ => Condition::Failed,
+            };
+            self.set(s, next);
+        }
+        if !self.get(System::Engine).is_ok() {
+            let thrust = (1.0 - THRUST_LOSS_PER_HIT * f64::from(self.hits)).max(0.0);
+            self.set(System::Engine, Condition::Degraded(thrust));
+        }
     }
 
     /// Mindestens ein System ist nicht intakt.
     pub fn any_damage(&self) -> bool {
-        self.0.iter().any(|c| !c.is_ok())
+        self.conditions.iter().any(|c| !c.is_ok())
     }
 
     /// Wirkung auf das Flugmodell.
@@ -163,13 +179,16 @@ impl Systems {
         if self.get(System::WeaponBay).is_failed() { 0.0 } else { self.capability(System::Hydraulics) }
     }
 
-    /// Für den Zustandshash: je System (Art, Leistung).
+    /// Für den Zustandshash: je System (Art, Leistung), dazu die Trefferzahl.
     pub fn hash_parts(&self) -> impl Iterator<Item = (u64, f64)> + '_ {
-        self.0.iter().map(|c| match c {
-            Condition::Ok => (0, 1.0),
-            Condition::Degraded(v) => (1, *v),
-            Condition::Failed => (2, 0.0),
-        })
+        self.conditions
+            .iter()
+            .map(|c| match c {
+                Condition::Ok => (0, 1.0),
+                Condition::Degraded(v) => (1, *v),
+                Condition::Failed => (2, 0.0),
+            })
+            .chain(std::iter::once((3, f64::from(self.hits))))
     }
 }
 
@@ -201,5 +220,22 @@ mod tests {
         for sys in System::ALL {
             assert!(!sys.label().is_empty());
         }
+    }
+
+    /// Wie im Original: Erst ein Treffer am Triebwerk kostet Schub, dann
+    /// jeder Treffer 4 % – auch frühere zählen mit; ausfallen kann es nicht.
+    #[test]
+    fn missile_hits_cost_thrust_once_the_engine_is_damaged() {
+        let mut s = Systems::default();
+        s.missile_hit(&[System::Radar, System::Optics]);
+        assert_eq!(s.health().thrust, 1.0);
+        assert_eq!(s.get(System::Radar), Condition::Degraded(HIT_CAPABILITY));
+        s.missile_hit(&[System::Engine, System::Radar]);
+        assert!((s.health().thrust - 0.92).abs() < 1e-12);
+        assert!(s.get(System::Radar).is_failed());
+        s.missile_hit(&[System::Engine, System::Fuel]);
+        s.missile_hit(&[System::Hydraulics, System::Displays]);
+        assert!((s.health().thrust - 0.84).abs() < 1e-12);
+        assert_eq!(s.hits, 4);
     }
 }

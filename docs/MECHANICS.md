@@ -1057,7 +1057,8 @@ Format jedes Eintrags:
   folgt mit Etappe 4.
 - **Status:** Gerüst umgesetzt (v0.2.4); erste Schadensquelle: Treffer
   feindlicher Raketen beschädigen zwei zufällige Systeme, intakt → halbe
-  Leistung → ausgefallen (v0.2.9, M-021); Splitter eigener Bomben folgen
+  Leistung → ausgefallen, beschädigtes Triebwerk 4 % Höchstschub je Treffer
+  wie im Original (v0.2.9, M-021); Splitter eigener Bomben folgen
 
 ### M-016 Bordkanone
 
@@ -1251,8 +1252,11 @@ Format jedes Eintrags:
   - **Treffer** geometrisch (Annäherungszünder) – Folgen **nur über die
     Bordsysteme** (M-015): Jeder Treffer trifft zwei zufällige, verschiedene
     Systeme; ein intaktes fällt auf halbe Leistung, ein eingeschränktes fällt
-    aus. Wiederholte Treffer verschärfen so die Folgen wie im Original mit der
-    Trefferzahl. Kein Lebensbalken – das Flugzeug geht über die Folgen
+    aus. Ausnahme Triebwerk, genau wie im Original: Es wird nur als
+    „beschädigt“ markiert und fällt nie aus; ab dann kostet jeder
+    Raketentreffer 4 % Höchstschub (Gesamtzahl der Treffer, frühere zählen
+    mit – nach fünf Treffern also 80 %). Wiederholte Treffer verschärfen so
+    die Folgen wie im Original mit der Trefferzahl. Kein Lebensbalken – das Flugzeug geht über die Folgen
     verloren. Meldung „SA-6 HIT“.
   - **Raketenwarnung:** Solange eine feindliche Rakete das Flugzeug verfolgt,
     blinkt „MISSILE“ im HUD und ein schneller Wechselton warnt. Auf der Karte

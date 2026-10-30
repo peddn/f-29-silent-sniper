@@ -893,7 +893,7 @@ impl Sim {
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
         self.stores.step(&mut world);
         // Raketentreffer: Folgen nur über die Bordsysteme (M-015).
-        let hits: Vec<System> = self
+        let hits: Vec<_> = self
             .stores
             .events
             .iter()
@@ -902,11 +902,10 @@ impl Sim {
                 WeaponEvent::AircraftHit { systems, .. } => Some(*systems),
                 _ => None,
             })
-            .flatten()
             .collect();
         if !hits.is_empty() {
-            for s in hits {
-                self.systems.hit(s);
+            for systems in hits {
+                self.systems.missile_hit(&systems);
             }
             self.apply_systems();
         }
