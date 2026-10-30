@@ -513,7 +513,7 @@ fn launch_circle_only_for_missiles() {
 /// Feuersignal: „SHOOT“ im Sweet Spot (rot), „IN RANGE“ sonst; bei Raketen
 /// nur „SHOOT“, wenn das Ziel im Abschusskreis liegt.
 #[test]
-fn shoot_cue_follows_zone_and_circle() {
+fn shoot_cue_follows_the_zone() {
     use f29_core::weapons::{Bay, LaunchZone, WeaponKind};
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
     let mut sim = Sim::new(SimConfig::new(0x0F29));
@@ -544,46 +544,9 @@ fn shoot_cue_follows_zone_and_circle() {
     let lgb_good = red(WeaponKind::GuidedBomb, LaunchZone::Good, 25.0);
     let lgb_in = red(WeaponKind::GuidedBomb, LaunchZone::InRange, 25.0);
     assert!(lgb_good > lgb_in + 10, "kein SHOOT für die Laserbombe");
-    // Rakete: Ziel 4° unter der Nase (im Kreis) vs. 15° (außerhalb).
-    let in_circle = red(WeaponKind::AirToGround, LaunchZone::Good, 4.0);
-    let outside = red(WeaponKind::AirToGround, LaunchZone::Good, 15.0);
-    assert!(in_circle > outside + 10, "SHOOT trotz Ziel außerhalb des Kreises");
-}
-
-/// Ecken (= Rakete würde übernehmen) nur, wenn das Ziel im Abschusskreis liegt.
-#[test]
-fn corners_only_inside_the_launch_circle() {
-    use f29_core::weapons::{Bay, LaunchZone, WeaponKind};
-    let layout = ScreenLayout::cockpit(16.0 / 9.0);
-    let mut sim = Sim::new(SimConfig::new(0x0F29));
-    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.55, f29_core::controls::flags::RADAR_TOGGLE));
-    let base = sim.flight_data();
-    let t0 = base.target.expect("Ziel");
-    let lines = |off_deg: f64, zone: Option<LaunchZone>| {
-        let mut fd = base.clone();
-        fd.stores.selected = 0;
-        fd.stores.gun_selected = false;
-        fd.stores.bays[0] = Bay { kind: Some(WeaponKind::AirToGround), count: 1 };
-        fd.bomb_aim = None;
-        let a = off_deg.to_radians();
-        fd.target = Some(f29_core::TargetInfo {
-            zone,
-            civilian: false,
-            direction_body: f29_core::DVec3::new(a.cos(), a.sin(), 0.0),
-            ..t0
-        });
-        build(
-            &fd,
-            &layout,
-            &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
-            None,
-        )
-        .lines
-        .len()
-    };
-    // 12° neben der Nase: außerhalb des Kreises, aber noch im Glas.
-    assert_eq!(lines(12.0, Some(LaunchZone::InRange)), lines(12.0, Some(LaunchZone::OutOfRange)));
-    assert!(lines(4.0, Some(LaunchZone::InRange)) >= lines(4.0, Some(LaunchZone::OutOfRange)) + 8);
+    let agm_good = red(WeaponKind::AirToGround, LaunchZone::Good, 4.0);
+    let agm_out = red(WeaponKind::AirToGround, LaunchZone::OutOfRange, 4.0);
+    assert!(agm_good > agm_out + 10, "kein SHOOT für die Rakete");
 }
 
 /// Karte: Ziele außerhalb der eigenen Erfassung nur mit AWACS (Zieltyp

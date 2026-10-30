@@ -1,6 +1,6 @@
-//! Lenkwaffen (M-013, M-014): Abschusskreis und Übergabe, gewürfelter
-//! Endanflug abhängig von der Startgüte (Sweet Spot), Selbstsuche,
-//! Reichweitenzonen, Laserbombe mit Gleitkorridor und Dauerbeleuchtung.
+//! Lenkwaffen (M-013, M-014): Abschusskreis und Übergabe, physische
+//! Verfolgung mit gewürfelter Wirkung, Selbstsuche, vorausberechnete
+//! Abschusszonen, Laserbombe mit Dauerbeleuchtung.
 
 use f29_core::controls::{flags, weapon_flags};
 use f29_core::sensors::LookDir;
@@ -95,20 +95,16 @@ fn agm() -> Loadout {
 struct Tally {
     shots: u32,
     destroyed: u32,
-    damaged: u32,
     missed: u32,
 }
 
-fn tally(dist: f64, height: f64) -> Tally {
+/// Schüsse mit Übergabe aus 8 km, 300 m über dem Ziel, über viele Seeds.
+fn tally(class: TargetClass) -> Tally {
     let mut t = Tally::default();
     for seed in 1..=120_u64 {
-        let Some((mut sim, target)) = lined_up_at(seed, TargetClass::Soft, dist, height, agm()) else {
+        let Some((mut sim, target)) = lined_up_at(seed, class, 8_000.0, 300.0, agm()) else {
             continue;
         };
-        let zone = sim.flight_data().target.and_then(|t| t.zone);
-        if !matches!(zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
-            continue;
-        }
         let events = shoot(&mut sim);
         // Nur Schüsse mit Übergabe der Aufschaltung zählen (sonst sucht die
         // Waffe selbst und fliegt womöglich ein anderes Ziel an).
@@ -118,32 +114,26 @@ fn tally(dist: f64, height: f64) -> Tally {
         t.shots += 1;
         match impact(&events) {
             Some(ImpactResult::Destroyed { .. }) => t.destroyed += 1,
-            Some(ImpactResult::Damaged(_)) => t.damaged += 1,
+            Some(ImpactResult::Ineffective(_)) => {}
             _ => t.missed += 1,
         }
     }
     t
 }
 
-/// Sweet Spot: Von der Reichweitengrenze (16 km) steigt die Trefferchance bis
-/// zum Sweet Spot (8 km) an und fällt bei weiterer Annäherung wieder ab. Flache
-/// Anflüge, damit das Ziel im Abschusskreis liegt.
+/// Wie im Original: Die verfolgende Rakete trifft geometrisch, die Wirkung
+/// wird gewürfelt – gegen weiche Ziele immer, gegen Gebäude etwa jedes dritte
+/// Mal.
 #[test]
-fn sweet_spot_hits_more_often_than_too_far_or_too_close() {
-    let sweet = tally(8_000.0, 300.0);
-    let far = tally(14_000.0, 500.0);
-    let close = tally(2_500.0, 150.0);
-    for t in [&sweet, &far, &close] {
-        assert!(t.shots >= 30, "zu wenige Schüsse: {sweet:?} {far:?} {close:?}");
-    }
-    let rate = |n: u32, t: &Tally| f64::from(n) / f64::from(t.shots);
-    let report = format!("Sweet Spot {sweet:?}, Grenze {far:?}, zu nah {close:?}");
-    assert!(rate(sweet.destroyed, &sweet) > 0.7, "{report}");
-    assert!(rate(far.destroyed, &far) < rate(sweet.destroyed, &sweet) - 0.2, "{report}");
-    assert!(rate(close.destroyed, &close) < rate(sweet.destroyed, &sweet) - 0.1, "{report}");
-    assert!(rate(far.missed, &far) > rate(sweet.missed, &sweet), "{report}");
-    assert!(rate(close.missed, &close) > rate(sweet.missed, &sweet), "{report}");
+fn handed_over_missile_hits_and_rolls_the_effect() {
+    let soft = tally(TargetClass::Soft);
+    let building = tally(TargetClass::Building);
+    let report = format!("weich {soft:?}, Gebäude {building:?}");
     eprintln!("{report}");
+    assert!(soft.shots >= 30 && building.shots >= 30, "{report}");
+    assert!(soft.destroyed * 10 >= soft.shots * 9, "{report}");
+    let rate = f64::from(building.destroyed) / f64::from(building.shots - building.missed);
+    assert!((0.15..0.55).contains(&rate), "{report}");
 }
 
 /// Liegt das Ziel außerhalb des Abschusskreises, übernimmt die Rakete es
@@ -162,22 +152,22 @@ fn target_outside_the_launch_circle_is_not_handed_over() {
     assert!(w.searching && w.target.is_none(), "{w:?}");
 }
 
-/// Zielrahmen-Zonen: außer Reichweite, in Reichweite, Sweet Spot; der
-/// Radarjäger wirkt nicht gegen weiche Ziele.
+/// Zielrahmen-Zonen aus der vorausberechneten Flugbahn: Treffer erwartet,
+/// in Reichweite, außer Reichweite; der Radarjäger wirkt nicht gegen weiche
+/// Ziele.
 #[test]
 fn launch_zones_follow_the_range() {
-    // Erster Anflug mit (bei `optical`) optischer Erfassung.
-    let zone = |dist: f64, loadout, optical: bool| {
+    // Zone der ersten flachen Anflüge (300 m über dem Ziel), in denen das Ziel
+    // im Abschusskreis liegt bzw. (`any`) überhaupt aufgeschaltet ist.
+    let zone = |dist: f64, loadout, any: bool| {
         (1..=30_u64)
-            .filter_map(|seed| lined_up(seed, TargetClass::Soft, dist, loadout))
-            .find_map(|(sim, _)| sim.flight_data().target.filter(|t| t.optical || !optical).map(|t| t.zone))
-            .flatten()
+            .filter_map(|seed| lined_up_at(seed, TargetClass::Soft, dist, 300.0, loadout))
+            .filter_map(|(sim, _)| sim.flight_data().target)
+            .find(|t| any || (t.optical && t.direction_body.z.atan2(t.direction_body.x) < 0.1))
+            .and_then(|t| t.zone)
     };
-    assert_eq!(zone(8_000.0, agm(), true), Some(LaunchZone::Good));
-    // Näher als der Sweet Spot: wieder nur „in Reichweite“.
-    assert_eq!(zone(2_000.0, agm(), true), Some(LaunchZone::InRange));
-    assert_eq!(zone(13_500.0, agm(), true), Some(LaunchZone::InRange));
-    assert_eq!(zone(20_000.0, agm(), false), Some(LaunchZone::OutOfRange));
+    assert_eq!(zone(8_000.0, agm(), false), Some(LaunchZone::Good));
+    assert_eq!(zone(20_000.0, agm(), true), Some(LaunchZone::OutOfRange));
     let arm = Loadout([Some(WeaponKind::AntiRadar), None, None, None]);
     assert_eq!(zone(5_000.0, arm, false), Some(LaunchZone::NoEffect));
     // Ungelenkte Waffe gewählt: keine Zone.
@@ -209,7 +199,7 @@ fn lgb() -> Loadout {
     Loadout([Some(WeaponKind::GuidedBomb), None, None, None])
 }
 
-/// Auf das Ziel zufliegen, bis die Laserbombe im Sweet Spot ist (Zielrahmen
+/// Auf das Ziel zufliegen, bis die Vorausberechnung einen Treffer erwartet (Zielrahmen
 /// rot), dann auslösen. `after` läuft nach dem Auslösen jeden Tick (z. B.
 /// Ziel wechseln). Liefert die Ereignisse oder `None`, wenn es nicht klappt.
 fn laser_run(seed: u64, mut after: impl FnMut(&mut Sim, u64)) -> Option<(Sim, usize, Vec<WeaponEvent>)> {
@@ -234,7 +224,7 @@ fn laser_run(seed: u64, mut after: impl FnMut(&mut Sim, u64)) -> Option<(Sim, us
     None
 }
 
-/// Laserbombe im Sweet Spot ausgelöst, Ziel bis zum Einschlag beleuchtet:
+/// Laserbombe bei erwartetem Treffer ausgelöst, Ziel bis zum Einschlag beleuchtet:
 /// meist zerstört.
 #[test]
 fn laser_bomb_hits_while_the_target_stays_designated() {
@@ -279,7 +269,7 @@ fn laser_bomb_falls_ballistic_when_the_designation_ends() {
     assert!(sim.targets()[target].is_intact() || sim.targets()[target].damage < 1.0);
 }
 
-/// Außerhalb des Gleitkorridors reicht die Energie der Laserbombe nicht: keine
+/// Zu weit entfernt reicht die Energie der Laserbombe nicht: keine
 /// Übergabe.
 #[test]
 fn laser_bomb_needs_energy_to_reach_the_target() {

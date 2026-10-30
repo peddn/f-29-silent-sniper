@@ -280,6 +280,25 @@ const CONTACTS_PER_UPDATE: usize = 4;
 /// Die Zielhilfe wird alle so viele Ticks neu berechnet (20 Hz).
 const BOMB_AIM_TICKS: u64 = 6;
 
+/// Momentane Abschusslage für das Auslösen und die Vorausberechnung (ein
+/// Makro, damit `self.stores` daneben veränderlich geliehen werden kann).
+macro_rules! launch {
+    ($sim:expr) => {
+        weapons::Launch {
+            tick: $sim.tick,
+            position: $sim.aircraft.position,
+            velocity: $sim.aircraft.velocity,
+            attitude: $sim.aircraft.attitude,
+            lock: $sim.sensors.lock.map(|l| l.target),
+            lock_optical: $sim.sensors.lock.is_some_and(|l| l.optical),
+            targets: &$sim.targets,
+            terrain: &$sim.terrain,
+            bay_ok: !$sim.systems.get(System::WeaponBay).is_failed(),
+            dt: DT,
+        }
+    };
+}
+
 /// Meldung zu einem Waffenereignis, z. B. „MK-82 AWAY“.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WeaponMessage {
@@ -520,6 +539,8 @@ pub struct Sim {
     /// Vorausberechneter Aufschlag (Punkt, Fallzeit) der gewählten Bombe;
     /// abgeleitet, nicht Teil des Zustandshashes.
     bomb_prediction: Option<(DVec3, f64)>,
+    /// Vorausberechnete Abschusslage der gewählten Lenkwaffe: (Ziel, Zone).
+    launch_zone: Option<(sensors::Lock, weapons::LaunchZone)>,
     /// Ziele, die die eigenen Sensoren erfassen (sonst nur AWACS-Datalink);
     /// reihum aktualisiert, abgeleitet, nicht Teil des Zustandshashes.
     own_contacts: Vec<bool>,
@@ -599,6 +620,7 @@ impl Sim {
             systems: Systems::default(),
             gun_prediction: None,
             bomb_prediction: None,
+            launch_zone: None,
             own_contacts: Vec::new(),
             contact_cursor: 0,
         };
@@ -671,7 +693,11 @@ impl Sim {
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
         let exposure = self.exposure();
         self.radar.step(self.tick, &self.targets, Some(&exposure));
-        if self.tick.is_multiple_of(BOMB_AIM_TICKS) {
+        // Neu aufgeschaltet: Abschusslage sofort, sonst im Takt der Bombenanzeige.
+        let guided = self.stores.selected_weapon().is_some_and(|k| k.is_guided());
+        let lock = self.sensors.lock.filter(|l| self.targets[l.target].is_intact());
+        let new_lock = guided && lock.is_some() && lock != self.launch_zone.map(|(l, _)| l);
+        if self.tick.is_multiple_of(BOMB_AIM_TICKS) || new_lock {
             self.update_bomb_prediction();
             let a = &self.aircraft;
             self.gun_prediction = if a.on_ground || self.gun.rounds == 0 {
@@ -761,14 +787,21 @@ impl Sim {
         }
     }
 
-    /// Aufschlag der gewählten ungelenkten Bombe vorausberechnen (M-014).
+    /// Aufschlag der gewählten ungelenkten Bombe bzw. Abschusslage der
+    /// gewählten Lenkwaffe vorausberechnen (M-014).
     fn update_bomb_prediction(&mut self) {
+        let kind = self.stores.selected_weapon().filter(|_| !self.aircraft.on_ground);
         let a = &self.aircraft;
-        self.bomb_prediction = match self.stores.selected_weapon() {
-            // Ungelenkte Bomben und die Laserbombe (ihr ballistischer Punkt ist
-            // die Mitte des Gleitkorridors).
-            Some(kind) if (!kind.is_guided() || !kind.uses_launch_circle()) && !a.on_ground => {
-                weapons::predict_release(kind, a.position, a.velocity, a.attitude, &self.terrain, DT)
+        self.bomb_prediction = match kind {
+            Some(k) if !k.is_guided() => {
+                weapons::predict_release(k, a.position, a.velocity, a.attitude, &self.terrain, DT)
+            }
+            _ => None,
+        };
+        let lock = self.sensors.lock.filter(|l| self.targets[l.target].is_intact());
+        self.launch_zone = match (kind, lock) {
+            (Some(k), Some(l)) if k.is_guided() => {
+                Some((l, weapons::launch_zone(k, &launch!(self), l.target)))
             }
             _ => None,
         };
@@ -789,24 +822,10 @@ impl Sim {
         let gun_trigger = controls.has_weapon(weapon_flags::TRIGGER) && self.stores.gun_selected;
         let fire = (controls.has_weapon(weapon_flags::GUN) || gun_trigger) && !a.on_ground;
         self.gun.trigger(self.tick, fire, a.position, a.velocity, a.attitude, DT);
-        let bay_ok = !self.systems.get(System::WeaponBay).is_failed();
         // Bei gewählter Kanone löst die Auslösetaste keine Schachtwaffe aus.
         if controls.has_weapon(weapon_flags::RELEASE) && !self.stores.gun_selected {
-            let a = &self.aircraft;
-            let launch = weapons::Launch {
-                tick: self.tick,
-                position: a.position,
-                velocity: a.velocity,
-                attitude: a.attitude,
-                lock: self.sensors.lock.map(|l| l.target),
-                lock_optical: self.sensors.lock.is_some_and(|l| l.optical),
-                targets: &self.targets,
-                terrain: &self.terrain,
-                bay_ok,
-                optics: self.systems.capability(System::Optics),
-                ballistic: self.bomb_prediction.map(|(p, _)| p),
-            };
-            let dropped = if a.on_ground { 0.0 } else { self.stores.release(&launch) };
+            let launch = launch!(self);
+            let dropped = if self.aircraft.on_ground { 0.0 } else { self.stores.release(&launch) };
             self.aircraft.stores_kg = (self.aircraft.stores_kg - dropped).max(0.0);
         }
     }
@@ -1105,19 +1124,7 @@ impl Sim {
                     -t.elevation - a.position.z,
                 ),
                 heading: t.heading,
-                zone: self.stores.selected_weapon().filter(|k| k.is_guided() && t.is_intact()).map(|k| {
-                    if k.uses_launch_circle() {
-                        weapons::launch_zone(k, a.position, t, lock.optical)
-                    } else {
-                        weapons::laser_zone(
-                            a.position,
-                            a.velocity,
-                            self.bomb_prediction.map(|(p, _)| p),
-                            t,
-                            lock.optical,
-                        )
-                    }
-                }),
+                zone: self.launch_zone.filter(|(l, _)| *l == lock).map(|(_, z)| z),
                 damage: t.damage,
                 destroyed: !t.is_intact(),
             })
@@ -1445,11 +1452,7 @@ impl Sim {
             }
             h.f64(w.age_s);
             h.u64(w.target.map_or(u64::MAX, |t| t as u64));
-            h.u64(w.outcome.map_or(9, |o| o as u64));
-            h.u64(u64::from(w.critical) | u64::from(w.searching) << 1);
-            h.f64(w.aim_offset.x);
-            h.f64(w.aim_offset.y);
-            h.f64(w.aim_offset.z);
+            h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1);
         }
         for s in &self.radar.sites {
             h.u64(u64::from(s.alert));

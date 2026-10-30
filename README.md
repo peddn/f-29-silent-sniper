@@ -236,6 +236,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       waagerecht fliegen); Alarmstufen 1–3 mit
       Abklingen, gemerkter Ping-Ort; SIG-Anzeige, Pieps, Reichweitenkreise
       (v0.2.9)
+- [x] Lenkwaffen physikalisch wie im Original: reine Verfolgung, Treffer
+      geometrisch (Annäherungszünder), Wirkung gewürfelt; „SHOOT“ aus dem
+      vorausberechneten Flug statt Sweet Spot (v0.2.9)
 - [ ] Boden-Luft-Raketen ab Stufe 3: SAM-Stellungen und Langstreckenraketen
       der Frühwarnradare – zusammen mit dem Schadensmodell
 - [ ] Täuschkörper (Düppel, Fackeln) gegen Langstreckenraketen

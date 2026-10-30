@@ -260,24 +260,9 @@ fn launch_circle(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, c
     dl.circle(center, r, 40, Ink::Hud);
 }
 
-/// Reichweitenzone, wie sie Zielrahmen und Feuersignal zeigen: Bei Raketen
-/// gilt „in Reichweite“ bzw. „Sweet Spot“ nur, wenn das Ziel auch im
-/// Abschusskreis liegt – sonst würde die Rakete es nicht übernehmen.
-fn armed_zone(fd: &FlightData, t: &f29_core::TargetInfo) -> Option<LaunchZone> {
-    let zone = t.zone?;
-    let st = &fd.stores;
-    let circle = !st.gun_selected && st.bays[st.selected].kind.is_some_and(|k| k.uses_launch_circle());
-    let in_circle =
-        t.direction_body.x >= f29_core::weapons::LAUNCH_CIRCLE_RAD.cos() * t.direction_body.length();
-    match zone {
-        LaunchZone::InRange | LaunchZone::Good if circle && !in_circle => Some(LaunchZone::OutOfRange),
-        z => Some(z),
-    }
-}
-
-/// Feuersignal der Lenkwaffen unten mittig im Glas: „IN RANGE“, solange das
-/// Ziel in Reichweite ist (auch im Sweet Spot), darüber „SHOOT“ (umrahmt) im
-/// Sweet Spot – bei Raketen nur mit dem Ziel im Abschusskreis.
+/// Feuersignal der Lenkwaffen unten mittig im Glas: „IN RANGE“, solange die
+/// Waffe das Ziel übernähme, darüber „SHOOT“ (umrahmt), wenn die
+/// vorausberechnete Flugbahn trifft.
 fn shoot_cue(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     let Some(t) = &fd.target else {
         return;
@@ -290,7 +275,7 @@ fn shoot_cue(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
         return;
     }
     let pos = [glass.center()[0], glass.min[1] + TXT * 1.4];
-    let zone = armed_zone(fd, t);
+    let zone = t.zone;
     if matches!(zone, Some(LaunchZone::InRange | LaunchZone::Good)) {
         dl.text_mid(pos, TXT_SMALL, Align::Center, "IN RANGE", Ink::Hud);
     }
@@ -353,13 +338,13 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
         return;
     };
     let s = vh * 0.02;
-    let zone = armed_zone(fd, t);
+    let zone = t.zone;
     let ink = if t.civilian { Ink::HudDim } else { Ink::Hud };
     match layout.project_body(t.direction_body.to_array()) {
         Some(p) if glass.contains(p) => {
             // Form nach Reichweitenzone der gewählten Lenkwaffe (wie im
-            // Original: in Reichweite erfasst, näher dran Farbwechsel). Blau
-            // nur im Sweet Spot.
+            // Original: in Reichweite erfasst, näher dran Farbwechsel). Blau,
+            // wenn die vorausberechnete Flugbahn trifft.
             let r = Rect::from_center(p, [s, s]);
             let ink = match zone {
                 Some(LaunchZone::Good) => Ink::HudWarning,
