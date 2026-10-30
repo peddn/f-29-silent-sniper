@@ -239,6 +239,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Lenkwaffen physikalisch wie im Original: reine Verfolgung, Treffer
       geometrisch (Annäherungszünder), Wirkung gewürfelt; „SHOOT“ aus dem
       vorausberechneten Flug statt Sweet Spot (v0.2.9)
+- [x] Karte aufgeräumt: Höhenbild in Graustufen statt Höhenlinien, größere
+      und einfachere Zielsymbole (v0.2.9)
 - [x] Feuersignal „LOCKED“/„SHOOT“; Waffenkamera der Maverick auf der Seite
       WPN CAM, nach dem Abschuss automatisch aufgeschaltet (v0.2.9)
 - [ ] Boden-Luft-Raketen ab Stufe 3: SAM-Stellungen und Langstreckenraketen

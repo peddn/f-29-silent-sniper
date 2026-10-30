@@ -1,5 +1,6 @@
-//! MFDs: Kartendaten und Satellitenbild im Hintergrund erzeugen, Bildschirm-
-//! hintergründe und das Satellitenbild als Sprites unter die HUD-Linien legen.
+//! MFDs: Kartendaten sowie Höhen- und Satellitenbild im Hintergrund erzeugen,
+//! Bildschirmhintergründe und das Kartenbild als Sprites unter die HUD-Linien
+//! legen.
 
 use crate::HUD_LAYER;
 use crate::sim::{SimState, SimSystems};
@@ -14,13 +15,13 @@ use bevy::tasks::{AsyncComputeTaskPool, Task};
 use bevy::window::PrimaryWindow;
 use f29_hud::map::{MAP_HALF_EXTENT_M, map_center};
 use f29_hud::{MapData, MapMode, MfdState, Rect};
+use f29_render::map_raster::{MapRaster, MapStyle};
 use f29_render::palette;
-use f29_render::sat_map::SatelliteMap;
 use std::sync::Arc;
 
-/// Pixel je Kante des Satellitenrasters (Kartengebiet 200 km ⇒ ≈ 98 m/px).
+/// Pixel je Kante der Kartenraster (Kartengebiet 200 km ⇒ ≈ 98 m/px).
 const SAT_RASTER_N: usize = 2_048;
-/// Pixel je Kante des Satelliten-Ausschnitts im MFD.
+/// Pixel je Kante des Kartenausschnitts im MFD.
 const SAT_VIEW_PX: u32 = 256;
 
 pub struct MfdPlugin;
@@ -43,10 +44,11 @@ pub struct MfdView(pub MfdState);
 pub struct MapAssets {
     seed: Option<u64>,
     pub map: Option<Arc<MapData>>,
-    sat: Option<Arc<SatelliteMap>>,
+    /// Kartenraster je Modus: Höhenbild (Gitter), Satellitenbild.
+    rasters: [Option<Arc<MapRaster>>; 2],
     map_task: Option<Task<MapData>>,
-    sat_task: Option<Task<SatelliteMap>>,
-    sat_image: Handle<Image>,
+    raster_tasks: [Option<Task<MapRaster>>; 2],
+    map_image: Handle<Image>,
 }
 
 #[derive(Component)]
@@ -54,7 +56,7 @@ enum Screen {
     Left,
     Right,
     Center,
-    Satellite,
+    Map,
 }
 
 fn setup(mut commands: Commands, mut assets: ResMut<MapAssets>, mut images: ResMut<Assets<Image>>) {
@@ -66,7 +68,7 @@ fn setup(mut commands: Commands, mut assets: ResMut<MapAssets>, mut images: ResM
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     );
     image.sampler = ImageSampler::nearest();
-    assets.sat_image = images.add(image);
+    assets.map_image = images.add(image);
 
     let [r, g, b] = palette::mix(0, 1, 0.25);
     let screen_color = Color::srgb(r, g, b);
@@ -80,11 +82,11 @@ fn setup(mut commands: Commands, mut assets: ResMut<MapAssets>, mut images: ResM
         ));
     }
     commands.spawn((
-        Sprite { image: assets.sat_image.clone(), custom_size: Some(Vec2::ONE), ..default() },
+        Sprite { image: assets.map_image.clone(), custom_size: Some(Vec2::ONE), ..default() },
         Transform::from_xyz(0.0, 0.0, -6.0),
         RenderLayers::layer(HUD_LAYER),
         Visibility::Hidden,
-        Screen::Satellite,
+        Screen::Map,
     ));
 }
 
@@ -94,15 +96,16 @@ fn load_maps(mut assets: ResMut<MapAssets>, state: Res<SimState>) {
     if assets.seed != Some(terrain.seed()) {
         assets.seed = Some(terrain.seed());
         assets.map = None;
-        assets.sat = None;
+        assets.rasters = [None, None];
         let pool = AsyncComputeTaskPool::get();
         let (t, route, targets) = (terrain.clone(), state.sim.route().to_vec(), state.sim.targets().to_vec());
         assets.map_task = Some(pool.spawn(async move { MapData::for_terrain(&t, &route, &targets) }));
-        let t = terrain.clone();
-        assets.sat_task =
-            Some(pool.spawn(async move {
-                SatelliteMap::build(&t, map_center(&t), MAP_HALF_EXTENT_M, SAT_RASTER_N)
+        for (k, style) in [MapStyle::Height, MapStyle::Satellite].into_iter().enumerate() {
+            let t = terrain.clone();
+            assets.raster_tasks[k] = Some(pool.spawn(async move {
+                MapRaster::build(&t, map_center(&t), MAP_HALF_EXTENT_M, SAT_RASTER_N, style)
             }));
+        }
     }
     if let Some(task) = assets.map_task.as_mut()
         && let Some(map) = check_ready(task)
@@ -110,11 +113,13 @@ fn load_maps(mut assets: ResMut<MapAssets>, state: Res<SimState>) {
         assets.map = Some(Arc::new(map));
         assets.map_task = None;
     }
-    if let Some(task) = assets.sat_task.as_mut()
-        && let Some(sat) = check_ready(task)
-    {
-        assets.sat = Some(Arc::new(sat));
-        assets.sat_task = None;
+    for k in 0..2 {
+        if let Some(task) = assets.raster_tasks[k].as_mut()
+            && let Some(raster) = check_ready(task)
+        {
+            assets.rasters[k] = Some(Arc::new(raster));
+            assets.raster_tasks[k] = None;
+        }
     }
 }
 
@@ -126,7 +131,7 @@ fn fit(rect: Rect, h: f32, z: f32, transform: &mut Transform, sprite: &mut Sprit
     sprite.custom_size = Some(size);
 }
 
-/// Hintergründe der MFDs und das Satellitenbild platzieren und aktualisieren.
+/// Hintergründe der MFDs und das Kartenbild platzieren und aktualisieren.
 fn place_screens(
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
@@ -139,8 +144,12 @@ fn place_screens(
     let layout = layout_for(&window);
     let mfd = layout.mfd_layout();
     let fd = state.sim.flight_data();
-    let sat_visible =
-        view.0.map_mode == MapMode::Satellite && assets.sat.is_some() && f29_hud::displays_on(&fd);
+    let raster = match view.0.map_mode {
+        MapMode::Grid => &assets.rasters[0],
+        MapMode::Satellite => &assets.rasters[1],
+    }
+    .as_ref()
+    .filter(|_| f29_hud::displays_on(&fd));
     for (screen, mut transform, mut sprite, mut vis) in &mut screens {
         let Some(m) = mfd else {
             *vis = Visibility::Hidden;
@@ -150,16 +159,15 @@ fn place_screens(
             Screen::Left => (m.left_screen, -8.0, true),
             Screen::Right => (m.right_screen, -8.0, true),
             Screen::Center => (m.center, -8.0, true),
-            Screen::Satellite => (m.left_screen, -6.0, sat_visible),
+            Screen::Map => (m.left_screen, -6.0, raster.is_some()),
         };
         fit(rect, h, z, &mut transform, &mut sprite);
         *vis = if show { Visibility::Inherited } else { Visibility::Hidden };
     }
-    if sat_visible
-        && let Some(sat) = &assets.sat
-        && let Some(mut image) = images.get_mut(&assets.sat_image)
+    if let Some(raster) = raster
+        && let Some(mut image) = images.get_mut(&assets.map_image)
     {
-        let px = sat.render_view(
+        let px = raster.render_view(
             [fd.position.x, fd.position.y],
             fd.heading,
             view.0.map_range_m(),

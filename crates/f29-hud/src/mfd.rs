@@ -22,7 +22,8 @@ pub const WEAPON_STATIONS: usize = 4;
 /// Darstellungsart der Karte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MapMode {
-    /// Gitter mit Küstenlinie und Höhenlinien.
+    /// Höhenbild in Graustufen (Wasser schwarz, Rasterbild des Frontends)
+    /// mit Kartengitter – wie im Original eine dunkle Fläche mit Gitter.
     #[default]
     Grid,
     /// Satellitenbild (Rasterbild, das das Frontend unter die Linien legt).
@@ -253,6 +254,9 @@ fn bezel(dl: &mut DisplayList, outer: Rect, screen: Rect) {
 }
 
 /// Gute Gitterweite (m) für einen Kartenbereich.
+/// Größe der Zielsymbole auf der Karte (Vielfaches der Schrifthöhe).
+const SYMBOL: f32 = 1.0;
+
 fn grid_spacing(range_m: f64) -> f64 {
     let target = range_m / 2.5;
     [500.0, 1_000.0, 2_000.0, 5_000.0, 10_000.0, 20_000.0, 50_000.0]
@@ -299,12 +303,6 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                     let y = k as f64 * g;
                     dl.line(proj.to_screen([lo_n, y]), proj.to_screen([hi_n, y]), Ink::MfdGrid);
                 }
-                for s in &map.contours {
-                    if near(s.a) {
-                        let ink = if s.level == 0 { Ink::Mfd } else { Ink::MfdDim };
-                        dl.line(proj.to_screen(s.a), proj.to_screen(s.b), ink);
-                    }
-                }
             }
             // Flugplätze
             for rw in &map.runways {
@@ -325,7 +323,7 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                     continue;
                 }
                 let p = proj.to_screen(t.pos);
-                let s = txt * 0.55;
+                let s = txt * SYMBOL;
                 if fd.own_contacts.binary_search(&k).is_ok() {
                     // Eigene Erfassung: Zieltyp und Kennung „zivil“ bekannt.
                     let ink = if t.civilian { Ink::MfdDim } else { Ink::Warning };
@@ -347,11 +345,11 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                     TargetRole::None => None,
                 };
                 if let Some(tag) = tag {
-                    dl.circle(p, s * 2.2, 10, Ink::Warning);
-                    dl.text_mid([p[0] + s * 2.6, p[1] + s * 1.6], txt * 0.75, Align::Left, tag, Ink::Warning);
+                    dl.circle(p, s * 1.6, 12, Ink::Warning);
+                    dl.text_mid([p[0] + s * 1.9, p[1] + s * 1.2], txt * 0.8, Align::Left, tag, Ink::Warning);
                 }
                 if Some(k) == locked {
-                    let b = s * 1.8;
+                    let b = s * 1.35;
                     let c = b * 0.45;
                     for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
                         let corner = [p[0] + sx * b, p[1] + sy * b];
@@ -375,7 +373,7 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                 if near(site.pos)
                     && let Some(t) = map.targets.get(site.target)
                 {
-                    target_symbol(dl, p, txt * 0.55, t.class, Ink::Warning);
+                    target_symbol(dl, p, txt * SYMBOL, t.class, Ink::Warning);
                 }
             }
             if let Some(pp) = fd.threat.ping_point {
@@ -503,62 +501,35 @@ pub(crate) fn fuel_bar(dl: &mut DisplayList, fd: &FlightData, bar: Rect, txt: f3
 /// Kartensymbol einer Zielklasse um `p` mit Größe `s`.
 pub(crate) fn target_symbol(dl: &mut DisplayList, p: [f32; 2], s: f32, class: TargetClass, ink: Ink) {
     let [x, y] = p;
+    let square = |dl: &mut DisplayList| dl.rect(Rect::from_center(p, [s * 0.6, s * 0.6]), ink);
     match class {
-        TargetClass::Soft => dl.circle(p, s * 0.6, 6, ink),
-        TargetClass::Armored => dl.rect(Rect::from_center(p, [s * 0.7, s * 0.5]), ink),
-        TargetClass::Building => dl.polyline(
-            &[
-                [x - s * 0.7, y - s * 0.6],
-                [x + s * 0.7, y - s * 0.6],
-                [x + s * 0.7, y + s * 0.2],
-                [x, y + s * 0.8],
-                [x - s * 0.7, y + s * 0.2],
-            ],
-            true,
-            ink,
-        ),
-        TargetClass::Hardened => {
-            dl.arc([x, y - s * 0.5], s * 0.8, 0.0, std::f32::consts::PI, 6, ink);
-            dl.line([x - s * 0.8, y - s * 0.5], [x + s * 0.8, y - s * 0.5], ink);
+        // Fahrzeuge: Quadrat
+        TargetClass::Soft | TargetClass::Armored => square(dl),
+        // Bauwerke: Quadrat mit Kreuz
+        TargetClass::Building | TargetClass::Hardened | TargetClass::Bridge => {
+            square(dl);
+            dl.line([x - s * 0.6, y - s * 0.6], [x + s * 0.6, y + s * 0.6], ink);
+            dl.line([x - s * 0.6, y + s * 0.6], [x + s * 0.6, y - s * 0.6], ink);
         }
-        TargetClass::AirDefense => {
+        // Flugabwehr: Dreieck, das Frühwarnradar mit Querstrich darunter
+        TargetClass::AirDefense | TargetClass::EarlyWarning => {
             dl.polyline(
-                &[[x - s * 0.8, y - s * 0.6], [x + s * 0.8, y - s * 0.6], [x, y + s * 0.8]],
+                &[[x - s * 0.7, y - s * 0.5], [x + s * 0.7, y - s * 0.5], [x, y + s * 0.7]],
                 true,
                 ink,
             );
-            dl.line([x, y - s * 0.6], [x, y + s * 1.3], ink);
-        }
-        TargetClass::EarlyWarning => {
-            // Radarschirm auf einem Mast
-            dl.arc([x, y + s * 0.2], s * 0.9, std::f32::consts::PI, std::f32::consts::TAU, 6, ink);
-            dl.line([x - s * 0.9, y + s * 0.2], [x + s * 0.9, y + s * 0.2], ink);
-            dl.line([x, y + s * 0.2], [x, y - s * 0.8], ink);
-        }
-        TargetClass::Bridge => {
-            dl.line([x - s, y - s * 0.3], [x + s, y - s * 0.3], ink);
-            dl.line([x - s, y + s * 0.3], [x + s, y + s * 0.3], ink);
-        }
-        TargetClass::ParkedAircraft => {
-            dl.line([x - s * 0.9, y + s * 0.1], [x + s * 0.9, y + s * 0.1], ink);
-            dl.line([x, y - s * 0.8], [x, y + s * 0.8], ink);
-            dl.line([x - s * 0.35, y - s * 0.7], [x + s * 0.35, y - s * 0.7], ink);
-        }
-        TargetClass::ShipSmall | TargetClass::ShipLarge => {
-            let w = if class == TargetClass::ShipLarge { s * 1.1 } else { s * 0.7 };
-            dl.polyline(
-                &[
-                    [x - w, y + s * 0.2],
-                    [x + w, y + s * 0.2],
-                    [x + w * 0.6, y - s * 0.4],
-                    [x - w * 0.6, y - s * 0.4],
-                ],
-                true,
-                ink,
-            );
-            if class == TargetClass::ShipLarge {
-                dl.line([x - w * 0.2, y + s * 0.2], [x - w * 0.2, y + s * 0.7], ink);
+            if class == TargetClass::EarlyWarning {
+                dl.line([x - s * 0.7, y - s * 0.8], [x + s * 0.7, y - s * 0.8], ink);
             }
+        }
+        // Flugzeuge am Boden: Kreuz
+        TargetClass::ParkedAircraft => {
+            dl.line([x - s * 0.7, y], [x + s * 0.7, y], ink);
+            dl.line([x, y - s * 0.7], [x, y + s * 0.7], ink);
+        }
+        // Schiffe: Raute
+        TargetClass::ShipSmall | TargetClass::ShipLarge => {
+            dl.polyline(&[[x - s * 0.8, y], [x, y + s * 0.5], [x + s * 0.8, y], [x, y - s * 0.5]], true, ink)
         }
     }
 }

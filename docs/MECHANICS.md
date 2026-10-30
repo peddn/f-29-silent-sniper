@@ -544,10 +544,16 @@ Format jedes Eintrags:
     senkrechter Balken, reserviert für die Stealth-/Radarimpuls-Anzeige (M-020).
     Ohne Brett (`panel_fraction` 0, spätere Weitwinkelsicht) entfallen die MFDs.
   - **Links: Karte**, Flugrichtung oben, Flugzeug in der Mitte. Zwei Modi (F3):
-    *Gitter* mit Kartengitter, Küstenlinie und Höhenlinien (400/900/1500 m,
-    Marching Squares über ein 500-m-Raster) und *Satellit* (Farbraster
-    2048², ≈ 98 m/px, mit Hangschattierung, im Hintergrund berechnet, pro Bild
-    kursbezogen und pixelig ausgeschnitten). In beiden Modi: Flugplätze, Route
+    *Gitter* mit Kartengitter über einem Höhenbild in Graustufen und *Satellit*
+    (Farbraster mit Hangschattierung). Beide Raster 2048², ≈ 98 m/px, im
+    Hintergrund berechnet, pro Bild kursbezogen und pixelig ausgeschnitten.
+    *v0.2.9 (Spielerwunsch, nach dem Original: dunkle Fläche mit Gitter und
+    Symbolen):* Die Höhenlinien des Gittermodus sind ersetzt durch das
+    Höhenbild – Wasser schwarz, Land gedämpft grau, je höher, desto heller
+    (nach der Wurzel der Höhe, damit auch das Flachland Relief zeigt). Die
+    Zielsymbole sind größer und einfacher: Quadrat (Fahrzeuge), Quadrat mit
+    Kreuz (Bauwerke, Bunker, Brücken), Dreieck (Flugabwehr; Frühwarnradar mit
+    Querstrich), Kreuz (abgestellte Flugzeuge), Raute (Schiffe). In beiden Modi: Flugplätze, Route
     mit aktivem Wegpunkt, Nordpfeil, Kurs, Bereich. Zoom in fünf Stufen mit
     Y/X (2–40 NM von der Mitte bis zum Rand).
   - **Rechts: Seiten** (F4 blättert, bisher eine): *Ressourcen* mit vier leeren
@@ -1282,7 +1288,7 @@ Format jedes Eintrags:
     flachem Land und Wasser stärkerer Impuls.
   - **Planquadrate** auf Karte und Missionsseite.
   - Technik: Floating Origin und Kachelstreaming tragen; die
-    Karten-Höhenlinien brauchen größere Ausschnitte; Schleifen über viele
+    Kartenraster brauchen größere Ausschnitte; Schleifen über viele
     feste Objekte bekommen eine Vorauswahl nach Rasterzellen.
   - Keine Positionen aus dem Original (sie liegen auch nicht vor): nur die
     Struktur (Raster, Objektliste, Generatorregeln) wird nachgebaut.

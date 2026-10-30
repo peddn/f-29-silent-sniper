@@ -9,11 +9,11 @@
 //! x = Ost, y = oben, z = Süd (rechtshändig, „vorn“ eines Modells = −z).
 
 pub mod coords;
+pub mod map_raster;
 pub mod mesh;
 pub mod model;
 pub mod palette;
 pub mod runway_mesh;
-pub mod sat_map;
 pub mod target_mesh;
 pub mod terrain_mesh;
 

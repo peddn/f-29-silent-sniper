@@ -21,7 +21,7 @@ pub enum Ink {
     Needle,
     /// MFD-Schrift und Kartenlinien (Küste).
     Mfd,
-    /// Abgeschwächte MFD-Linien (Höhenlinien, Platzhalter).
+    /// Abgeschwächte MFD-Linien (Platzhalter, Nebenangaben).
     MfdDim,
     /// Kartengitter.
     MfdGrid,

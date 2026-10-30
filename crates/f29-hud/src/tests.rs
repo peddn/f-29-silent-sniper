@@ -188,7 +188,7 @@ fn map_draws_inside_left_screen_in_all_modes_and_zooms() {
     }
     let fd = sim.flight_data();
     let map = MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
-    assert!(!map.contours.is_empty() && map.runways.len() >= 2 && map.route.len() >= 3);
+    assert!(map.runways.len() >= 2 && map.route.len() >= 3);
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
     let m = layout.mfd_layout().unwrap();
     let panel_only = |opts: &HudOptions| {
@@ -213,7 +213,7 @@ fn map_draws_inside_left_screen_in_all_modes_and_zooms() {
             counts.push((mode, zoom, lines.len()));
         }
     }
-    // Gitterkarte zeichnet mehr Linien als die Satellitenansicht (Gitter, Höhenlinien)
+    // Gitterkarte zeichnet mehr Linien als die Satellitenansicht (Gitter)
     let grid: usize = counts.iter().filter(|c| c.0 == MapMode::Grid).map(|c| c.2).sum();
     let sat: usize = counts.iter().filter(|c| c.0 == MapMode::Satellite).map(|c| c.2).sum();
     assert!(grid > sat, "Gitter {grid} vs Satellit {sat}");
