@@ -250,6 +250,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Frühwarnradare; halbaktiv (weit weg nur, solange die Stellung uns
       erfasst), Treffer beschädigen zwei Bordsysteme; Raketenwarnung mit Ton,
       Rauchspur (v0.2.9)
+- [x] Drei SAM-Typen mit Startprofil: SA-8 (Kurzstrecken-Flugabwehr bei den
+      Zielen, direkt), SA-6 (Boost und Bogen), SA-5 (fast senkrechter Start,
+      ausgeprägter Bogen); Vorhalt für alle Lenkwaffen (v0.2.9)
 - [ ] Täuschkörper (Düppel, Fackeln) gegen Langstreckenraketen
 - ~~Flak~~ (gestrichen, Spielerentscheidung v0.2.9)
 

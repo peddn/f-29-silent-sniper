@@ -16,7 +16,7 @@ fn base_color(class: TargetClass, civilian: bool) -> [f32; 3] {
         TargetClass::Building if civilian => palette::mix(14, 10, 0.4),
         TargetClass::Building => palette::mix(13, 11, 0.4),
         TargetClass::Hardened => palette::mix(13, 12, 0.35),
-        TargetClass::AirDefense => palette::mix(7, 13, 0.55),
+        TargetClass::AirDefense | TargetClass::ShortRangeSam => palette::mix(7, 13, 0.55),
         TargetClass::EarlyWarning => palette::mix(13, 7, 0.4),
         TargetClass::Bridge => palette::srgb(13),
         TargetClass::ParkedAircraft => palette::mix(14, 13, 0.4),

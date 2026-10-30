@@ -88,9 +88,9 @@ pub const MAX_HOSTILE: usize = 4;
 /// Näher als so (m) lenkt eine Boden-Luft-Rakete mit eigenem Suchkopf, weiter
 /// weg nur mit der Beleuchtung ihrer Stellung (halbaktiv).
 pub const SEMI_ACTIVE_M: f64 = 5_000.0;
-/// Startrichtung der Boden-Luft-Raketen: so steil über der Linie zum
-/// Flugzeug (rad, 10° – innerhalb des Suchkegels), dann lenkt sie ein.
-const SAM_LOFT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
+/// Boden-Luft-Raketen starten mindestens so steil über der Linie zum
+/// Flugzeug (rad, 10° – innerhalb des Suchkegels).
+const SAM_DIRECT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
 /// Vorhalt höchstens für so viele Sekunden Restflugzeit.
 const MAX_LEAD_S: f64 = 10.0;
 /// Startgeschwindigkeit der Boden-Luft-Raketen (m/s).
@@ -120,9 +120,11 @@ pub enum WeaponKind {
     /// Seezielrakete: fliegt nur Schiffe an.
     AntiShip,
     /// Boden-Luft-Rakete mittlerer Reichweite (SAM-Stellungen).
-    SurfaceToAir,
+    MediumRangeSam,
     /// Langstrecken-Boden-Luft-Rakete (Frühwarnradare).
     LongRangeSam,
+    /// Kurzstrecken-Boden-Luft-Rakete (Kurzstrecken-Flugabwehr).
+    ShortRangeSam,
 }
 
 /// Suchkopf einer gelenkten Waffe.
@@ -179,6 +181,15 @@ pub struct WeaponSpec {
     pub accel_mps2: f64,
     /// Größte Drehrate der Flugrichtung (rad/s).
     pub turn_rate_rad: f64,
+    /// Startwinkel einer Boden-Luft-Rakete über der Waagerechten (rad; die
+    /// Langstreckenrakete fast senkrecht wie im Original), mindestens knapp
+    /// über der Linie zum Flugzeug.
+    pub launch_rad: f64,
+    /// Boost (s): So lange steigt sie nach dem Start ungelenkt.
+    pub boost_s: f64,
+    /// Bogen: Die Rakete zielt um diesen Anteil der Entfernung über das Ziel
+    /// (wie im Original; schrumpft beim Annähern, 0 = direkt).
+    pub loft: f64,
     /// Vorhaltfaktor 0..1 gegen bewegte Ziele: 0 = reine Verfolgung (wie im
     /// Original, leicht auszukurven), 1 = voller Vorhalt (Kollisionskurs).
     pub lead: f64,
@@ -213,6 +224,9 @@ const BOMB: WeaponSpec = WeaponSpec {
     cruise_mps: 0.0,
     accel_mps2: 0.0,
     turn_rate_rad: 0.0,
+    launch_rad: 0.0,
+    boost_s: 0.0,
+    loft: 0.0,
     // Alle Lenkwaffen mit voller Gefährlichkeit (Spielerwunsch v0.2.9).
     lead: 1.0,
     max_range_m: 0.0,
@@ -238,6 +252,9 @@ const MISSILE: WeaponSpec = WeaponSpec {
     cruise_mps: 700.0,
     accel_mps2: 70.0,
     turn_rate_rad: deg(25.0),
+    launch_rad: 0.0,
+    boost_s: 0.0,
+    loft: 0.0,
     lead: 1.0,
     max_range_m: 16_000.0,
     seeker_cone_rad: deg(25.0),
@@ -246,27 +263,31 @@ const MISSILE: WeaponSpec = WeaponSpec {
     life_s: 70.0,
 };
 
-/// Boden-Luft-Rakete mittlerer Reichweite (Vorbild SA-6).
+/// Boden-Luft-Rakete mittlerer Reichweite (Vorbild SA-6): mittelschnell,
+/// mittlerer Boost und Bogen.
 const SAM: WeaponSpec = WeaponSpec {
-    kind: WeaponKind::SurfaceToAir,
+    kind: WeaponKind::MediumRangeSam,
     label: "SA-6",
     name: "SA-6 GAINFUL",
     mass_kg: 600.0,
     per_bay: 0,
     seeker: Seeker::SemiActive,
-    cruise_mps: 750.0,
+    cruise_mps: 650.0,
     accel_mps2: 250.0,
     turn_rate_rad: deg(22.0),
+    launch_rad: deg(45.0),
+    boost_s: 1.5,
+    loft: 0.1,
     max_range_m: 25_000.0,
     // Suchkegel wie im Original
     seeker_cone_rad: deg(22.0),
     lethal_radius_m: 20.0,
     frag_radius_m: 0.0,
-    life_s: 45.0,
+    life_s: 50.0,
     ..MISSILE
 };
 
-const SPECS: [WeaponSpec; 8] = [
+const SPECS: [WeaponSpec; 9] = [
     BOMB,
     WeaponSpec {
         kind: WeaponKind::Retarded,
@@ -323,19 +344,41 @@ const SPECS: [WeaponSpec; 8] = [
         ..MISSILE
     },
     SAM,
-    // Langstreckenrakete der Frühwarnradare (Vorbild SA-5): trifft auch aus
-    // großer Entfernung, dreht aber träge.
+    // Langstreckenrakete der Frühwarnradare (Vorbild SA-5): langsam, langer
+    // fast senkrechter Boost und ausgeprägter Bogen – kommt über jeden Berg
+    // und auch aus großer Entfernung, ist aber lange unterwegs.
     WeaponSpec {
         kind: WeaponKind::LongRangeSam,
         label: "SA-5",
         name: "SA-5 GAMMON",
         mass_kg: 7_000.0,
-        cruise_mps: 1_000.0,
-        accel_mps2: 150.0,
+        cruise_mps: 450.0,
+        accel_mps2: 100.0,
         turn_rate_rad: deg(10.0),
+        launch_rad: deg(85.0),
+        boost_s: 4.0,
+        loft: 0.25,
         max_range_m: 60_000.0,
         lethal_radius_m: 30.0,
-        life_s: 90.0,
+        life_s: 150.0,
+        ..SAM
+    },
+    // Kurzstreckenrakete (Vorbild SA-8): sehr schnell und wendig, startet
+    // ohne Boost direkt auf das Ziel.
+    WeaponSpec {
+        kind: WeaponKind::ShortRangeSam,
+        label: "SA-8",
+        name: "SA-8 GECKO",
+        mass_kg: 130.0,
+        cruise_mps: 900.0,
+        accel_mps2: 400.0,
+        turn_rate_rad: deg(30.0),
+        launch_rad: 0.0,
+        boost_s: 0.0,
+        loft: 0.0,
+        max_range_m: 10_000.0,
+        lethal_radius_m: 12.0,
+        life_s: 20.0,
         ..SAM
     },
 ];
@@ -377,8 +420,9 @@ impl WeaponKind {
             WeaponKind::AirToGround => "agm",
             WeaponKind::AntiRadar => "arm",
             WeaponKind::AntiShip => "ship",
-            WeaponKind::SurfaceToAir => "sa6",
+            WeaponKind::MediumRangeSam => "sa6",
             WeaponKind::LongRangeSam => "sa5",
+            WeaponKind::ShortRangeSam => "sa8",
         }
     }
 
@@ -393,8 +437,9 @@ impl WeaponKind {
     /// Boden-Luft-Rakete, die eine Radarstellung der Klasse startet.
     pub fn sam_for(class: TargetClass) -> Option<Self> {
         match class {
-            TargetClass::AirDefense => Some(WeaponKind::SurfaceToAir),
+            TargetClass::AirDefense => Some(WeaponKind::MediumRangeSam),
             TargetClass::EarlyWarning => Some(WeaponKind::LongRangeSam),
+            TargetClass::ShortRangeSam => Some(WeaponKind::ShortRangeSam),
             _ => None,
         }
     }
@@ -412,8 +457,8 @@ impl WeaponKind {
         use WeaponKind as W;
         let steep = impact_rad >= HARDENED_MIN_IMPACT_RAD;
         match (self, class) {
-            (W::SurfaceToAir | W::LongRangeSam, _) => 0.0,
-            (W::AntiRadar, C::AirDefense | C::EarlyWarning) => 1.0,
+            (W::MediumRangeSam | W::LongRangeSam | W::ShortRangeSam, _) => 0.0,
+            (W::AntiRadar, C::AirDefense | C::EarlyWarning | C::ShortRangeSam) => 1.0,
             (W::AntiRadar, _) => 0.0,
             (W::AntiShip, C::ShipSmall) => 1.0,
             (W::AntiShip, C::ShipLarge) => 0.5,
@@ -429,7 +474,15 @@ impl WeaponKind {
                 }
             }
             (_, C::Hardened) => 0.0,
-            (_, C::Soft | C::ParkedAircraft | C::AirDefense | C::EarlyWarning | C::ShipSmall) => 1.0,
+            (
+                _,
+                C::Soft
+                | C::ParkedAircraft
+                | C::AirDefense
+                | C::EarlyWarning
+                | C::ShortRangeSam
+                | C::ShipSmall,
+            ) => 1.0,
             (W::GuidedBomb | W::AirToGround, C::Armored) => 1.0,
             (W::AirToGround, C::Building) => 0.34,
             (W::AirToGround, C::Bridge | C::ShipLarge) => 0.25,
@@ -938,9 +991,11 @@ impl Stores {
         {
             return false;
         }
-        // Schräg nach oben über der Linie zum Flugzeug abheben.
+        // Im Startwinkel des Typs, mindestens knapp über der Linie zum
+        // Flugzeug abheben.
         let flat = DVec3::new(to.x, to.y, 0.0).normalize_or_zero();
-        let elev = (detmath::atan2(-to.z, to.x.hypot(to.y)) + SAM_LOFT_RAD).min(std::f64::consts::FRAC_PI_2);
+        let direct = detmath::atan2(-to.z, to.x.hypot(to.y)) + SAM_DIRECT_RAD;
+        let elev = direct.max(kind.spec().launch_rad).min(std::f64::consts::FRAC_PI_2);
         let dir = flat * elev.cos() + DVec3::new(0.0, 0.0, -elev.sin());
         let id = self.next_id;
         self.next_id += 1;
@@ -1161,16 +1216,20 @@ fn seek(
 /// Suchkopf einer feindlichen Rakete prüfen (halbaktiv, wie im Original):
 /// Liegt das Flugzeug weit hinter ihr, gibt sie auf. Sonst lenkt sie, wenn es
 /// in ihrem Suchkegel liegt und – weiter als [`SEMI_ACTIVE_M`] – ihre Stellung
-/// es beim letzten Umlauf erfasst hat (`painted`).
+/// es beim letzten Umlauf erfasst hat (`painted`). Kegel und Aufgabe gelten
+/// wie im Original nur in der Peilung (waagerecht) – so findet auch eine
+/// senkrecht gestartete Rakete ihr Ziel.
 fn seek_aircraft(w: &mut Weapon, aircraft: Option<DVec3>, painted: bool) {
-    if w.age_s < GUIDANCE_DELAY_S {
+    // Im Boost sucht sie noch nicht.
+    if w.age_s < w.kind.spec().boost_s.max(GUIDANCE_DELAY_S) {
         return;
     }
     let Some(to) = aircraft.filter(|_| w.chasing).map(|a| a - w.position) else {
         w.tracking = false;
         return;
     };
-    let off = angle_between(w.velocity, to);
+    let flat = |v: DVec3| DVec3::new(v.x, v.y, 0.0);
+    let off = if flat(w.velocity).length() < 1.0 { 0.0 } else { angle_between(flat(w.velocity), flat(to)) };
     w.chasing = off <= GIVE_UP_RAD;
     w.tracking =
         w.chasing && off <= w.kind.spec().seeker_cone_rad && (painted || to.length() <= SEMI_ACTIVE_M);
@@ -1328,13 +1387,16 @@ fn steer_bomb(w: &mut Weapon, aim: Option<DVec3>, dt: f64) {
 /// nach der Restflugzeit sein wird, gewichtet mit dem Vorhaltfaktor der
 /// Waffe. Für stehende Ziele die Zielmitte (reine Verfolgung wie im Original).
 fn intercept(w: &Weapon, aim: DVec3, vel: DVec3) -> DVec3 {
+    let s = w.kind.spec();
+    let to = aim - w.position;
+    let range = to.length();
+    // Bogen: um einen Anteil der Entfernung über das Ziel zielen.
+    let aim = aim + DVec3::new(0.0, 0.0, -s.loft * range);
     if vel == DVec3::ZERO {
         return aim;
     }
-    let to = aim - w.position;
-    let range = to.length();
     let closing = (w.velocity - vel).dot(to / range.max(1.0)).max(1.0);
-    aim + vel * (w.kind.spec().lead * (range / closing).min(MAX_LEAD_S))
+    aim + vel * (s.lead * (range / closing).min(MAX_LEAD_S))
 }
 
 /// Ein Zeitschritt Rakete: erst frei aus dem Schacht fallen, dann mit
@@ -1342,7 +1404,9 @@ fn intercept(w: &Weapon, aim: DVec3, vel: DVec3) -> DVec3 {
 /// und auf Marschfahrt gehen. Ohne Ziel fliegt sie geradeaus in ihrer
 /// Abschusslage (`boresight`).
 fn guide(w: &mut Weapon, aim: Option<DVec3>, dt: f64) {
-    if w.age_s < GUIDANCE_DELAY_S {
+    // Eigene fallen aus dem Schacht; Boden-Luft-Raketen starten mit Schub
+    // (im Boost ohne Ziel geradeaus).
+    if w.owner.is_none() && w.age_s < GUIDANCE_DELAY_S {
         fly(w, dt);
         return;
     }
@@ -1515,10 +1579,10 @@ mod tests {
     /// Suchkegels lenkt sie nicht, weit hinter ihr gibt sie auf.
     #[test]
     fn sam_guidance_is_semi_active() {
-        let mut w = Weapon::new(0, WeaponKind::SurfaceToAir, DVec3::ZERO, DVec3::new(700.0, 0.0, 0.0));
+        let mut w = Weapon::new(0, WeaponKind::MediumRangeSam, DVec3::ZERO, DVec3::new(700.0, 0.0, 0.0));
         w.owner = Some(0);
         w.chasing = true;
-        w.age_s = 1.0;
+        w.age_s = 10.0;
         let far = Some(DVec3::new(10_000.0, 0.0, 0.0));
         seek_aircraft(&mut w, far, true);
         assert!(w.tracking);
@@ -1538,7 +1602,7 @@ mod tests {
     /// voraus, voll bei Faktor 1.
     #[test]
     fn intercept_leads_moving_targets_only() {
-        let w = Weapon::new(0, WeaponKind::SurfaceToAir, DVec3::ZERO, DVec3::new(700.0, 0.0, 0.0));
+        let w = Weapon::new(0, WeaponKind::ShortRangeSam, DVec3::ZERO, DVec3::new(700.0, 0.0, 0.0));
         let aim = DVec3::new(7_000.0, 0.0, 0.0);
         assert_eq!(intercept(&w, aim, DVec3::ZERO), aim);
         // Ziel quer mit 200 m/s, Annäherung 700 m/s ⇒ 10 s ⇒ 2 km voraus
@@ -1547,6 +1611,9 @@ mod tests {
         for k in WeaponKind::ALL {
             assert_eq!(k.spec().lead, 1.0, "{k:?}: volle Gefährlichkeit");
         }
+        // Bogen: Die SA-5 zielt ein Viertel der Entfernung über das Ziel.
+        let w = Weapon { kind: WeaponKind::LongRangeSam, ..w };
+        assert_eq!(intercept(&w, aim, DVec3::ZERO), aim + DVec3::new(0.0, 0.0, -1_750.0));
     }
 
     /// Wie im Original: Ein Ziel weit hinter der Rakete gibt sie auf.

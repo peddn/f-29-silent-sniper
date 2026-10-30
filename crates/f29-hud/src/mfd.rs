@@ -511,8 +511,9 @@ pub(crate) fn target_symbol(dl: &mut DisplayList, p: [f32; 2], s: f32, class: Ta
             dl.line([x - s * 0.6, y - s * 0.6], [x + s * 0.6, y + s * 0.6], ink);
             dl.line([x - s * 0.6, y + s * 0.6], [x + s * 0.6, y - s * 0.6], ink);
         }
-        // Flugabwehr: Dreieck, das Frühwarnradar mit Querstrich darunter
-        TargetClass::AirDefense | TargetClass::EarlyWarning => {
+        // Flugabwehr: Dreieck; Frühwarnradar mit Querstrich darunter,
+        // Kurzstrecke mit Punkt in der Mitte
+        TargetClass::AirDefense | TargetClass::EarlyWarning | TargetClass::ShortRangeSam => {
             dl.polyline(
                 &[[x - s * 0.7, y - s * 0.5], [x + s * 0.7, y - s * 0.5], [x, y + s * 0.7]],
                 true,
@@ -520,6 +521,9 @@ pub(crate) fn target_symbol(dl: &mut DisplayList, p: [f32; 2], s: f32, class: Ta
             );
             if class == TargetClass::EarlyWarning {
                 dl.line([x - s * 0.7, y - s * 0.8], [x + s * 0.7, y - s * 0.8], ink);
+            }
+            if class == TargetClass::ShortRangeSam {
+                dl.circle([x, y - s * 0.1], s * 0.12, 6, ink);
             }
         }
         // Flugzeuge am Boden: Kreuz

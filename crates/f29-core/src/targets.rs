@@ -41,6 +41,8 @@ pub enum TargetClass {
     ShipLarge,
     /// Frühwarnradar: große Drehantenne mit Langstreckenraketen (M-020).
     EarlyWarning,
+    /// Kurzstrecken-Flugabwehr: Fahrzeug mit Radar und Werfer, bewacht Ziele.
+    ShortRangeSam,
 }
 
 /// Achsenparalleler Quader einer Zielform (Meter, Zielachsen).
@@ -80,6 +82,12 @@ const SHAPE_EARLY_WARNING: [ShapeBox; 4] = [
     b([0.0, 0.0, 15.0], [1.0, 7.0, 1.5]),
     b([14.0, 0.0, 1.2], [4.0, 1.4, 1.2]),
 ];
+const SHAPE_SHORT_RANGE_SAM: [ShapeBox; 4] = [
+    b([0.0, 0.0, 1.1], [4.5, 1.4, 1.1]),
+    b([-1.5, 0.0, 2.8], [1.2, 1.2, 0.6]),
+    b([-1.5, 0.0, 3.9], [0.2, 1.0, 0.5]),
+    b([1.8, 0.0, 2.6], [1.6, 0.8, 0.4]),
+];
 const SHAPE_BRIDGE: [ShapeBox; 4] = [
     b([0.0, 0.0, 8.0], [60.0, 5.0, 0.8]),
     b([-30.0, 0.0, 3.6], [1.5, 4.0, 3.6]),
@@ -100,7 +108,7 @@ const SHAPE_SHIP_LARGE: [ShapeBox; 3] = [
 ];
 
 impl TargetClass {
-    pub const ALL: [TargetClass; 10] = [
+    pub const ALL: [TargetClass; 11] = [
         TargetClass::Soft,
         TargetClass::Armored,
         TargetClass::Building,
@@ -111,6 +119,7 @@ impl TargetClass {
         TargetClass::ShipSmall,
         TargetClass::ShipLarge,
         TargetClass::EarlyWarning,
+        TargetClass::ShortRangeSam,
     ];
 
     /// Kurzname für Anzeigen.
@@ -126,12 +135,13 @@ impl TargetClass {
             TargetClass::ShipSmall => "BOAT",
             TargetClass::ShipLarge => "SHIP",
             TargetClass::EarlyWarning => "EW RADAR",
+            TargetClass::ShortRangeSam => "SHORAD",
         }
     }
 
     /// Strahlt ein Radar ab (Radarstellung, M-020).
     pub fn is_radar(self) -> bool {
-        matches!(self, TargetClass::AirDefense | TargetClass::EarlyWarning)
+        matches!(self, TargetClass::AirDefense | TargetClass::EarlyWarning | TargetClass::ShortRangeSam)
     }
 
     pub fn is_naval(self) -> bool {
@@ -151,6 +161,7 @@ impl TargetClass {
             TargetClass::ShipSmall => &SHAPE_SHIP_SMALL,
             TargetClass::ShipLarge => &SHAPE_SHIP_LARGE,
             TargetClass::EarlyWarning => &SHAPE_EARLY_WARNING,
+            TargetClass::ShortRangeSam => &SHAPE_SHORT_RANGE_SAM,
         }
     }
 
@@ -186,6 +197,7 @@ impl TargetClass {
             TargetClass::ShipSmall => (&["PATROL BOAT"], &["FISHING BOAT"]),
             TargetClass::ShipLarge => (&["FRIGATE", "DESTROYER"], &["FREIGHTER", "TANKER"]),
             TargetClass::EarlyWarning => (&["EW RADAR"], &[]),
+            TargetClass::ShortRangeSam => (&["SHORT RANGE SAM"], &[]),
         }
     }
 
@@ -392,7 +404,7 @@ pub fn generate(terrain: &Terrain, seed: u64, route: &[Steerpoint]) -> Vec<Targe
             n,
             e,
             TargetRole::Primary,
-            &[TargetClass::Soft, TargetClass::Armored, TargetClass::AirDefense],
+            &[TargetClass::Soft, TargetClass::Armored, TargetClass::ShortRangeSam],
         );
     }
     // Sekundärziel
@@ -429,7 +441,7 @@ pub fn generate(terrain: &Terrain, seed: u64, route: &[Steerpoint]) -> Vec<Targe
     let others = [
         (TargetClass::Building, &[TargetClass::Soft][..]),
         (TargetClass::Soft, &[TargetClass::Soft, TargetClass::Soft][..]),
-        (TargetClass::Armored, &[TargetClass::Armored, TargetClass::Armored][..]),
+        (TargetClass::Armored, &[TargetClass::Armored, TargetClass::ShortRangeSam][..]),
         (TargetClass::ParkedAircraft, &[TargetClass::ParkedAircraft, TargetClass::Hardened][..]),
         (TargetClass::Bridge, &[][..]),
         (TargetClass::Building, &[TargetClass::Building][..]),

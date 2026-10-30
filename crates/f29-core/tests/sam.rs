@@ -13,6 +13,12 @@ const SEED: u64 = 0x0F29;
 /// Luftstart `dist` m südlich der ersten Stellung der Klasse, Kurs Nord auf
 /// sie zu, `height` m darüber, Schacht offen (gut sichtbar).
 fn toward_site(class: TargetClass, dist: f64, height: f64) -> (Sim, usize) {
+    toward_site_with(class, dist, height, false)
+}
+
+/// Wie [`toward_site`]; `visible` schaltet das Stealth-Level ab (jeder Ping
+/// trifft).
+fn toward_site_with(class: TargetClass, dist: f64, height: f64, visible: bool) -> (Sim, usize) {
     let probe = Sim::new(SimConfig::new(SEED));
     let (i, t) = probe.targets().iter().enumerate().find(|(_, t)| t.class == class).expect("Stellung");
     let mut sim = Sim::new(SimConfig {
@@ -25,6 +31,7 @@ fn toward_site(class: TargetClass, dist: f64, height: f64) -> (Sim, usize) {
             heading: 0.0,
             speed: 200.0,
             throttle: 0.7,
+            visible,
             ..Spawn::default()
         },
     });
@@ -59,7 +66,7 @@ fn launched(sim: &Sim) -> Option<(WeaponKind, usize)> {
 fn sam_site_fires_after_radar_id() {
     let (mut sim, site) = toward_site(TargetClass::AirDefense, 7_000.0, 800.0);
     assert!(fly_until(&mut sim, 30.0, |s| launched(s).is_some()), "kein Start");
-    assert_eq!(launched(&sim), Some((WeaponKind::SurfaceToAir, site)));
+    assert_eq!(launched(&sim), Some((WeaponKind::MediumRangeSam, site)));
     assert_eq!(sim.radar().sites.iter().find(|s| s.target == site).unwrap().alert, 3);
     let hostile: Vec<_> = sim.weapons_in_flight().iter().filter(|w| w.owner.is_some()).collect();
     assert_eq!(hostile.len(), 1, "eine Rakete je Stellung");
@@ -154,4 +161,39 @@ fn turning_into_the_missile_does_not_help() {
         }
     }
     assert!(was_hit, "Rakete verfehlt beim Hineindrehen");
+}
+
+/// Die Kurzstrecken-Flugabwehr bei den Zielgruppen startet die SA-8 direkt
+/// auf das Flugzeug, ohne Boost.
+#[test]
+fn short_range_sam_fires_directly() {
+    let (mut sim, site) = toward_site_with(TargetClass::ShortRangeSam, 8_000.0, 1_500.0, true);
+    assert!(fly_until(&mut sim, 30.0, |s| launched(s).is_some()), "kein Start");
+    assert_eq!(launched(&sim), Some((WeaponKind::ShortRangeSam, site)));
+    let w = sim.weapons_in_flight().iter().find(|w| w.owner.is_some()).unwrap();
+    let to = sim.aircraft().position - w.position;
+    let off = (w.velocity.normalize_or_zero().dot(to.normalize_or_zero())).acos().to_degrees();
+    assert!(off < 25.0, "startet {off:.0}° neben dem Flugzeug");
+}
+
+/// Die SA-5 steigt nach dem fast senkrechten Start hoch und fliegt im Bogen
+/// – über jeden Berg.
+#[test]
+fn long_range_sam_climbs_and_lofts() {
+    let (mut sim, _) = toward_site(TargetClass::EarlyWarning, 20_000.0, 3_000.0);
+    assert!(fly_until(&mut sim, 60.0, |s| launched(s).is_some()), "kein Start");
+    let start = sim.weapons_in_flight().iter().find(|w| w.owner.is_some()).unwrap().position;
+    let mut top: f64 = 0.0;
+    fly_until(&mut sim, 30.0, |s| match s.weapons_in_flight().iter().find(|w| w.owner.is_some()) {
+        Some(w) => {
+            top = top.max(start.z - w.position.z);
+            false
+        }
+        None => true,
+    });
+    let above_aircraft = top - (start.z - sim.aircraft().position.z);
+    assert!(
+        top > 1_500.0 && above_aircraft > 0.0,
+        "Gipfel {top:.0} m, über dem Flugzeug {above_aircraft:.0} m"
+    );
 }

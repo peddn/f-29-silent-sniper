@@ -1238,10 +1238,31 @@ Format jedes Eintrags:
     der Luft hat und nicht schon vier feindliche fliegen. Die Rakete hebt 10°
     über der Linie zum Flugzeug ab (im Suchkegel) und lenkt nach 0,4 s ein.
     Meldung „MISSILE LAUNCH SA-6 - <Stellung>“.
-  - **Typen:** SAM-Stellungen starten die **SA-6 Gainful** (25 km, 750 m/s,
-    22°/s, Wirkradius 20 m, 45 s), Frühwarnradare die **SA-5 Gammon** (60 km,
-    1000 m/s, träge 10°/s, Wirkradius 30 m, 90 s) – sie trifft auch aus großer
-    Entfernung (Spielerwunsch). Suchkegel beider ±22° wie im Original.
+  - **Drei Typen** (Spielerentscheidung v0.2.9), je mit eigenem Startprofil:
+
+    | | Kurzstrecke SA-8 Gecko | Mittelstrecke SA-6 Gainful | Langstrecke SA-5 Gammon |
+    |---|---|---|---|
+    | Stellung | Kurzstrecken-Flugabwehr (neu, Fahrzeug, bewacht Zielgruppen) | SAM-Stellung | Frühwarnradar |
+    | Radar | Doppler 12 km, Umlauf 2,5 s | Doppler 30 km, 5 s | Impuls 60 km, 10 s |
+    | Reichweite | 10 km | 25 km | 60 km |
+    | Geschwindigkeit | 900 m/s | 650 m/s | 450 m/s |
+    | Drehrate | 30°/s | 22°/s | 10°/s |
+    | Start | direkt aufs Ziel | 45°, 1,5 s Boost | 85° (fast senkrecht wie im Original), 4 s Boost |
+    | Bogen | 0 | 0,1 | 0,25 |
+    | Wirkradius / Flugzeit | 12 m / 20 s | 20 m / 50 s | 30 m / 150 s |
+
+    Die Kurzstrecke ist kaum auszukurven (nur Reichweite und Stealth
+    schützen), die Mittelstrecke der Allrounder, die Langstrecke kommt über
+    jeden Berg und aus großer Entfernung, ist aber lange unterwegs – Zeit für
+    Täuschkörper (Spielerwunsch). Suchkegel aller ±22° wie im Original.
+  - **Startprofil:** Die Rakete startet im Startwinkel ihres Typs (mindestens
+    10° über der Linie zum Flugzeug) und steigt im **Boost** ungelenkt. Danach
+    lenkt sie mit **Bogen** wie im Original: Sie zielt um Bogenfaktor ×
+    Entfernung über das Ziel, der Zuschlag schrumpft beim Annähern auf null.
+    Suchkegel und Aufgabe gelten wie im Original nur in der Peilung
+    (waagerecht) – so findet auch eine steil gestartete Rakete ihr Ziel.
+  - **Munition:** unbegrenzt wie im Original, eine Rakete je Stellung in der
+    Luft (Spielerentscheidung).
   - **Lenkung halbaktiv**, mit **Vorhalt** auf den Treffpunkt (Flugzeugort
     plus Geschwindigkeit × Restflugzeit, höchstens 10 s): Abweichung vom
     Original, das auch hier rein verfolgt – im Spieltest rettete sonst das

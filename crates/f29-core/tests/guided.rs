@@ -186,7 +186,7 @@ fn unlocked_weapon_searches_for_its_own_kind() {
         let events = shoot(&mut sim);
         for e in &events {
             if let WeaponEvent::Acquired { target, .. } = e {
-                assert_eq!(sim.targets()[*target].class, TargetClass::AirDefense);
+                assert!(sim.targets()[*target].class.is_radar());
             }
         }
         checked += 1;
@@ -204,6 +204,13 @@ fn lgb() -> Loadout {
 /// Ziel wechseln). Liefert die Ereignisse oder `None`, wenn es nicht klappt.
 fn laser_run(seed: u64, mut after: impl FnMut(&mut Sim, u64)) -> Option<(Sim, usize, Vec<WeaponEvent>)> {
     let (mut sim, target) = lined_up_at(seed, TargetClass::Soft, 6_000.0, 900.0, lgb())?;
+    // Ohne Flugabwehr: Ein Treffer könnte die Optik und damit den Laser
+    // ausschalten – das prüfen diese Tests nicht.
+    for i in 0..sim.targets().len() {
+        if sim.targets()[i].class.is_radar() {
+            sim.destroy_target(i);
+        }
+    }
     step(&mut sim, 0, weapon_flags::BAY_DOORS);
     for _ in 0..ticks(30.0) {
         if sim.stores().door_open() && sim.flight_data().target.and_then(|t| t.zone) == Some(LaunchZone::Good)

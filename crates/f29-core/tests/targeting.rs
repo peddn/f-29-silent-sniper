@@ -99,6 +99,12 @@ fn optical_lock_needs_line_of_sight_and_is_shorter_ranged() {
     // und hat freie Sicht; jede reine Radarerfassung ohne optische hat keine
     // (oder liegt außerhalb der optischen Reichweite).
     let mut sim = near_primary();
+    // Ohne Flugabwehr: Ein Treffer an der Optik verkürzte ihre Reichweite.
+    for i in 0..sim.targets().len() {
+        if sim.targets()[i].class.is_radar() {
+            sim.destroy_target(i);
+        }
+    }
     step(&mut sim, flags::RADAR_TOGGLE);
     let (mut optical, mut radar_only) = (0, 0);
     for i in 0..(120 * 120) {

@@ -71,12 +71,15 @@ pub struct RadarSpec {
 pub const EARLY_WARNING: RadarSpec = RadarSpec { kind: RadarKind::Pulse, range_m: 60_000.0, sweep_s: 10.0 };
 /// SAM-Feuerleitradar: kürzer, schneller Umlauf (eigene Werte).
 pub const SAM: RadarSpec = RadarSpec { kind: RadarKind::Doppler, range_m: 30_000.0, sweep_s: 5.0 };
+/// Radar der Kurzstrecken-Flugabwehr: kurz, sehr schneller Umlauf.
+pub const SHORAD: RadarSpec = RadarSpec { kind: RadarKind::Doppler, range_m: 12_000.0, sweep_s: 2.5 };
 
 /// Radar einer Zielklasse, falls sie eines hat.
 pub fn spec_for(class: TargetClass) -> Option<RadarSpec> {
     match class {
         TargetClass::EarlyWarning => Some(EARLY_WARNING),
         TargetClass::AirDefense => Some(SAM),
+        TargetClass::ShortRangeSam => Some(SHORAD),
         _ => None,
     }
 }
