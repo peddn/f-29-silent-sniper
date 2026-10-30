@@ -1,5 +1,5 @@
-//! Minimales WAV-Format (PCM): Schreiben für Hörproben, Lesen für eigene
-//! Ansage-Samples (z. B. `assets/sounds/stall.wav`).
+//! Minimales WAV-Format (PCM): Schreiben für Hörproben, Lesen für die
+//! eingebetteten Ansage-Samples (`sounds/*.wav`).
 
 /// Schreibt Mono-Samples (−1..1) als 16-Bit-PCM-WAV.
 pub fn write_mono16(samples: &[f32], sample_rate: u32) -> Vec<u8> {

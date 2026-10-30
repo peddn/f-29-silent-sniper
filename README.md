@@ -115,13 +115,12 @@ Leserecht auf `/dev/input/event*` (Gruppe `input`).
 
 ## Klang
 
-Alle Klänge entstehen zur Laufzeit per Synthese im Retro-Stil, es gibt keine
-Klangdateien. Die Abrisswarnung ist ein hoher, pulsierender Alarmton, die
-Bodenwarnung eine Ansage „PULL UP“ – ohne eigene Aufnahme aus einem kleinen
-eigenen Sprachsynthesizer. Eine Aufnahme kommt als PCM-WAV nach
-`crates/f29-app/assets/sounds/pull_up.wav` (Details und Lizenzregeln in
-`crates/f29-app/assets/sounds/README.md`). Hörproben ohne Spiel:
-`cargo run -p f29-headless -- sound --out sounds`.
+Die Klänge entstehen zur Laufzeit per Synthese im Retro-Stil. Nur die beiden
+Ansagen „PULL UP“ und „OVER G“ sind Samples: `crates/f29-audio/sounds/*.wav`
+(PCM, eingebettet; mit espeak-ng erzeugt und auf Bordfunk gefiltert). Wer sie
+ersetzen will, legt dort eine andere PCM-WAV-Datei ab (8/16 Bit, beliebige
+Abtastrate; nur frei lizenzierte Aufnahmen, keine aus anderen Spielen).
+Hörproben ohne Spiel: `cargo run -p f29-headless -- sound --out sounds`.
 
 ## Werkzeuge ohne Grafik
 

@@ -1,6 +1,6 @@
 //! Hörproben: rendert die Klänge als WAV-Dateien, ganz ohne Soundkarte.
 
-use f29_audio::{AudioInput, Mix, SAMPLE_RATE, Synth, TouchdownCue, voice, wav};
+use f29_audio::{AudioInput, Mix, SAMPLE_RATE, Synth, TouchdownCue, wav};
 use f29_core::autopilot::{AIM_POINT_M, Approach, GLIDE_SLOPE};
 use f29_core::controls::flags;
 use f29_core::sim::{Spawn, SpawnKind};
@@ -15,7 +15,7 @@ const ENGINE_ONLY: Mix = Mix { engine: 1.0, systems: 0.0, events: 0.0, voice: 0.
 
 /// Rendert eine Zeitleiste: `input(t)` liefert die Momentaufnahme zur Zeit t.
 fn render(seconds: f32, mix: Mix, mut input: impl FnMut(f32) -> AudioInput) -> Vec<f32> {
-    let mut synth = Synth::with_default_voice();
+    let mut synth = Synth::new();
     synth.set_mix(mix);
     let per_frame = (SAMPLE_RATE as f32 / FPS) as usize;
     let frames = (seconds * FPS) as usize;
@@ -201,6 +201,14 @@ pub fn render_all(dir: &Path) -> Result<Vec<String>, String> {
                     AudioInput { blast, ..cruise(0.0, 200.0) }
                 }),
             ),
+            (
+                "07d_ansagen",
+                render(5.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
+                    pull_up_warning: t < 2.0,
+                    over_g_warning: (2.5..4.5).contains(&t),
+                    ..cruise(0.0, 200.0)
+                }),
+            ),
             ("08_flug_start_abriss", flight_demo()),
             ("09_flug_landung", landing_demo()),
         ];
@@ -211,11 +219,6 @@ pub fn render_all(dir: &Path) -> Result<Vec<String>, String> {
             .map_err(|e| format!("{}: {e}", path.display()))?;
         written.push(path.display().to_string());
     }
-    for (name, word) in [("10_ansage_pull_up", &voice::PULL_UP[..]), ("11_ansage_stall", &voice::STALL[..])] {
-        let path = dir.join(format!("{name}.wav"));
-        std::fs::write(&path, wav::write_mono16(&voice::speak(word, SAMPLE_RATE), SAMPLE_RATE))
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-        written.push(path.display().to_string());
-    }
+
     Ok(written)
 }

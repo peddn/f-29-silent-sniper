@@ -9,7 +9,6 @@ use crate::sim::{SimState, SimSystems};
 use bevy::audio::{AddAudioSource, ChannelCount, Decodable, SampleRate, Source};
 use bevy::prelude::*;
 use f29_audio::{AudioInput, SAMPLE_RATE, Synth};
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -42,7 +41,6 @@ struct SoundLink {
 #[derive(Asset, TypePath)]
 pub struct SynthStream {
     shared: Arc<Mutex<AudioInput>>,
-    voice: Arc<[f32]>,
     volume: f32,
 }
 
@@ -93,40 +91,14 @@ impl Decodable for SynthStream {
     type Decoder = SynthDecoder;
 
     fn decoder(&self) -> SynthDecoder {
-        let mut synth = Synth::new(self.voice.clone());
+        let mut synth = Synth::new();
         synth.set_volume(self.volume);
         SynthDecoder { synth, shared: self.shared.clone(), buf: vec![0.0; BLOCK], pos: BLOCK }
     }
 }
 
-/// Ansage der Bodenwarnung aus `assets/sounds/pull_up.wav` (PCM, 8/16 Bit),
-/// falls vorhanden.
-fn custom_pull_up_voice() -> Option<Arc<[f32]>> {
-    let mut roots = vec![PathBuf::from("assets")];
-    if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        roots.insert(0, PathBuf::from(dir).join("assets"));
-    }
-    for root in roots {
-        let path = root.join("sounds").join("pull_up.wav");
-        if let Ok(bytes) = std::fs::read(&path) {
-            match f29_audio::wav::read_mono(&bytes, SAMPLE_RATE) {
-                Some(samples) if !samples.is_empty() => {
-                    info!("PULL-UP-Ansage: {}", path.display());
-                    return Some(samples.into());
-                }
-                _ => warn!(
-                    "{} ist kein unterstütztes PCM-WAV (8/16 Bit) – nutze die eingebaute Ansage",
-                    path.display()
-                ),
-            }
-        }
-    }
-    None
-}
-
 fn start_stream(mut commands: Commands, link: Res<SoundLink>, mut streams: ResMut<Assets<SynthStream>>) {
-    let voice = custom_pull_up_voice().unwrap_or_else(f29_audio::default_pull_up_voice);
-    let handle = streams.add(SynthStream { shared: link.shared.clone(), voice, volume: link.volume });
+    let handle = streams.add(SynthStream { shared: link.shared.clone(), volume: link.volume });
     commands.spawn(AudioPlayer(handle));
 }
 

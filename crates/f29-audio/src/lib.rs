@@ -17,15 +17,16 @@
 //! - **Aufsetzen:** Reifenquietschen und Schlag (hart: lauter), Absturz: Krachen.
 //! - **Abrisswarnung:** hoher, pulsierender Alarmton, solange die Warnung
 //!   anliegt.
-//! - **PULL UP:** Ansage in Abständen, solange die Bodenwarnung anliegt. Die
-//!   Stimme ist ein Sample; ohne eigene Aufnahme spricht der eingebaute
-//!   Formant-Synthesizer.
+//! - **Ansagen „PULL UP“ und „OVER G“:** Samples (`sounds/*.wav`, im Crate
+//!   eingebettet), in Abständen, solange die Warnung anliegt; die
+//!   Bodenwarnung hat Vorrang.
+//! - **Detonationen:** tiefer, abfallender Bass mit verzerrtem, knisterndem
+//!   Krachen; Treffer am eigenen Flugzeug zusätzlich metallisch.
 //!
 //! Spätere Musik (z. B. im Startbildschirm) läuft im Frontend als eigener
 //! Kanal neben diesem Datenstrom und berührt ihn nicht.
 
 pub mod dsp;
-pub mod voice;
 pub mod wav;
 
 use dsp::{Noise, OnePole, Phase, pulse, saw, sine, triangle};
@@ -35,8 +36,11 @@ use std::sync::Arc;
 
 /// Abtastrate des Datenstroms.
 pub const SAMPLE_RATE: u32 = 44_100;
-/// Abstand der PULL-UP-Ansage (s, von Beginn zu Beginn).
+/// Abstand der Ansagen (s, von Beginn zu Beginn).
 pub const PULL_UP_REPEAT_S: f32 = 1.6;
+/// Eingebettete Ansagen (PCM-WAV, mit espeak-ng erzeugt und bearbeitet).
+const PULL_UP_WAV: &[u8] = include_bytes!("../sounds/pull_up.wav");
+const OVER_G_WAV: &[u8] = include_bytes!("../sounds/over_g.wav");
 /// Tonhöhe des Abriss-Alarms (Hz) und seine Pulsfrequenz (Hz).
 pub const STALL_ALARM_HZ: f32 = 1_250.0;
 pub const STALL_PULSE_HZ: f32 = 6.0;
@@ -93,6 +97,8 @@ pub struct AudioInput {
     pub stall_warning: bool,
     /// Bodenwarnung (PULL UP).
     pub pull_up_warning: bool,
+    /// Überlastung (OVER G).
+    pub over_g_warning: bool,
     pub touchdown: Option<TouchdownCue>,
     /// Jüngster Radarping (Radarwarnempfänger).
     pub ping: Option<PingCue>,
@@ -117,6 +123,7 @@ impl AudioInput {
             on_ground: fd.on_ground,
             stall_warning: fd.warnings.stall,
             pull_up_warning: fd.warnings.pull_up,
+            over_g_warning: fd.warnings.over_g,
             touchdown: fd.touchdown.map(|t| TouchdownCue { id: t.tick, hard: t.hard }),
             ping: fd.threat.last_ping.filter(|p| p.age_s < 0.5).map(|p| PingCue { id: p.tick, hit: p.hit }),
             missile_warning: fd.warnings.missile,
@@ -173,12 +180,13 @@ enum OneShot {
     /// Absturz.
     Crash { t: f32, lp: OnePole },
     /// Abspielen eines Samples (Ansage).
-    Sample { pos: usize, gain: f32 },
+    Sample { data: Arc<[f32]>, pos: usize, gain: f32 },
     /// Piepton des Radarwarnempfängers.
     Beep { t: f32, freq: f32, gain: f32, dur: f32, phase: Phase },
-    /// Detonation: gefiltertes Rauschen mit tiefem Grollen; `ring` > 0 gibt
-    /// einen metallischen Klang dazu (Treffer am eigenen Flugzeug).
-    Boom { t: f32, gain: f32, decay: f32, cutoff: f32, ring: f32, lp: OnePole },
+    /// Detonation: tiefer, abfallender Bass, verzerrtes dunkles Rauschen und
+    /// Knistern; `ring` > 0 gibt einen metallischen Klang dazu (Treffer am
+    /// eigenen Flugzeug).
+    Boom { t: f32, gain: f32, decay: f32, cutoff: f32, ring: f32, lp: OnePole, lp2: OnePole, bass: Phase },
 }
 
 /// Der Synthesizer. Ein Exemplar pro Datenstrom.
@@ -187,7 +195,8 @@ pub struct Synth {
     sr: f32,
     input: AudioInput,
     noise: Noise,
-    pull_up_voice: Arc<[f32]>,
+    pull_up: Arc<[f32]>,
+    over_g: Arc<[f32]>,
     // geglättete Parameter
     rpm: OnePole,
     thrust: OnePole,
@@ -228,13 +237,16 @@ pub struct Synth {
 }
 
 impl Synth {
-    /// `pull_up_voice` ist die Ansage der Bodenwarnung (Mono, [`SAMPLE_RATE`]).
-    pub fn new(pull_up_voice: Arc<[f32]>) -> Self {
+    pub fn new() -> Self {
+        let sample = |wav: &[u8]| -> Arc<[f32]> {
+            wav::read_mono(wav, SAMPLE_RATE).expect("eingebettetes PCM-WAV").into()
+        };
         Self {
             sr: SAMPLE_RATE as f32,
             input: AudioInput::default(),
             noise: Noise::new(0x0F29_0A0D),
-            pull_up_voice,
+            pull_up: sample(PULL_UP_WAV),
+            over_g: sample(OVER_G_WAV),
             rpm: OnePole::default(),
             thrust: OnePole::default(),
             master: OnePole::default(),
@@ -270,11 +282,6 @@ impl Synth {
             volume: 1.0,
             mix: Mix::default(),
         }
-    }
-
-    /// Mit der eingebauten, synthetischen Ansage.
-    pub fn with_default_voice() -> Self {
-        Self::new(default_pull_up_voice())
     }
 
     /// Gesamtlautstärke 0..1.
@@ -358,18 +365,21 @@ impl Synth {
         {
             self.last_blast = Some(b.id);
             if !first {
-                let lp = OnePole::default();
                 let g = b.gain;
+                let boom = |gain: f32, decay: f32, cutoff: f32, ring: f32| OneShot::Boom {
+                    t: 0.0,
+                    gain,
+                    decay,
+                    cutoff,
+                    ring,
+                    lp: OnePole::default(),
+                    lp2: OnePole::default(),
+                    bass: Phase::default(),
+                };
                 self.shots.push(match b.kind {
-                    BlastKind::TargetHit => {
-                        OneShot::Boom { t: 0.0, gain: 1.1 * g, decay: 1.1, cutoff: 1_100.0, ring: 0.0, lp }
-                    }
-                    BlastKind::Miss => {
-                        OneShot::Boom { t: 0.0, gain: 0.6 * g, decay: 0.35, cutoff: 450.0, ring: 0.0, lp }
-                    }
-                    BlastKind::AircraftHit => {
-                        OneShot::Boom { t: 0.0, gain: 1.4, decay: 0.6, cutoff: 2_800.0, ring: 640.0, lp }
-                    }
+                    BlastKind::TargetHit => boom(1.0 * g, 1.4, 700.0, 0.0),
+                    BlastKind::Miss => boom(0.7 * g, 0.45, 350.0, 0.0),
+                    BlastKind::AircraftHit => boom(1.3, 0.8, 1_500.0, 640.0),
                 });
             }
         }
@@ -377,7 +387,7 @@ impl Synth {
             self.shots.push(OneShot::Crash { t: 0.0, lp: OnePole::default() });
         }
         self.crashed = input.crashed;
-        if !input.pull_up_warning {
+        if !input.pull_up_warning && !input.over_g_warning {
             self.pull_up_timer = 0.0;
         }
         self.prev_gear = input.gear;
@@ -406,12 +416,20 @@ impl Synth {
         // Nach dem Absturz soll das Krachen noch zu hören sein.
         let shots_master = if inp.paused { 0.0 } else { self.volume };
 
-        // Bodenwarnung: Ansage in festen Abständen
-        if inp.pull_up_warning && !inp.paused && !inp.crashed {
+        // Ansagen in festen Abständen, die Bodenwarnung hat Vorrang.
+        let voice = if inp.pull_up_warning {
+            Some(&self.pull_up)
+        } else if inp.over_g_warning {
+            Some(&self.over_g)
+        } else {
+            None
+        };
+        if let Some(data) = voice.filter(|_| !inp.paused && !inp.crashed) {
+            let data = data.clone();
             self.pull_up_timer -= out.len() as f32 * dt;
             if self.pull_up_timer <= 0.0 {
                 self.pull_up_timer = PULL_UP_REPEAT_S;
-                self.shots.push(OneShot::Sample { pos: 0, gain: 0.6 });
+                self.shots.push(OneShot::Sample { data, pos: 0, gain: 0.7 });
             }
         }
         // Raketenwarnung: schneller Wechselton aus kurzen Piepsern
@@ -479,7 +497,7 @@ impl Synth {
             x += self.render_shots(dt) * shots_master + alarm * shots_master;
             *o = x.tanh();
         }
-        self.shots.retain(|s| !shot_finished(s, self.pull_up_voice.len()));
+        self.shots.retain(|s| !shot_finished(s));
     }
 
     fn render_shots(&mut self, dt: f32) -> f32 {
@@ -523,20 +541,31 @@ impl Synth {
                         *t += dt;
                         v
                     }
-                    OneShot::Boom { t, gain, decay, cutoff, ring, lp } => {
-                        let rumble = lp.process(n, OnePole::coeff(*cutoff, sr)) * (-*t / *decay).exp() * 1.6
-                            + sine(*t * 42.0) * (-*t / (*decay * 0.4)).exp() * 0.6;
-                        let metal = if *ring > 0.0 {
-                            (sine(*t * *ring) + 0.5 * sine(*t * *ring * 2.76)) * (-*t / 0.4).exp() * 0.35
+                    OneShot::Boom { t, gain, decay, cutoff, ring, lp, lp2, bass } => {
+                        // Bass: Druckstoß, der von 90 auf 30 Hz abfällt
+                        let f = 30.0 + 60.0 * (-*t / 0.15).exp();
+                        let thump = sine(bass.advance(f, sr)) * (-*t / (*decay * 0.5)).exp() * 1.3;
+                        // Krachen: dunkles Rauschen, hart übersteuert, dazu
+                        // vereinzelte Knister-Impulse
+                        let a = OnePole::coeff(*cutoff, sr);
+                        let dark = lp2.process(lp.process(n, a), a);
+                        let crunch = (dark * 9.0).tanh() * (-*t / *decay).exp() * 0.55;
+                        let crackle = if n.abs() > 0.995 {
+                            n.signum() * 0.5 * (-*t / (*decay * 0.6)).exp()
                         } else {
                             0.0
                         };
-                        let v = (rumble + metal) * *gain;
+                        let metal = if *ring > 0.0 {
+                            (sine(*t * *ring) + 0.5 * sine(*t * *ring * 2.76)) * (-*t / 0.4).exp() * 0.3
+                        } else {
+                            0.0
+                        };
+                        let v = (thump + crunch + crackle + metal) * *gain;
                         *t += dt;
                         v
                     }
-                    OneShot::Sample { pos, gain } => {
-                        let v = self.pull_up_voice.get(*pos).copied().unwrap_or(0.0) * *gain * mix.voice;
+                    OneShot::Sample { data, pos, gain } => {
+                        let v = data.get(*pos).copied().unwrap_or(0.0) * *gain * mix.voice;
                         *pos += 1;
                         v
                     }
@@ -562,7 +591,7 @@ impl Synth {
     }
 }
 
-fn shot_finished(s: &OneShot, voice_len: usize) -> bool {
+fn shot_finished(s: &OneShot) -> bool {
     match s {
         OneShot::Thump { t, decay, .. } => *t > decay * 8.0,
         OneShot::Click { t, .. } => *t > 0.05,
@@ -570,14 +599,15 @@ fn shot_finished(s: &OneShot, voice_len: usize) -> bool {
         OneShot::Squeal { t, .. } => *t >= 0.32,
         OneShot::Crash { t, .. } => *t > 3.0,
         OneShot::Boom { t, decay, .. } => *t > *decay * 7.0,
-        OneShot::Sample { pos, .. } => *pos >= voice_len,
+        OneShot::Sample { data, pos, .. } => *pos >= data.len(),
         OneShot::Beep { t, dur, .. } => *t >= *dur,
     }
 }
 
-/// Die eingebaute Ansage „PULL UP“.
-pub fn default_pull_up_voice() -> Arc<[f32]> {
-    voice::speak(&voice::PULL_UP, SAMPLE_RATE).into()
+impl Default for Synth {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -605,7 +635,7 @@ mod tests {
     #[test]
     fn engine_gets_louder_with_thrust_and_output_is_bounded() {
         let level = |engine: f32| {
-            let mut s = Synth::with_default_voice();
+            let mut s = Synth::new();
             s.set_input(flying(engine));
             let out = run(&mut s, 3.0);
             assert!(out.iter().all(|v| v.is_finite() && v.abs() <= 1.0));
@@ -618,11 +648,11 @@ mod tests {
 
     #[test]
     fn pause_and_volume_silence_the_stream() {
-        let mut s = Synth::with_default_voice();
+        let mut s = Synth::new();
         s.set_input(AudioInput { paused: true, ..flying(1.0) });
         let out = run(&mut s, 2.0);
         assert!(rms(&out[out.len() / 2..]) < 1e-4);
-        let mut s = Synth::with_default_voice();
+        let mut s = Synth::new();
         s.set_volume(0.0);
         s.set_input(flying(1.0));
         let out = run(&mut s, 2.0);
@@ -631,7 +661,7 @@ mod tests {
 
     #[test]
     fn gear_lock_and_touchdown_fire_once() {
-        let mut s = Synth::with_default_voice();
+        let mut s = Synth::new();
         s.set_input(AudioInput { gear: 0.5, ..flying(0.5) });
         run(&mut s, 0.1);
         assert_eq!(s.active_one_shots(), 0);
@@ -652,7 +682,7 @@ mod tests {
     #[test]
     fn blasts_sound_once_and_by_kind() {
         let level = |kind: BlastKind, gain: f32| {
-            let mut s = Synth::with_default_voice();
+            let mut s = Synth::new();
             s.set_mix(Mix::WITHOUT_ENGINE);
             s.set_input(flying(0.6));
             run(&mut s, 0.1);
@@ -672,7 +702,7 @@ mod tests {
 
     #[test]
     fn missile_warning_beeps_only_while_active() {
-        let mut s = Synth::with_default_voice();
+        let mut s = Synth::new();
         s.set_mix(Mix::WITHOUT_ENGINE);
         s.set_input(flying(0.6));
         assert!(rms(&run(&mut s, 0.5)) < 1e-4);
@@ -685,7 +715,7 @@ mod tests {
 
     #[test]
     fn stall_alarm_pulses_only_while_active() {
-        let mut s = Synth::with_default_voice();
+        let mut s = Synth::new();
         s.set_mix(Mix::WITHOUT_ENGINE);
         s.set_input(flying(0.6));
         let quiet = run(&mut s, 0.5);
@@ -708,9 +738,31 @@ mod tests {
         assert!(rms(&after) < 1e-4);
     }
 
+    /// OVER G spricht wie PULL UP; liegen beide an, hat PULL UP Vorrang.
+    #[test]
+    fn over_g_speaks_and_pull_up_has_priority() {
+        let first_sample = |input: AudioInput| {
+            let mut s = Synth::new();
+            s.set_input(flying(0.6));
+            run(&mut s, 0.1);
+            s.set_input(input);
+            run(&mut s, 0.05);
+            s.shots.iter().find_map(|o| match o {
+                OneShot::Sample { data, .. } => Some(data.len()),
+                _ => None,
+            })
+        };
+        let s = Synth::new();
+        let over_g = first_sample(AudioInput { over_g_warning: true, ..flying(0.6) });
+        assert_eq!(over_g, Some(s.over_g.len()));
+        let both = first_sample(AudioInput { over_g_warning: true, pull_up_warning: true, ..flying(0.6) });
+        assert_eq!(both, Some(s.pull_up.len()));
+        assert_ne!(s.over_g.len(), s.pull_up.len());
+    }
+
     #[test]
     fn pull_up_speaks_repeatedly_only_while_active() {
-        let mut s = Synth::with_default_voice();
+        let mut s = Synth::new();
         s.set_input(flying(0.6));
         run(&mut s, 1.0);
         assert_eq!(s.active_one_shots(), 0);
@@ -736,14 +788,14 @@ mod tests {
     fn no_wind_and_engine_noise_is_dark() {
         // Ohne Triebwerk und ohne bewegte Teile ist es in der Luft still – auch
         // bei hoher Fahrt und ausgefahrener Luftbremse (kein Wind).
-        let mut s = Synth::with_default_voice();
+        let mut s = Synth::new();
         s.set_mix(Mix::WITHOUT_ENGINE);
         s.set_input(AudioInput { airbrake: 1.0, tas: 300.0, ..flying(1.0) });
         run(&mut s, 1.0);
         let out = run(&mut s, 1.0);
         assert!(rms(&out) < 1e-4, "Restgeräusch {}", rms(&out));
         // Triebwerk bei Vollgas: wenig Energie oberhalb von 2 kHz (Nulldurchgänge)
-        let mut s = Synth::with_default_voice();
+        let mut s = Synth::new();
         s.set_input(flying(1.0));
         let out = run(&mut s, 2.0);
         let tail = &out[out.len() / 2..];
@@ -753,7 +805,7 @@ mod tests {
 
     #[test]
     fn crash_is_audible_although_engine_stops() {
-        let mut s = Synth::with_default_voice();
+        let mut s = Synth::new();
         s.set_input(flying(0.8));
         run(&mut s, 1.0);
         s.set_input(AudioInput { crashed: true, ..flying(0.8) });

@@ -77,28 +77,6 @@ pub fn saw(p: f32) -> f32 {
     2.0 * p - 1.0
 }
 
-/// Zweipoliger Resonator (Bandpass) nach Klatt – für Formanten.
-#[derive(Debug, Clone, Default)]
-pub struct Resonator {
-    y1: f32,
-    y2: f32,
-}
-
-impl Resonator {
-    /// Ein Abtastwert durch einen Resonator mit Mittenfrequenz `f` und
-    /// Bandbreite `bw` (Hz). Verstärkung 1 bei Gleichspannung (wie bei Klatt,
-    /// damit die Formanten in Reihe die natürlichen Pegelverhältnisse ergeben).
-    pub fn process(&mut self, x: f32, f: f32, bw: f32, sr: f32) -> f32 {
-        let c = -(-TAU * bw / sr).exp();
-        let b = 2.0 * (-std::f32::consts::PI * bw / sr).exp() * (TAU * f / sr).cos();
-        let a = 1.0 - b - c;
-        let y = a * x + b * self.y1 + c * self.y2;
-        self.y2 = self.y1;
-        self.y1 = y;
-        y
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,27 +103,5 @@ mod tests {
             }
         }
         assert!((triangle(0.0) + 1.0).abs() < 1e-6 && (triangle(0.5) - 1.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn resonator_passes_its_center_frequency() {
-        let sr = 44_100.0;
-        let gain_at = |f: f32| {
-            let mut r = Resonator::default();
-            let mut p = Phase::default();
-            let mut peak = 0.0_f32;
-            for i in 0..20_000 {
-                let y = r.process(sine(p.advance(f, sr)), 1_000.0, 100.0, sr);
-                if i > 10_000 {
-                    peak = peak.max(y.abs());
-                }
-            }
-            peak
-        };
-        let center = gain_at(1_000.0);
-        let low = gain_at(20.0);
-        assert!((low - 1.0).abs() < 0.1, "Gleichanteil {low}");
-        assert!(center > 3.0 * low, "Mitte {center}");
-        assert!(gain_at(3_000.0) < 0.2 * center);
     }
 }

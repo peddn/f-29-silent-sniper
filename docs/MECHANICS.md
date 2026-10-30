@@ -622,14 +622,12 @@ Format jedes Eintrags:
     **Absturz:** Krachen; das Triebwerk verstummt.
   - **Abrisswarnung:** *v0.1.14 (Spielerwunsch):* hoher, pulsierender
     Alarmton (1250 Hz, 6 Pulse/s, 40 % an), solange die Warnung anliegt.
-  - **Bodenwarnung „PULL UP“:** Ansage alle 1,6 s, solange die PULL-UP-Warnung
-    anliegt. Gedacht für eine authentische Aufnahme
-    (`assets/sounds/pull_up.wav`, nur frei lizenzierte Aufnahmen, Herkunft in
-    `assets/sounds/README.md`). Ohne Aufnahme spricht ein kleiner
-    Formant-Synthesizer (Stimmquelle durch drei Formant-Resonatoren, Zisch- und
-    Explosivlaute aus gefiltertem Rauschen, grobe Abtastung und Quantisierung
-    wie bei frühen Sprachchips). Das Wort „STALL“ derselben Stimme bleibt für
-    spätere Ansagen erhalten.
+  - **Ansagen „PULL UP“ und „OVER G“:** alle 1,6 s, solange die Warnung
+    anliegt; die Bodenwarnung hat Vorrang. *v0.2.9 (Spielerwunsch):* einfache
+    Samples statt der früheren Formant-Sprachsynthese (entfernt):
+    `crates/f29-audio/sounds/pull_up.wav` und `over_g.wav`, eingebettet. Erzeugt
+    mit espeak-ng (Stimme en-us+f3), dann auf Bordfunk gefiltert (300–3400 Hz,
+    leicht gesättigt). Ersetzbar durch frei lizenzierte Aufnahmen.
   - Hörproben rendern Einzelklänge ohne Triebwerk (Klanggruppen Triebwerk,
     Systeme, Ereignisse, Ansagen lassen sich getrennt pegeln).
   - Pause schaltet weich stumm. Startparameter `--volume 0..100` und
@@ -1295,9 +1293,11 @@ Format jedes Eintrags:
     (Spielerwunsch v0.2.9). Im Moment des Schadens fällt der Hebel auf die
     Sperre zurück und lässt sich nicht darüber schieben; das Triebwerk läuft
     wie im Original höchstens bis zur Sperre hoch.
-  - **Klänge der Detonationen** (Spielerwunsch v0.2.9): Treffer am Ziel lang
-    und kräftig, Fehlschuss (eigene wie feindliche Waffen) kurz und dumpf,
-    Treffer am eigenen Flugzeug laut, scharf und metallisch; ferne
+  - **Klänge der Detonationen** (Spielerwunsch v0.2.9): tiefer Bass-Druckstoß
+    (von 90 auf 30 Hz fallend) mit übersteuertem, dunklem Krachen und
+    Knistern statt hellem Rauschen. Treffer am Ziel lang und kräftig,
+    Fehlschuss (eigene wie feindliche Waffen) kurz und dumpf, Treffer am
+    eigenen Flugzeug laut und metallisch; ferne
     Detonationen leiser (halbe Lautstärke bei 1,5 km). Hörprobe:
     `f29-headless sound` → `07c_detonationen.wav`.
   - **Raketenwarnung:** Solange eine feindliche Rakete das Flugzeug verfolgt,
