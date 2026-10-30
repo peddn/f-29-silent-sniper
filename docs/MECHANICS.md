@@ -1171,6 +1171,69 @@ Format jedes Eintrags:
   Schadensmodell.
 - **Status:** geplant (v0.2)
 
+### M-031 Einsatzgebiete und Missionsgenerator
+
+- **Verhalten:** Das Original hat vier feste Einsatzgebiete (Libyen, Persischer
+  Golf, Nordkap, Mitteleuropa) mit fester Geografie. Jede Mission wird in einem
+  Gebiet aus dessen festen Objekten erzeugt.
+- **Referenzstelle:** f19re `src_start/stgen.c` (`missionGenerate`,
+  `parseWorld`, `runGenerator`, `findOrPlaceItem`, `formatGridRef`),
+  `src_start/stparse.c` (Geländekacheln), `src_en/egcombat.c` (Rasterzellen in
+  der Radarbewertung, `spawnSamThreat`). Die eigentlichen Gebietsdateien
+  (`*.wld`, `*.3dT`, `*.xxx`) liegen dem Rekonstruktionsprojekt nicht bei;
+  ausgewertet wurden nur Aufbau, Maßstab und Regeln, keine Positionen.
+- **Lesephase v0.2.9:**
+  - Je Gebiet eine Weltdatei, eine Geländekacheldatei und ein Kartenbild.
+  - Die Karte ist ein Quadrat von 32 768 internen Einheiten; die
+    Entfernungsanzeige rechnet 64 Einheiten je km (in der untersuchten,
+    übersetzten Fassung), das Gebiet wäre also rund 500 km breit – gut doppelt
+    so groß wie unsere Karte.
+  - Für Briefings ist sie in 20 × 20 Planquadrate (je rund 25 km) mit
+    Buchstaben-Ziffern-Kennung geteilt, je Gebiet mit eigenem Versatz.
+  - Ein Grobraster von 16 × 16 Zellen (je rund 32 km) trägt je Zelle wenige
+    Merkmale: Land oder Wasser (Missionsziele nur auf Land), eine Geländeart,
+    die die Radarbewertung direkt verstärkt oder schwächt (die grobe
+    „Maskierung“ des Originals, ohne Sichtlinie), und ein Merkmal, in dem
+    tagsüber spontan eine tragbare Flugabwehrrakete in der Nähe starten kann.
+  - Die Weltdatei enthält eine Objektliste mit Koordinaten, Typ und Merkmalen:
+    zielfähige Anlagen, Startbasen (eigene Flugplätze und Flugzeugträger, die
+    in Deckshöhe starten), Bodenstellungen mit Radar und SAM-Typ sowie
+    Flugzeugeinheiten (Patrouillen mit Basis, Typ und Treibstoff).
+  - Geländekacheln: bis zu 32 Kacheltypen in fünf Detailstufen – fertige
+    Ausschnitte (Orte, Anlagen, Hügel), die in Rasterzellen gesetzt werden;
+    Zufallsziele „rasten“ am nächsten solchen Geländemerkmal ein.
+  - Missionsgenerator: Primärziel aus der Objektliste oder ein Zufallspunkt
+    auf Land, der zum nächsten Geländemerkmal rutscht; ebenso das
+    Sekundärziel; beide höchstens rund 200 km auseinander. Startbasis: eine
+    eigene Basis nahe den Zielen, mit etwas Zufall und Vorrang für Träger. Die
+    Gesamtstrecke muss in einem Band liegen, sonst wird neu gewürfelt (bis zu
+    1000 Versuche). Welcher Missionstyp zum Ziel passt, regelt eine Tabelle
+    nach Zielklasse, Gebiet und Kampagnenstufe; für ein Gebiet gibt es
+    zusätzlich fest vorgegebene Missionen.
+- **Unser Design (Entwurf, v0.3):**
+  - **Eigene, fiktive Einsatzgebiete als Daten** (z. B.
+    `data/theaters/*.ron`): Seed und Größe (rund 400–500 km), ein Grobraster
+    16 × 16 (Land/Wasser, Geländeart flach/hügelig/Gebirge, Zugehörigkeit
+    eigen/neutral/feindlich), das unser prozedurales Gelände steuert (Küsten,
+    Gebirge), und eine Objektliste: Heimatbasen, ein Träger, geheime Pisten,
+    Radarnetz (Frühwarnradare an Grenze und Küste, SAM-Gürtel um wichtige
+    Anlagen), Städte und Dörfer als Gruppen ziviler Gebäude, Häfen, Brücken,
+    Kraftwerke, feindliche Flugplätze, später Patrouillenbasen.
+  - **Missionsgenerator nach dem Vorbild des Originals:** Ziele aus der
+    Objektliste (oder Zufallspunkt, der zum nächsten Ort rutscht), nächste
+    eigene Startbasis, Strecke in einem Band; die Route folgt aus Basis und
+    Zielen – nicht mehr wie bisher Ziele um eine Zufallsroute.
+  - **Geländeart als Radarfaktor** (optional): billiger Ersatz für die
+    gestrichene Sichtlinie, nahe am Original – im Gebirge schwächerer, über
+    flachem Land und Wasser stärkerer Impuls.
+  - **Planquadrate** auf Karte und Missionsseite.
+  - Technik: Floating Origin und Kachelstreaming tragen; die
+    Karten-Höhenlinien brauchen größere Ausschnitte; Schleifen über viele
+    feste Objekte bekommen eine Vorauswahl nach Rasterzellen.
+  - Keine Positionen aus dem Original (sie liegen auch nicht vor): nur die
+    Struktur (Raster, Objektliste, Generatorregeln) wird nachgebaut.
+- **Status:** Lesephase abgeschlossen (v0.2.9), Umsetzung geplant (v0.3)
+
 ### M-030 Karriere, Szenarien, Orden
 
 - **Verhalten:** Ein Pilot fliegt eine Folge von Missionen in mehreren Einsatzgebieten

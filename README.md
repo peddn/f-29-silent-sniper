@@ -242,6 +242,14 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - ~~Flak~~ (gestrichen, Spielerentscheidung v0.2.9)
 
 ### v0.3: Missionen
+- [ ] Einsatzgebiete als Daten (M-031): eigenes fiktives Küstengebiet, rund
+      400–500 km, Grobraster 16 × 16 (Land/Wasser, Geländeart, Zugehörigkeit)
+      steuert das prozedurale Gelände; feste Objekte (Basen, Träger, geheime
+      Pisten, Radarnetz, Städte, Häfen, Brücken, Kraftwerke)
+- [ ] Missionsgenerator nach dem Vorbild des Originals: Ziele aus dem Gebiet,
+      nächste eigene Startbasis, Strecke in einem Band, Route aus Basis und
+      Zielen
+- [ ] Planquadrate auf Karte und Missionsseite; Geländeart als Radarfaktor
 - [ ] Missionsdaten: Primär- und Sekundärziel, Route, Bedrohungslage
 - [ ] Bewaffnung und Betankung vor dem Start (Zusatztanks), Missionsauswertung
       mit Landebewertung, Verbrauchsvorschau auf der Karte
