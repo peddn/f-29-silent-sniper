@@ -42,8 +42,10 @@ const NEAR_M: f32 = 15.0;
 const MOUNT: Vec3 = Vec3::new(0.0, -1.5, -3.0);
 /// Nahebene der Waffenkamera: der eigene Waffenkörper liegt davor.
 const WPN_NEAR_M: f32 = 2.0;
-/// Sichtfeld der Waffenkamera ohne verfolgtes Ziel (rad, vertikal).
-const WPN_FOV_RAD: f32 = 0.12;
+/// Festes Sichtfeld der Waffenkamera (rad, vertikal), schmal wie ein echter
+/// Fernsehsuchkopf: Das Ziel wächst im Anflug stetig, statt erst am Ende ins
+/// Bild zu springen.
+const WPN_FOV_RAD: f32 = 3.0 * std::f32::consts::PI / 180.0;
 
 pub struct TgtCameraPlugin;
 
@@ -173,14 +175,7 @@ fn update(
         RightPage::WeaponCam => fd.weapon_cam.filter(|_| on).map(|c| {
             let eye = Vec3::from_array(coords::relative_yup(c.position, origin.0));
             let aim = Vec3::from_array(coords::relative_yup(c.position + c.look * 100.0, origin.0));
-            let half = match c.tracking {
-                Some((i, range)) => {
-                    let r = state.sim.targets()[i].class.radius();
-                    (r / TARGET_FILL).atan2(range.max(1.0)) as f32
-                }
-                None => WPN_FOV_RAD * 0.5,
-            };
-            (eye, aim, half, WPN_NEAR_M, 0.7)
+            (eye, aim, WPN_FOV_RAD * 0.5, WPN_NEAR_M, 0.7)
         }),
         _ => None,
     };

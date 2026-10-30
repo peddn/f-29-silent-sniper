@@ -972,7 +972,10 @@ Format jedes Eintrags:
     (Maverick) senden ihr Bild auf die eigene Seite „WPN CAM“ (Kurzname CAM)
     des rechten MFDs; nach dem Abschuss schaltet das MFD selbst dorthin. Das
     Bild kommt von einer zweiten 3D-Kamera an der Waffe (derselbe körnige
-    Schwarzweiß-Effekt wie das Zielbild), Blick zur Zielmitte, solange der
+    Schwarzweiß-Effekt wie das Zielbild) mit festem, schmalem Sichtfeld von 3°
+    wie ein echter Suchkopf – das Ziel wächst im Anflug stetig (v0.2.9, statt
+    mitlaufendem Zoom; ein Abbremsen im Endanflug wurde erwogen und verworfen,
+    Spielerentscheidung). Blick zur Zielmitte, solange der
     Suchkopf verfolgt („TRACK“, Zielkästchen), sonst in Flugrichtung
     („SEARCH“). Mit dem Einschlag reißt das Bild ab („NO SIGNAL“). Die GBU-12
     hat wie das reale Vorbild nur einen Lasersensor und keine Kamera; ihren
