@@ -23,8 +23,10 @@
 //! - **Feindliche Boden-Luft-Raketen** (M-021) fliegen in derselben Liste und
 //!   mit demselben Flug, Ziel ist das Flugzeug: Startet eine Radarstellung,
 //!   lenkt die Rakete halbaktiv – weit weg nur, solange die Stellung das
-//!   Flugzeug beim letzten Umlauf erfasst hat, nah mit eigenem Suchkopf. Ein
-//!   Treffer beschädigt zufällige Bordsysteme (keine Trefferpunkte).
+//!   Flugzeug beim letzten Umlauf erfasst hat, nah mit eigenem Suchkopf. Sie
+//!   fliegen mit Vorhalt auf den Treffpunkt (Abweichung vom Original, damit
+//!   Hineindrehen nicht rettet). Ein Treffer beschädigt zufällige Bordsysteme
+//!   (keine Trefferpunkte).
 //!
 //! Werte: eigene Größenordnungen aus öffentlichen Daten realer Waffen und
 //! Spielbalance, siehe M-014.
@@ -87,6 +89,8 @@ pub const SEMI_ACTIVE_M: f64 = 5_000.0;
 /// Startrichtung der Boden-Luft-Raketen: so steil über der Linie zum
 /// Flugzeug (rad, 10° – innerhalb des Suchkegels), dann lenkt sie ein.
 const SAM_LOFT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
+/// Vorhalt höchstens für so viele Sekunden Restflugzeit.
+const MAX_LEAD_S: f64 = 10.0;
 /// Startgeschwindigkeit der Boden-Luft-Raketen (m/s).
 const SAM_LAUNCH_MPS: f64 = 60.0;
 /// So viele Bordsysteme beschädigt ein Raketentreffer (Original: Konflikt-
@@ -463,7 +467,7 @@ pub fn launch_zone(kind: WeaponKind, l: &Launch<'_>, i: usize) -> LaunchZone {
         }
         step += 1;
         let aim = w.aim_point(l.targets);
-        match advance(&mut w, aim, l.terrain, dt) {
+        match advance(&mut w, aim, DVec3::ZERO, l.terrain, dt) {
             Fate::Flying => {}
             Fate::Fuze(_) => return LaunchZone::Good,
             Fate::Ground(p) => {
@@ -735,8 +739,9 @@ pub struct World<'a> {
     pub targets: &'a mut [Target],
     pub tick: u64,
     pub dt: f64,
-    /// Position des eigenen Flugzeugs (NED).
+    /// Position und Geschwindigkeit des eigenen Flugzeugs (NED).
     pub aircraft: DVec3,
+    pub aircraft_velocity: DVec3,
     /// Optisch aufgeschaltetes Ziel des Flugzeugs (Laserbeleuchtung).
     pub designated: Option<usize>,
     /// Das Flugzeug fliegt (Ziel der feindlichen Raketen).
@@ -960,9 +965,12 @@ impl Stores {
                     }
                 }
             }
-            let aim =
-                if w.owner.is_some() { aircraft.filter(|_| w.tracking) } else { w.aim_point(world.targets) };
-            match advance(&mut w, aim, world.terrain, world.dt) {
+            let (aim, lead) = if w.owner.is_some() {
+                (aircraft.filter(|_| w.tracking), world.aircraft_velocity)
+            } else {
+                (w.aim_point(world.targets), DVec3::ZERO)
+            };
+            match advance(&mut w, aim, lead, world.terrain, world.dt) {
                 Fate::Flying => {
                     self.in_flight[i] = w;
                     i += 1;
@@ -1162,14 +1170,15 @@ fn seek_aircraft(w: &mut Weapon, aircraft: Option<DVec3>, painted: bool) {
 /// Vorausberechnung): bewegen, dann Annäherungszünder (Raketen: kürzester
 /// Abstand der Strecke zum Zielpunkt `aim` unter dem Wirkradius),
 /// Bodenaufschlag und Flugzeit prüfen. `aim` ist der Punkt, den der Suchkopf
-/// gerade hat (Zielmitte bzw. Flugzeug), sonst `None`.
-fn advance(w: &mut Weapon, aim: Option<DVec3>, terrain: &Terrain, dt: f64) -> Fate {
+/// gerade hat (Zielmitte bzw. Flugzeug), sonst `None`; `lead` die
+/// Geschwindigkeit dieses Punkts (Vorhalt, Bodenziele 0).
+fn advance(w: &mut Weapon, aim: Option<DVec3>, lead: DVec3, terrain: &Terrain, dt: f64) -> Fate {
     let before = w.position;
     let s = w.kind.spec();
     match s.seeker {
         Seeker::None => fly(w, dt),
         Seeker::Laser => steer_bomb(w, aim, dt),
-        _ => guide(w, aim, dt),
+        _ => guide(w, aim.map(|a| intercept(w, a, lead)), dt),
     }
     if s.cruise_mps > 0.0
         && let Some(aim) = aim
@@ -1302,6 +1311,19 @@ fn steer_bomb(w: &mut Weapon, aim: Option<DVec3>, dt: f64) {
         let wanted = (aim - w.position).normalize_or_zero();
         w.velocity = turn_towards(dir, wanted, w.kind.spec().turn_rate_rad * dt) * speed;
     }
+}
+
+/// Treffpunkt mit Vorhalt: wo das Ziel (bei `aim`, Geschwindigkeit `lead`)
+/// nach der Restflugzeit sein wird. Für stehende Ziele die Zielmitte (reine
+/// Verfolgung wie im Original).
+fn intercept(w: &Weapon, aim: DVec3, lead: DVec3) -> DVec3 {
+    if lead == DVec3::ZERO {
+        return aim;
+    }
+    let to = aim - w.position;
+    let range = to.length();
+    let closing = (w.velocity - lead).dot(to / range.max(1.0)).max(1.0);
+    aim + lead * (range / closing).min(MAX_LEAD_S)
 }
 
 /// Ein Zeitschritt Rakete: erst frei aus dem Schacht fallen, dann mit
@@ -1451,7 +1473,7 @@ mod tests {
                 seek(&mut w, &targets, &terrain, None, true);
             }
             let aim = w.aim_point(&targets);
-            fate = advance(&mut w, aim, &terrain, 1.0 / 120.0);
+            fate = advance(&mut w, aim, DVec3::ZERO, &terrain, 1.0 / 120.0);
             if fate != Fate::Flying {
                 break;
             }

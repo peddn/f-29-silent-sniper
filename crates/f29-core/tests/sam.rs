@@ -112,3 +112,46 @@ fn sam_engagement_is_deterministic() {
     };
     assert_eq!(run(), run());
 }
+
+/// Hineindrehen rettet nicht: Die Rakete fliegt mit Vorhalt auf den
+/// Treffpunkt. Querflug 6 km südlich einer SAM-Stellung (ohne Stealth), nach
+/// dem Start harte Kurve auf die Rakete zu.
+#[test]
+fn turning_into_the_missile_does_not_help() {
+    let probe = Sim::new(SimConfig::new(SEED));
+    let t = probe.targets().iter().find(|t| t.class == TargetClass::AirDefense).expect("Stellung").clone();
+    let mut sim = Sim::new(SimConfig {
+        seed: SEED,
+        spawn: Spawn {
+            north: t.north - 6_000.0,
+            east: t.east - 3_000.0,
+            altitude: t.elevation + 1_000.0,
+            min_clearance: 300.0,
+            heading: std::f64::consts::FRAC_PI_2,
+            speed: 230.0,
+            throttle: 1.0,
+            visible: true,
+            ..Spawn::default()
+        },
+    });
+    assert!(fly_until(&mut sim, 40.0, |s| launched(s).is_some()), "kein Start");
+    let hit = |s: &Sim| s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. }));
+    let mut was_hit = false;
+    for _ in 0..(30 * TICK_HZ) {
+        let fd = sim.flight_data();
+        let Some(m) = sim.weapons_in_flight().iter().find(|w| w.owner.is_some()) else { break };
+        // Peilung zur Rakete relativ zum Kurs: Vorzeichen = Kurvenrichtung.
+        let to = m.position - fd.position;
+        let rel = (to.y.atan2(to.x) - fd.heading + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU)
+            - std::f64::consts::PI;
+        let bank = 75f64.to_radians() * rel.signum();
+        let roll = ((bank - fd.roll) * 2.0).clamp(-1.0, 1.0);
+        let pull = if (bank - fd.roll).abs() < 0.3 { 1.0 } else { 0.2 };
+        sim.step(ControlFrame::from_analog(pull, roll, 0.0, 1.0, 0));
+        if hit(&sim) {
+            was_hit = true;
+            break;
+        }
+    }
+    assert!(was_hit, "Rakete verfehlt beim Hineindrehen");
+}

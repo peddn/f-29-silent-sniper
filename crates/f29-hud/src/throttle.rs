@@ -4,10 +4,12 @@
 //! der unteren Ecke schräg nach oben zum Griff läuft), eigene Gestaltung: Der
 //! Hebel schwenkt in einer Bogenkulisse von IDLE (flach) bis MIL (steil). Eine
 //! Marke an der Kulisse zeigt die tatsächliche Triebwerksstellung, die dem
-//! Hebel verzögert folgt.
+//! Hebel verzögert folgt. Ist das Triebwerk beschädigt, sperrt eine rote
+//! Marke den nicht mehr verfügbaren Bereich der Kulisse (Höchstschub).
 
 use crate::canvas::{Align, DisplayList, Ink, Rect};
 use f29_core::FlightData;
+use f29_core::systems::System;
 
 /// Hebelwinkel (rad, gegen die Waagerechte) bei Leerlauf und Vollschub.
 const ANGLE_IDLE: f32 = 0.30;
@@ -39,6 +41,20 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, r: Rect) {
     dl.text_mid([idle[0], idle[1] - txt * 1.3], txt * 0.8, Align::Center, "IDLE", Ink::PanelDim);
     let mil = at(ANGLE_MIL, len * 1.18);
     dl.text_mid(mil, txt * 0.8, Align::Center, "MIL", Ink::PanelDim);
+
+    // Triebwerksschaden: Bereich über dem verfügbaren Höchstschub rot
+    // gesperrt, dicke Sperrmarke quer über die Kulisse.
+    let cap = fd.systems.capability(System::Engine) as f32;
+    if cap < 1.0 {
+        let ac = angle(cap);
+        for rr in [r_in, r_out, (r_in + r_out) * 0.5] {
+            dl.arc(pivot, rr, ac, ANGLE_MIL + 0.06, 12, Ink::Warning);
+        }
+        for k in -1..=1 {
+            let a = ac + k as f32 * 0.008;
+            dl.line(at(a, r_in - len * 0.06), at(a, r_out + len * 0.1), Ink::Warning);
+        }
+    }
 
     // Tatsächliche Triebwerksstellung als Dreieck an der inneren Kulisse
     let ae = angle(fd.engine as f32);
@@ -79,6 +95,16 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, r: Rect) {
         &format!("THR {pct}"),
         Ink::Panel,
     );
+    if cap < 1.0 {
+        let max = (cap * 100.0).round() as i64;
+        dl.text_mid(
+            [r.max[0] - w * 0.02, r.max[1] - txt * 0.9],
+            txt,
+            Align::Right,
+            &format!("MAX {max}"),
+            Ink::Warning,
+        );
+    }
 }
 
 #[cfg(test)]
@@ -106,6 +132,23 @@ mod tests {
             .filter(|l| l.ink == Ink::Needle)
             .flat_map(|l| [l.a[1], l.b[1]])
             .fold(f32::MIN, f32::max)
+    }
+
+    /// Beschädigtes Triebwerk: rote Sperre an der Kulisse und „MAX“.
+    #[test]
+    fn engine_damage_shows_a_red_stop() {
+        use f29_core::systems::Condition;
+        let reds = |cap: f64| {
+            let mut sim = Sim::new(SimConfig::new(1));
+            if cap < 1.0 {
+                sim.set_condition(System::Engine, Condition::Degraded(cap));
+            }
+            let mut dl = DisplayList::new();
+            draw(&mut dl, &sim.flight_data(), Rect { min: [0.0, 0.0], max: [0.2, 0.35] });
+            dl.lines.iter().filter(|l| l.ink == Ink::Warning).count()
+        };
+        assert_eq!(reds(1.0), 0);
+        assert!(reds(0.8) > 20);
     }
 
     #[test]

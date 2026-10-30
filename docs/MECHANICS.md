@@ -1242,7 +1242,14 @@ Format jedes Eintrags:
     22°/s, Wirkradius 20 m, 45 s), Frühwarnradare die **SA-5 Gammon** (60 km,
     1000 m/s, träge 10°/s, Wirkradius 30 m, 90 s) – sie trifft auch aus großer
     Entfernung (Spielerwunsch). Suchkegel beider ±22° wie im Original.
-  - **Lenkung halbaktiv:** reine Verfolgung wie die eigenen Raketen. Weiter als
+  - **Lenkung halbaktiv**, mit **Vorhalt** auf den Treffpunkt (Flugzeugort
+    plus Geschwindigkeit × Restflugzeit, höchstens 10 s): Abweichung vom
+    Original, das auch hier rein verfolgt – im Spieltest rettete sonst das
+    Hineindrehen in die Rakete, im Luftkampf das Falscheste (Spielerwunsch
+    v0.2.9). Eigene Raketen gegen stehende Ziele bleiben bei reiner
+    Verfolgung. Eine „Pitbull“-Phase mit mehr Leistung im Endanflug gibt es im
+    Original nicht; nur die Unabhängigkeit von der Stellung auf kurze
+    Entfernung (unten). Weiter als
     5 km lenkt die Rakete nur, solange ihre Stellung das Flugzeug beim
     **letzten Antennenumlauf erfasst** hat (Ping-Treffer, „painted“) – Stealth
     wirkt also auch während des Anflugs: tief, waagerecht, Schacht zu, quer zum
@@ -1258,6 +1265,9 @@ Format jedes Eintrags:
     mit – nach fünf Treffern also 80 %). Wiederholte Treffer verschärfen so
     die Folgen wie im Original mit der Trefferzahl. Kein Lebensbalken – das Flugzeug geht über die Folgen
     verloren. Meldung „SA-6 HIT“.
+  - **Schubhebel:** Ist das Triebwerk beschädigt, sperrt eine rote Marke den
+    nicht mehr verfügbaren Bereich der Kulisse, daneben „MAX 92“ in Rot
+    (Spielerwunsch v0.2.9).
   - **Raketenwarnung:** Solange eine feindliche Rakete das Flugzeug verfolgt,
     blinkt „MISSILE“ im HUD und ein schneller Wechselton warnt. Auf der Karte
     erscheinen feindliche Raketen als roter Strich, in der 3D-Ansicht mit

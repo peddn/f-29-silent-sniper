@@ -885,6 +885,7 @@ impl Sim {
             tick: self.tick,
             dt: DT,
             aircraft: self.aircraft.position,
+            aircraft_velocity: self.aircraft.velocity,
             designated: self.sensors.lock.filter(|l| l.optical).map(|l| l.target),
             flying: self.status == Status::Flying,
             painting: &painting,
