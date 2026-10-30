@@ -68,6 +68,7 @@ fn scripted_landing(seed: u64) -> Replay {
         loadout: f29_core::weapons::Loadout::EMPTY,
         night: false,
         awacs: true,
+        visible: false,
     };
     let mut sim = Sim::new(SimConfig { seed, spawn });
     let mut replay = Replay::new(sim.config().clone());

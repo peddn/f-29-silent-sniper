@@ -4,19 +4,21 @@
 //! die Startbedingungen exakt erhalten bleiben):
 //!
 //! ```text
-//! F29REPLAY 5
+//! F29REPLAY 6
 //! seed 3881
 //! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
 //! loadout fall,chute,lgb,agm
 //! time <day|night>
 //! awacs <on|off>
+//! stealth <on|off>
 //! frames <anzahl Zeilen>
 //! <wiederholungen> <pitch> <roll> <yaw> <throttle> <flags> <waffen>
 //! ...
 //! hash <hex>
 //! ```
 //!
-//! Ältere Versionen werden weiter gelesen: Version 4 ohne AWACS-Zeile (an),
+//! Ältere Versionen werden weiter gelesen: Version 5 ohne Stealth-Zeile (an),
+//! Version 4 zudem ohne AWACS-Zeile (an),
 //! Version 3 zudem ohne Tageszeit (Tag),
 //! Version 2 zudem ohne Beladungszeile und
 //! Waffenspalte (Standardbeladung, keine Waffenbedienung), Version 1 zudem ohne
@@ -28,7 +30,8 @@ use crate::sim::{Sim, SimConfig, Spawn, SpawnKind};
 use crate::weapons::Loadout;
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 5";
+pub const MAGIC: &str = "F29REPLAY 6";
+const MAGIC_V5: &str = "F29REPLAY 5";
 const MAGIC_V4: &str = "F29REPLAY 4";
 const MAGIC_V3: &str = "F29REPLAY 3";
 const MAGIC_V2: &str = "F29REPLAY 2";
@@ -110,6 +113,7 @@ impl Replay {
         let _ = writeln!(s, "loadout {}", sp.loadout.to_text());
         let _ = writeln!(s, "time {}", if sp.night { "night" } else { "day" });
         let _ = writeln!(s, "awacs {}", if sp.awacs { "on" } else { "off" });
+        let _ = writeln!(s, "stealth {}", if sp.visible { "off" } else { "on" });
         let _ = writeln!(s, "frames {}", self.frames.len());
         for (n, f) in &self.frames {
             let _ =
@@ -136,7 +140,8 @@ impl Replay {
         let old = v1 || magic == MAGIC_V2;
         let v3 = magic == MAGIC_V3;
         let v4 = magic == MAGIC_V4;
-        if magic != MAGIC && !old && !v3 && !v4 {
+        let v5 = magic == MAGIC_V5;
+        if magic != MAGIC && !old && !v3 && !v4 && !v5 {
             return Err(err(ln, format!("erwartet `{MAGIC}`")));
         }
 
@@ -202,6 +207,17 @@ impl Replay {
             }
         };
 
+        let visible = if old || v3 || v4 || v5 {
+            false
+        } else {
+            let (ln, l) = next("stealth")?;
+            match l.strip_prefix("stealth ") {
+                Some("on") => false,
+                Some("off") => true,
+                _ => return Err(err(ln, "erwartet `stealth on|off`".into())),
+            }
+        };
+
         let (ln, frames_line) = next("frames")?;
         let count = frames_line
             .strip_prefix("frames ")
@@ -257,6 +273,7 @@ impl Replay {
                     loadout,
                     night,
                     awacs,
+                    visible,
                 },
             },
             frames,
@@ -286,6 +303,7 @@ mod tests {
         rw.config.spawn.loadout = Loadout::parse("arm,-,ship,fall").unwrap();
         rw.config.spawn.night = true;
         rw.config.spawn.awacs = false;
+        rw.config.spawn.visible = true;
         rw.push(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.5, 0).with_weapons(3));
         assert_eq!(Replay::from_text(&rw.to_text()).expect("parse"), rw);
     }

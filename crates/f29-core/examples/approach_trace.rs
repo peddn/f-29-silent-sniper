@@ -26,6 +26,7 @@ fn main() {
         loadout: f29_core::weapons::Loadout::EMPTY,
         night: false,
         awacs: true,
+        visible: false,
     };
     let mut sim = Sim::new(SimConfig { seed, spawn });
     let mut ap = Approach::new(rw.clone());

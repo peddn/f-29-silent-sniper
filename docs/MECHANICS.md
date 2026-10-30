@@ -1175,6 +1175,9 @@ Format jedes Eintrags:
   SAM-Stellung das Flugzeug erst unter 3 km, ein Frühwarnradar unter 6 km; in
   3000 m (Stealth ≈ 62 %) unter etwa 11 bzw. 23 km; dort mit 90° Querlage
   (≈ 32 %) unter etwa 20 bzw. 41 km.
+- **Testoption** `--no-stealth` (Spielerwunsch v0.2.9): Stealth-Level immer 0,
+  jeder Ping in Reichweite trifft – zum Testen von Alarmstufen, Raketen und
+  Schäden. Steht im Replay (`stealth on|off`, Format 6).
 - **Status:** Entdeckung umgesetzt (v0.2.9); Raketen, Patrouillen und
   Störsender folgen.
 

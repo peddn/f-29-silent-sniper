@@ -41,6 +41,9 @@ cargo run --release -p f29-app -- --night
 # ohne freundliches AWACS: ferne Ziele fehlen auf der Karte
 cargo run --release -p f29-app -- --no-awacs
 
+# Testoption: Stealth-Level immer 0, jeder Radarping in Reichweite trifft
+cargo run --release -p f29-app -- --no-stealth
+
 # Lautstärke in Prozent (Standard 80) bzw. ganz ohne Ton
 cargo run --release -p f29-app -- --volume 50
 cargo run --release -p f29-app -- --no-sound

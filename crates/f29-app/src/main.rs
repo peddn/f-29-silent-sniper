@@ -10,7 +10,7 @@
 //! ```text
 //! f29-silent-sniper [--seed N] [--view cockpit|chase] [--start runway|air]
 //!                   [--volume 0..100] [--no-sound]
-//!                   [--loadout fall,chute,lgb,agm] [--night] [--no-awacs]
+//!                   [--loadout fall,chute,lgb,agm] [--night] [--no-awacs] [--no-stealth]
 //!                   [--joystick DATEI] [--joystick-debug]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
@@ -50,6 +50,7 @@ fn main() {
     config.spawn.night = args.iter().any(|a| a == "--night");
     // Ohne freundliches AWACS: keine Datalink-Daten zu fernen Zielen.
     config.spawn.awacs = !args.iter().any(|a| a == "--no-awacs");
+    config.spawn.visible = args.iter().any(|a| a == "--no-stealth");
     // Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship oder `-`.
     if let Some(text) = arg(&args, "--loadout") {
         match f29_core::weapons::Loadout::parse(&text) {

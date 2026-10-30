@@ -86,6 +86,9 @@ pub struct Spawn {
     /// Ein freundliches AWACS ist in der Luft: Datalink-Daten zu Zielen
     /// außerhalb der eigenen Erfassung (pseudosimuliert, M-013).
     pub awacs: bool,
+    /// Testoption: Stealth-Level immer 0 – jeder Ping in Reichweite trifft
+    /// (`--no-stealth`).
+    pub visible: bool,
 }
 
 impl Default for Spawn {
@@ -103,6 +106,7 @@ impl Default for Spawn {
             loadout: Loadout::default(),
             night: false,
             awacs: true,
+            visible: false,
         }
     }
 }
@@ -757,6 +761,7 @@ impl Sim {
             height_agl_m: a.height_agl_m,
             door: self.stores.door,
             radar_on: self.sensors.radar_on,
+            visible: self.config.spawn.visible,
         }
     }
 

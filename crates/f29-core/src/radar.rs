@@ -113,6 +113,8 @@ pub struct Exposure {
     pub door: f64,
     /// Eigenes Radar eingeschaltet.
     pub radar_on: bool,
+    /// Testoption: voll sichtbar (Stealth-Level 0).
+    pub visible: bool,
 }
 
 impl Exposure {
@@ -121,6 +123,9 @@ impl Exposure {
     /// eigenes Radar. Auch am Boden kein Sonderfall: ganz unten bleibt der
     /// Grundwert, perfekt unsichtbar ist das Flugzeug nie.
     pub fn signature(&self) -> f64 {
+        if self.visible {
+            return 1.0;
+        }
         let above = (self.height_agl_m - LOW_LEVEL_M).max(0.0);
         let altitude = SIG_ALTITUDE * detmath::atan(above / ALTITUDE_SCALE_M) / std::f64::consts::FRAC_PI_2;
         let bank = detmath::wrap_pi(self.roll).abs();
@@ -340,6 +345,7 @@ mod tests {
             height_agl_m: 1_000.0,
             door: 0.0,
             radar_on: false,
+            visible: false,
         }
     }
 
@@ -384,6 +390,7 @@ mod tests {
         let radar = Exposure { radar_on: true, ..low };
         assert!((low.stealth() - bay.stealth() - SIG_BAY).abs() < 1e-9);
         assert!((low.stealth() - radar.stealth() - SIG_RADAR).abs() < 1e-9);
+        assert_eq!(Exposure { visible: true, ..low }.stealth(), 0.0, "--no-stealth");
         let ground = Exposure { height_agl_m: 0.0, ..base };
         assert!((ground.stealth() - (1.0 - SIG_BASE)).abs() < 1e-9, "nie ganz unsichtbar");
     }
