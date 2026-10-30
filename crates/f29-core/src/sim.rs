@@ -11,7 +11,9 @@ use crate::rng::Pcg32;
 use crate::sensors::{self, LookDir, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
-use crate::weapons::{self, Bay, ImpactResult, LaunchZone, Loadout, Stores, Weapon, WeaponEvent, WeaponKind};
+use crate::weapons::{
+    self, Bay, DecoyKind, ImpactResult, LaunchZone, Loadout, Stores, Track, Weapon, WeaponEvent, WeaponKind,
+};
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_terrain::{AirfieldKind, Terrain};
 
@@ -257,6 +259,9 @@ pub struct StoresInfo {
     pub door: f64,
     /// Eigene Waffen in der Luft.
     pub in_flight: usize,
+    /// Vorrat an Düppeln und Fackeln.
+    pub chaff: u8,
+    pub flares: u8,
     /// Masse der Waffen an Bord (kg).
     pub mass_kg: f64,
 }
@@ -416,8 +421,10 @@ pub struct FlightData {
     pub awacs: bool,
     /// Zielhilfe, wenn eine ungelenkte Bombe gewählt ist und das Flugzeug fliegt.
     pub bomb_aim: Option<BombAim>,
-    /// Waffen in der Luft für die Karte: eigene und (ab Etappe 3) feindliche.
+    /// Waffen in der Luft für die Karte: eigene und feindliche.
     pub munitions: Vec<MunitionInfo>,
+    /// Täuschkörper in der Luft.
+    pub decoys: Vec<DecoyInfo>,
     /// Bild der jüngsten eigenen Waffe mit Fernsehsuchkopf in der Luft.
     pub weapon_cam: Option<WeaponCam>,
     /// Jüngste Detonation (Klang).
@@ -538,6 +545,14 @@ pub struct MunitionInfo {
     pub missile: bool,
     /// Feindliche Waffe (Boden-Luft-Rakete).
     pub hostile: bool,
+}
+
+/// Ein Täuschkörper in der Luft (Karte).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DecoyInfo {
+    pub kind: DecoyKind,
+    /// NED (m).
+    pub position: DVec3,
 }
 
 /// Suchkopfbild einer Waffe im Flug (WPN-CAM-Seite).
@@ -889,6 +904,13 @@ impl Sim {
         let gun_trigger = controls.has_weapon(weapon_flags::TRIGGER) && self.stores.gun_selected;
         let fire = (controls.has_weapon(weapon_flags::GUN) || gun_trigger) && !a.on_ground;
         self.gun.trigger(self.tick, fire, a.position, a.velocity, a.attitude, DT);
+        // Täuschkörper (nicht am Boden)
+        for (flag, kind) in [(weapon_flags::CHAFF, DecoyKind::Chaff), (weapon_flags::FLARE, DecoyKind::Flare)]
+        {
+            if controls.has_weapon(flag) && !self.aircraft.on_ground {
+                self.stores.drop_decoy(self.tick, kind, self.aircraft.position);
+            }
+        }
         // Bei gewählter Kanone löst die Auslösetaste keine Schachtwaffe aus.
         if controls.has_weapon(weapon_flags::RELEASE) && !self.stores.gun_selected {
             let launch = launch!(self);
@@ -898,7 +920,7 @@ impl Sim {
     }
 
     fn step_weapons(&mut self) {
-        if self.stores.in_flight.is_empty() {
+        if self.stores.in_flight.is_empty() && self.stores.decoys.is_empty() {
             return;
         }
         let painting: Vec<usize> = self.radar.sites.iter().filter(|s| s.painted).map(|s| s.target).collect();
@@ -1276,7 +1298,12 @@ impl Sim {
             flameout: !crashed && a.flamed_out(),
             gear_overspeed: airborne && a.gear > 0.05 && aero.tas > self.spec.gear_max_speed_mps,
             gear_up: airborne && !a.gear_down() && approach,
-            missile: airborne && self.stores.in_flight.iter().any(|w| w.owner.is_some() && w.chasing),
+            missile: airborne
+                && self
+                    .stores
+                    .in_flight
+                    .iter()
+                    .any(|w| w.owner.is_some() && w.target == Some(Track::Aircraft)),
         };
 
         FlightData {
@@ -1326,7 +1353,9 @@ impl Sim {
                 selected: self.stores.selected,
                 gun_selected: self.stores.gun_selected,
                 door: self.stores.door,
-                in_flight: self.stores.in_flight.len(),
+                in_flight: self.stores.in_flight.iter().filter(|w| w.owner.is_none()).count(),
+                chaff: self.stores.chaff,
+                flares: self.stores.flares,
                 mass_kg: self.stores.mass_kg(),
             },
             weapon_messages: self.weapon_messages(),
@@ -1363,16 +1392,28 @@ impl Sim {
                     hostile: w.owner.is_some(),
                 })
                 .collect(),
-            weapon_cam: self.stores.in_flight.iter().rev().find(|w| w.kind.has_camera()).map(|w| {
-                let aim = w.aim_point(&self.targets).map(|p| p - w.position);
-                WeaponCam {
-                    id: w.id,
-                    kind: w.kind,
-                    position: w.position,
-                    look: aim.unwrap_or(w.velocity).normalize_or_zero(),
-                    tracking: w.target.zip(aim).map(|(i, d)| (i, d.length())),
-                }
-            }),
+            decoys: self
+                .stores
+                .decoys
+                .iter()
+                .map(|d| DecoyInfo { kind: d.kind, position: d.position })
+                .collect(),
+            weapon_cam: self
+                .stores
+                .in_flight
+                .iter()
+                .rev()
+                .find(|w| w.owner.is_none() && w.kind.has_camera())
+                .map(|w| {
+                    let aim = w.aim_point(&self.targets).map(|p| p - w.position);
+                    WeaponCam {
+                        id: w.id,
+                        kind: w.kind,
+                        position: w.position,
+                        look: aim.unwrap_or(w.velocity).normalize_or_zero(),
+                        tracking: w.ground_target().zip(aim).map(|(i, d)| (i, d.length())),
+                    }
+                }),
             destroyed_targets: (0..self.targets.len()).filter(|&i| !self.targets[i].is_intact()).collect(),
             warnings,
         }
@@ -1447,6 +1488,8 @@ impl Sim {
                         (format!("MISSILE LAUNCH {} - {}", kind.label(), name(site)), true)
                     }
                     WeaponEvent::AircraftHit { kind, .. } => (format!("{} HIT", kind.label()), true),
+                    WeaponEvent::Decoyed { kind, .. } => (format!("{} DECOYED", kind.label()), false),
+                    WeaponEvent::DecoyEmpty(kind) => (format!("{} EMPTY", kind.label()), true),
                     WeaponEvent::Acquired { kind, target, .. } => {
                         (format!("{} LOCK {}", kind.label(), name(target)), self.targets[target].civilian)
                     }
@@ -1574,9 +1617,19 @@ impl Sim {
                 h.f64(v.z);
             }
             h.f64(w.age_s);
-            h.u64(w.target.map_or(u64::MAX, |t| t as u64));
-            h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1 | u64::from(w.chasing) << 2);
+            h.u64(match w.target {
+                None => u64::MAX,
+                Some(Track::Ground(i)) => i as u64,
+                Some(Track::Aircraft) => u64::MAX - 1,
+                Some(Track::Decoy(id)) => 1 << 40 | u64::from(id),
+            });
+            h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1);
             h.u64(w.owner.map_or(u64::MAX, |o| o as u64));
+        }
+        h.u64(u64::from(st.chaff) | u64::from(st.flares) << 8);
+        for d in &st.decoys {
+            h.u64(u64::from(d.id));
+            h.f64(d.age_s);
         }
         for s in &self.radar.sites {
             h.u64(u64::from(s.alert));

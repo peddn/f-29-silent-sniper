@@ -166,7 +166,7 @@ fn turning_into_the_missile_does_not_help() {
     assert!(was_hit, "Rakete verfehlt beim Hineindrehen");
 }
 
-/// Die Kurzstrecken-Flugabwehr bei den Zielgruppen startet die SA-8 direkt
+/// Die Kurzstrecken-Flugabwehr bei den Zielgruppen startet die SA-13 direkt
 /// auf das Flugzeug, ohne Boost.
 #[test]
 fn short_range_sam_fires_directly() {
@@ -198,5 +198,77 @@ fn long_range_sam_climbs_and_lofts() {
     assert!(
         top > 1_500.0 && above_aircraft > 0.0,
         "Gipfel {top:.0} m, über dem Flugzeug {above_aircraft:.0} m"
+    );
+}
+
+/// Wartet auf den Start, dann fliegt geradeaus und wirft `decoy`, sobald die
+/// Rakete näher als `at_m` ist. Liefert die Ereignisse danach.
+fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u8, at_m: f64) -> Vec<WeaponEvent> {
+    let (mut sim, _) = toward_site_with(class, dist, height, true);
+    assert!(fly_until(&mut sim, 40.0, |s| launched(s).is_some()), "kein Start");
+    let t0 = sim.flight_data().tick;
+    let mut thrown = false;
+    for _ in 0..(20 * TICK_HZ) {
+        let near = sim
+            .weapons_in_flight()
+            .iter()
+            .filter(|w| w.owner.is_some())
+            .any(|w| (w.position - sim.aircraft().position).length() < at_m);
+        let w = if near && !thrown { decoy } else { 0 };
+        thrown |= w != 0;
+        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(w));
+        if thrown && sim.weapons_in_flight().iter().all(|w| w.owner.is_none()) {
+            break;
+        }
+    }
+    assert!(thrown, "Rakete kam nicht nah genug");
+    sim.weapon_events().iter().filter(|(t, _)| *t > t0).map(|(_, e)| *e).collect()
+}
+
+/// Ein Düppel kurz vor dem Einschlag lenkt die Radarrakete (SA-6) ab.
+#[test]
+fn chaff_decoys_the_radar_missile() {
+    let ev = decoy_run(TargetClass::AirDefense, 12_000.0, 1_500.0, weapon_flags::CHAFF, 2_000.0);
+    assert!(
+        ev.iter().any(|e| matches!(e, WeaponEvent::Decoyed { kind: WeaponKind::MediumRangeSam, .. })),
+        "{ev:?}"
+    );
+    assert!(!ev.iter().any(|e| matches!(e, WeaponEvent::AircraftHit { .. })), "{ev:?}");
+}
+
+/// Die Infrarotrakete (SA-13) lässt sich von Düppeln nicht beirren, wohl
+/// aber von einer Fackel.
+#[test]
+fn flare_decoys_the_infrared_missile_but_chaff_does_not() {
+    // Hoch genug für freie Sicht (Infrarot braucht sie).
+    let chaff = decoy_run(TargetClass::ShortRangeSam, 8_000.0, 3_000.0, weapon_flags::CHAFF, 1_500.0);
+    assert!(!chaff.iter().any(|e| matches!(e, WeaponEvent::Decoyed { .. })), "{chaff:?}");
+    let flare = decoy_run(TargetClass::ShortRangeSam, 8_000.0, 3_000.0, weapon_flags::FLARE, 1_500.0);
+    assert!(
+        flare.iter().any(|e| matches!(e, WeaponEvent::Decoyed { kind: WeaponKind::ShortRangeSam, .. })),
+        "{flare:?}"
+    );
+    assert!(!flare.iter().any(|e| matches!(e, WeaponEvent::AircraftHit { .. })), "{flare:?}");
+}
+
+/// Vorrat 20 je Art, höchstens drei gleichzeitig; leer meldet sich.
+#[test]
+fn decoy_stock_is_limited() {
+    let (mut sim, _) = toward_site(TargetClass::AirDefense, 30_000.0, 4_000.0);
+    for _ in 0..5 {
+        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::FLARE));
+    }
+    assert_eq!(sim.flight_data().decoys.len(), 3);
+    assert_eq!(sim.flight_data().stores.flares, 17);
+    for _ in 0..40 {
+        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::FLARE));
+        fly_until(&mut sim, 2.0, |_| false);
+    }
+    assert_eq!(sim.flight_data().stores.flares, 0);
+    assert_eq!(sim.flight_data().stores.chaff, 20);
+    assert!(
+        sim.weapon_events()
+            .iter()
+            .any(|(_, e)| *e == WeaponEvent::DecoyEmpty(f29_core::weapons::DecoyKind::Flare))
     );
 }

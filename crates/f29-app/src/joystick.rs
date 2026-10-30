@@ -194,6 +194,8 @@ fn joystick_input(
                 _ if !pressed => {}
                 Action::NextWeapon => pilot.weapons |= weapon_flags::NEXT_BAY,
                 Action::BayDoors => pilot.weapons |= weapon_flags::BAY_DOORS,
+                Action::Chaff => pilot.weapons |= weapon_flags::CHAFF,
+                Action::Flare => pilot.weapons |= weapon_flags::FLARE,
                 Action::Radar => pilot.radar_toggle = true,
                 Action::NextSteerpoint => pilot.next_steerpoint = true,
                 Action::LookForward => pilot.look = LookDir::Forward.code(),

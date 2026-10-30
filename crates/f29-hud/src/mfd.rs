@@ -409,6 +409,22 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
         }
     }
 
+    // Täuschkörper: Düppel als kleines Kreuz, Fackel als kleiner Kreis.
+    for d in &fd.decoys {
+        let p = proj.to_screen([d.position.x, d.position.y]);
+        if !screen.contains(p) {
+            continue;
+        }
+        let k = txt * 0.3;
+        match d.kind {
+            f29_core::weapons::DecoyKind::Chaff => {
+                dl.line([p[0] - k, p[1] - k], [p[0] + k, p[1] + k], Ink::Hud);
+                dl.line([p[0] - k, p[1] + k], [p[0] + k, p[1] - k], Ink::Hud);
+            }
+            f29_core::weapons::DecoyKind::Flare => dl.circle(p, k, 6, Ink::Hud),
+        }
+    }
+
     // Waffen in der Luft: Raketen als kurzer Strich in Flugrichtung (Spitze
     // vorn), Bomben als Punkt; eigene in der Farbe des Flugzeugsymbols,
     // feindliche rot.

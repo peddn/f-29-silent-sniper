@@ -516,6 +516,10 @@ fn selected_weapon(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
         None => ("NO STORE".to_string(), Ink::HudDim),
     };
     dl.text_mid([x, y + TXT_SMALL * 1.7], TXT_SMALL, Align::Left, &text, ink);
+    // Täuschkörper: Düppel und Fackeln
+    let decoys = format!("CH {} FL {}", st.chaff, st.flares);
+    let ink = if st.chaff == 0 || st.flares == 0 { Ink::HudWarning } else { Ink::HudDim };
+    dl.text_mid([x, y + TXT_SMALL * 3.4], TXT_SMALL, Align::Left, &decoys, ink);
     let door = if st.door >= 1.0 {
         "OPEN"
     } else if st.door > 0.0 {

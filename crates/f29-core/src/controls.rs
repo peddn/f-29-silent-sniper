@@ -36,6 +36,10 @@ pub mod weapon_flags {
     /// Abzug der gewählten Waffe gehalten: feuert die Kanone, wenn sie gewählt
     /// ist (Schachtwaffen lösen über die Flanke `RELEASE` aus).
     pub const TRIGGER: u8 = 1 << 4;
+    /// Düppel abwerfen.
+    pub const CHAFF: u8 = 1 << 5;
+    /// Fackel abwerfen.
+    pub const FLARE: u8 = 1 << 6;
 }
 
 /// Ein Tick Steuereingabe, quantisiert.

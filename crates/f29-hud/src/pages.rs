@@ -129,9 +129,12 @@ pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
         }
     }
 
-    // Angaben zum gewählten Schacht
+    // Angaben zum gewählten Schacht, darunter die Täuschkörper
     let info_top = top - 2.0 * bay_h - gap - f.h * 0.05;
     let step = f.txt * 1.35;
+    let decoy_ink = if st.chaff == 0 || st.flares == 0 { Ink::Warning } else { Ink::Mfd };
+    let decoys = format!("{} / {}", st.chaff, st.flares);
+    row(dl, &f, info_top - step * 6.4, "CHAFF / FLARES", &decoys, decoy_ink);
     if st.gun_selected {
         // Bordkanone gewählt (eigenes System, vor den Schächten).
         dl.text_mid([f.x0, info_top], f.txt, Align::Left, "SELECTED GUN", Ink::Mfd);

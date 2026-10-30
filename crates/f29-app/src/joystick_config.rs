@@ -59,6 +59,8 @@ pub enum Action {
     Fire,
     NextWeapon,
     BayDoors,
+    Chaff,
+    Flare,
     Radar,
     NextSteerpoint,
     LookForward,
@@ -79,11 +81,13 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [(Action, &'static str); 21] = [
+    pub const ALL: [(Action, &'static str); 23] = [
         (Action::Gun, "gun"),
         (Action::Fire, "fire"),
         (Action::NextWeapon, "next_weapon"),
         (Action::BayDoors, "bay_doors"),
+        (Action::Chaff, "chaff"),
+        (Action::Flare, "flare"),
         (Action::Radar, "radar"),
         (Action::NextSteerpoint, "next_steerpoint"),
         (Action::LookForward, "look_forward"),

@@ -79,6 +79,8 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | N | 6 | nächster Navigationspunkt |
 | V | 5 | Radar ein/aus (schaltet ohne Sichtlinie auf; eingeschaltet etwas sichtbarer für feindliche Radare, wie ein offener Schacht) |
 | O | 4 | Schachtklappen auf/zu |
+| C | (frei belegbar: `chaff`) | Düppel abwerfen (gegen radargelenkte Raketen SA-6, SA-5) |
+| T | (frei belegbar: `flare`) | Fackel abwerfen (gegen die infrarotgelenkte SA-13) |
 | Tab | 3 | nächste Waffe: GUN → BAY 1 → … → BAY 4 → GUN (Start: GUN) |
 | Leertaste | 2 | gewählte Waffe auslösen (Schachtwaffen nur bei offenem Schacht; die Kanone feuert, solange die Taste gehalten wird) |
 | Rücktaste (gehalten) | 1 (Abzug) | Bordkanone feuern, gleich welche Waffe gewählt ist (nicht am Boden) |
@@ -253,7 +255,10 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Drei SAM-Typen mit Startprofil: SA-8 (Kurzstrecken-Flugabwehr bei den
       Zielen, direkt), SA-6 (Boost und Bogen), SA-5 (fast senkrechter Start,
       ausgeprägter Bogen); Vorhalt für alle Lenkwaffen (v0.2.9)
-- [ ] Täuschkörper (Düppel, Fackeln) gegen Langstreckenraketen
+- [x] Täuschkörper: Düppel (C) gegen Radar-, Fackeln (T) gegen Infrarotlenkung,
+      je 20; Kurzstrecken-SAM als SA-13 mit Infrarotsuchkopf (gemeinsamer
+      optischer Suchkopf mit der Maverick); Ziele der Lenkwaffen als
+      Bodenziel/Flugzeug/Täuschkörper (v0.2.9)
 - ~~Flak~~ (gestrichen, Spielerentscheidung v0.2.9)
 
 ### v0.3: Missionen

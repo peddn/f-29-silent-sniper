@@ -1239,7 +1239,7 @@ Format jedes Eintrags:
     Meldung „MISSILE LAUNCH SA-6 - <Stellung>“.
   - **Drei Typen** (Spielerentscheidung v0.2.9), je mit eigenem Startprofil:
 
-    | | Kurzstrecke SA-8 Gecko | Mittelstrecke SA-6 Gainful | Langstrecke SA-5 Gammon |
+    | | Kurzstrecke SA-13 Gopher (Infrarot) | Mittelstrecke SA-6 Gainful | Langstrecke SA-5 Gammon |
     |---|---|---|---|
     | Stellung | Kurzstrecken-Flugabwehr (neu, Fahrzeug, bewacht Zielgruppen) | SAM-Stellung | Frühwarnradar |
     | Radar | Doppler 12 km, Umlauf 2,5 s | Doppler 30 km, 5 s | Impuls 60 km, 10 s |
@@ -1250,8 +1250,11 @@ Format jedes Eintrags:
     | Bogen | 0 | 0,1 | 0,25 |
     | Wirkradius / Flugzeit | 12 m / 20 s | 20 m / 50 s | 30 m / 150 s |
 
-    Die Kurzstrecke ist kaum auszukurven (nur Reichweite und Stealth
-    schützen), die Mittelstrecke der Allrounder, die Langstrecke kommt über
+    Die Kurzstrecke (bis v0.2.9 als SA-8, dann mit Infrarotsuchkopf als SA-13,
+    Spielerentscheidung) ist kaum auszukurven; sie sucht nach dem Start selbst
+    (keine Beleuchtung durch die Stellung, Stealth hilft dann nicht), braucht
+    aber freie Sicht – Gelände und Fackeln schützen. Sie nutzt denselben
+    optischen Suchkopf wie die Maverick (Kegel, Reichweite, Sichtlinie), die Mittelstrecke der Allrounder, die Langstrecke kommt über
     jeden Berg und aus großer Entfernung, ist aber lange unterwegs – Zeit für
     Täuschkörper (Spielerwunsch). Suchkegel aller ±22° wie im Original.
   - **Startprofil:** Die Rakete startet im Startwinkel ihres Typs (mindestens
@@ -1305,8 +1308,23 @@ Format jedes Eintrags:
     blinkt „MISSILE“ im HUD und ein schneller Wechselton warnt. Auf der Karte
     erscheinen feindliche Raketen als roter Strich, in der 3D-Ansicht mit
     Rauchspur.
-  - Täuschkörper folgen mit Etappe 4 (Düppel auf „.“, Fackeln später mit den
-    Infrarotraketen).
+  - **Ziele der Lenkwaffen** (v0.2.9): Eine Rakete verfolgt ein Bodenziel, das
+    eigene Flugzeug oder einen Täuschkörper; jedes liefert Ort und
+    Geschwindigkeit. Der Suchkopf richtet sich nur nach seiner Art: optisch
+    bzw. Infrarot (Kegel, Reichweite, Sichtlinie), halbaktives Radar (weit weg
+    nur mit Beleuchtung), Laser. Luft-Luft-Raketen beider Seiten werden damit
+    zu Tabelleneinträgen.
+  - **Täuschkörper** (wie im Original, v0.2.9): **Düppel** (Taste C) gegen
+    Radarlenkung (SA-6, SA-5), **Fackeln** (Taste T) gegen Infrarotlenkung
+    (SA-13). Je 20 Stück, höchstens drei gleichzeitig in der Luft, leer meldet
+    „CHAFF EMPTY“ bzw. „FLARES EMPTY“. Ein Täuschkörper bleibt am Abwurfort
+    stehen und brennt 5 s. Liegt er im Suchkegel (Peilung) und in Reichweite
+    einer Rakete der passenden Lenkart, lenkt sie auf ihn statt auf das
+    Flugzeug – kein Würfel – und zündet dort wirkungslos („SA-6 DECOYED“).
+    Brennt er vorher aus, fliegt sie ohne Ziel weiter. Richtig werfen heißt:
+    kurz vor dem Einschlag, dann abdrehen. Kein Einfluss auf das
+    Stealth-Level (Spielerentscheidung). Anzeige: HUD „CH 20 FL 20“,
+    WPN-Seite, Karte (Kreuz bzw. Kreis), 3D-Wolke bzw. glühender Punkt.
 - **Status:** Boden-Luft-Raketen umgesetzt (v0.2.9), Täuschkörper geplant
 
 ### M-031 Einsatzgebiete und Missionsgenerator

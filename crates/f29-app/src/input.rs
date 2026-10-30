@@ -177,11 +177,14 @@ pub(crate) fn flight_input(keys: Res<ButtonInput<KeyCode>>, time: Res<Time>, mut
     pilot.gun = keys.pressed(KeyCode::Backspace);
     pilot.trigger = keys.pressed(KeyCode::Space);
 
-    // Waffen: Leertaste auslösen, O Schacht auf/zu, Tab nächste Waffe (GUN, BAY 1–4)
+    // Waffen: Leertaste auslösen, O Schacht auf/zu, Tab nächste Waffe (GUN,
+    // BAY 1–4); C Düppel, T Fackel
     for (key, flag) in [
         (KeyCode::Space, weapon_flags::RELEASE),
         (KeyCode::KeyO, weapon_flags::BAY_DOORS),
         (KeyCode::Tab, weapon_flags::NEXT_BAY),
+        (KeyCode::KeyC, weapon_flags::CHAFF),
+        (KeyCode::KeyT, weapon_flags::FLARE),
     ] {
         if keys.just_pressed(key) {
             pilot.weapons |= flag;

@@ -1,13 +1,13 @@
 //! Waffen in der 3D-Ansicht (M-014): Bomben und Flugkörper im Flug, der
 //! Bremsschirm der Fallschirmbombe und ein kurzer Blitz beim Einschlag;
 //! dazu die Leuchtspur der Bordkanone und kleine Einschlagwölkchen (M-016)
-//! sowie die Rauchspur feindlicher Raketen (M-021).
+//! sowie die Rauchspur feindlicher Raketen und die Täuschkörper (M-021).
 
 use crate::sim::{SimState, SimSystems};
 use crate::view::WorldOrigin;
 use bevy::prelude::*;
 use f29_core::DVec3;
-use f29_core::weapons::{WeaponEvent, WeaponKind};
+use f29_core::weapons::{DECOY_LIFE_S, DecoyKind, WeaponEvent, WeaponKind};
 use f29_render::{coords, palette};
 use std::collections::BTreeMap;
 
@@ -43,6 +43,9 @@ const PUFF_HIT_M: f32 = 8.0;
 const SMOKE_STEP_M: f64 = 40.0;
 const SMOKE_S: f32 = 4.0;
 const SMOKE_M: f32 = 5.0;
+/// Täuschkörper: Düppelwolke und Fackel (Radius m).
+const CHAFF_M: f32 = 12.0;
+const FLARE_M: f32 = 4.0;
 
 /// Dauer des Einschlagblitzes (s) und größter Radius (m).
 const BLAST_S: f32 = 1.2;
@@ -72,6 +75,9 @@ struct WeaponVisuals {
     smoke: Handle<StandardMaterial>,
     /// Feindliche Rakete → Ort des letzten Rauchwölkchens.
     smoke_at: BTreeMap<u32, DVec3>,
+    flare: Handle<StandardMaterial>,
+    /// Täuschkörper, die schon eine Wolke haben.
+    decoys_seen: Vec<u32>,
 }
 
 #[derive(Component)]
@@ -125,6 +131,12 @@ fn setup(
     visuals.puff_ground = materials.add(StandardMaterial { base_color: color(14), unlit: true, ..default() });
     visuals.puff_hit = materials.add(StandardMaterial { base_color: color(15), unlit: true, ..default() });
     visuals.smoke = materials.add(StandardMaterial { base_color: color(13), unlit: true, ..default() });
+    visuals.flare = materials.add(StandardMaterial {
+        base_color: color(15),
+        emissive: LinearRgba::rgb(6.0, 4.0, 1.5),
+        unlit: true,
+        ..default()
+    });
 }
 
 /// Leuchtspur: eine Entität je Patrone im Flug, in Flugrichtung gestreckt.
@@ -207,6 +219,25 @@ fn spawn_puffs(mut commands: Commands, state: Res<SimState>, mut visuals: ResMut
             MeshMaterial3d(visuals.smoke.clone()),
             Transform::from_scale(Vec3::splat(0.1)),
             Puff { at: w.position, age: 0.0, radius: SMOKE_M, life: SMOKE_S },
+        ));
+    }
+    // Täuschkörper: Düppel als helle Wolke, Fackel als glühender Punkt
+    let decoys = &state.sim.stores().decoys;
+    visuals.decoys_seen.retain(|id| decoys.iter().any(|d| d.id == *id));
+    for d in decoys {
+        if visuals.decoys_seen.contains(&d.id) {
+            continue;
+        }
+        visuals.decoys_seen.push(d.id);
+        let (material, radius) = match d.kind {
+            DecoyKind::Chaff => (visuals.puff_ground.clone(), CHAFF_M),
+            DecoyKind::Flare => (visuals.flare.clone(), FLARE_M),
+        };
+        commands.spawn((
+            Mesh3d(visuals.sphere.clone()),
+            MeshMaterial3d(material),
+            Transform::from_scale(Vec3::splat(0.1)),
+            Puff { at: d.position, age: 0.0, radius, life: DECOY_LIFE_S as f32 },
         ));
     }
 }

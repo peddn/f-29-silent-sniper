@@ -25,6 +25,10 @@
 //!   lenkt die Rakete halbaktiv – weit weg nur, solange die Stellung das
 //!   Flugzeug beim letzten Umlauf erfasst hat, nah mit eigenem Suchkopf. Ein
 //!   Treffer beschädigt zufällige Bordsysteme (keine Trefferpunkte).
+//! - **Täuschkörper** (M-021, wie im Original): Düppel und Fackeln bleiben am
+//!   Abwurfort stehen und brennen einige Sekunden. Liegt einer im Suchkegel
+//!   einer Rakete der passenden Lenkart (Düppel: Radar, Fackel: Infrarot /
+//!   optisch), lenkt sie auf ihn statt auf ihr Ziel – kein Würfel.
 //! - **Vorhalt** für alle Lenkwaffen: Sie fliegen auf den Treffpunkt eines
 //!   bewegten Ziels (Abweichung vom Original, damit Hineindrehen nicht
 //!   rettet); bei stehenden Zielen ist das die reine Verfolgung des Originals.
@@ -95,6 +99,10 @@ const SAM_DIRECT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
 const MAX_LEAD_S: f64 = 10.0;
 /// Startgeschwindigkeit der Boden-Luft-Raketen (m/s).
 const SAM_LAUNCH_MPS: f64 = 60.0;
+/// Täuschkörper: Vorrat je Art, höchstens so viele gleichzeitig, Brenndauer (s).
+pub const DECOY_STOCK: u8 = 20;
+pub const MAX_DECOYS: usize = 3;
+pub const DECOY_LIFE_S: f64 = 5.0;
 /// So viele Bordsysteme beschädigt ein Raketentreffer (Original: Konflikt-
 /// stufe plus eins; Schwierigkeitsgrade folgen).
 pub const HIT_SYSTEMS: usize = 2;
@@ -145,6 +153,11 @@ pub enum Seeker {
 }
 
 impl Seeker {
+    /// Lässt sich dieser Suchkopf von dieser Art Täuschkörper ablenken?
+    pub fn lured_by(self, decoy: DecoyKind) -> bool {
+        matches!((self, decoy), (Seeker::SemiActive, DecoyKind::Chaff) | (Seeker::Optical, DecoyKind::Flare))
+    }
+
     /// Kann dieser Suchkopf ein Ziel der Klasse überhaupt erfassen?
     pub fn sees(self, class: TargetClass) -> bool {
         match self {
@@ -363,12 +376,15 @@ const SPECS: [WeaponSpec; 9] = [
         life_s: 150.0,
         ..SAM
     },
-    // Kurzstreckenrakete (Vorbild SA-8): sehr schnell und wendig, startet
-    // ohne Boost direkt auf das Ziel.
+    // Kurzstreckenrakete mit Infrarotsuchkopf (Vorbild SA-13): sehr schnell
+    // und wendig, startet ohne Boost direkt auf das Ziel. Sucht selbst (keine
+    // Beleuchtung durch die Stellung), braucht aber freie Sicht; Fackeln
+    // lenken sie ab.
     WeaponSpec {
         kind: WeaponKind::ShortRangeSam,
-        label: "SA-8",
-        name: "SA-8 GECKO",
+        label: "SA-13",
+        name: "SA-13 GOPHER",
+        seeker: Seeker::Optical,
         mass_kg: 130.0,
         cruise_mps: 900.0,
         accel_mps2: 400.0,
@@ -422,7 +438,7 @@ impl WeaponKind {
             WeaponKind::AntiShip => "ship",
             WeaponKind::MediumRangeSam => "sa6",
             WeaponKind::LongRangeSam => "sa5",
-            WeaponKind::ShortRangeSam => "sa8",
+            WeaponKind::ShortRangeSam => "sa13",
         }
     }
 
@@ -517,17 +533,26 @@ pub fn launch_zone(kind: WeaponKind, l: &Launch<'_>, i: usize) -> LaunchZone {
         return LaunchZone::NoEffect;
     }
     let mut w = Weapon::launched(0, kind, l);
-    if w.target != Some(i) {
+    if w.ground_target() != Some(i) {
         return LaunchZone::NoLock;
     }
+    let view = View {
+        targets: l.targets,
+        terrain: l.terrain,
+        designated: Some(i),
+        aircraft: None,
+        decoys: &[],
+        painted: false,
+        los: false,
+    };
     let dt = l.dt * PREDICT_STEPS;
     let mut step = 0_u32;
     loop {
         if step.is_multiple_of(3) {
-            seek(&mut w, l.targets, l.terrain, Some(i), false);
+            seek(&mut w, &view);
         }
         step += 1;
-        let aim = w.aim_point(l.targets).map(|p| (p, DVec3::ZERO));
+        let aim = w.target.filter(|_| w.tracking).and_then(|t| view.locate(t));
         match advance(&mut w, aim, l.terrain, dt) {
             Fate::Flying => {}
             Fate::Fuze(_) => return LaunchZone::Good,
@@ -594,6 +619,45 @@ pub struct Bay {
     pub count: u8,
 }
 
+/// Was eine Lenkwaffe verfolgt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Track {
+    /// Bodenziel (Index in `Sim::targets`).
+    Ground(usize),
+    /// Das eigene Flugzeug (feindliche Raketen).
+    Aircraft,
+    /// Ein Täuschkörper (Nummer).
+    Decoy(u32),
+}
+
+/// Art eines Täuschkörpers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecoyKind {
+    /// Düppel gegen Radarlenkung.
+    Chaff,
+    /// Fackel gegen Infrarot- bzw. optische Lenkung.
+    Flare,
+}
+
+impl DecoyKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            DecoyKind::Chaff => "CHAFF",
+            DecoyKind::Flare => "FLARES",
+        }
+    }
+}
+
+/// Ein Täuschkörper: steht am Abwurfort, bis er ausgebrannt ist.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Decoy {
+    pub id: u32,
+    pub kind: DecoyKind,
+    /// NED (m).
+    pub position: DVec3,
+    pub age_s: f64,
+}
+
 /// Eine Waffe im Flug.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Weapon {
@@ -605,8 +669,8 @@ pub struct Weapon {
     /// NED (m/s).
     pub velocity: DVec3,
     pub age_s: f64,
-    /// Verfolgtes Ziel (Index in `Sim::targets`).
-    pub target: Option<usize>,
+    /// Verfolgtes Ziel; `None`, wenn es keines (mehr) hat.
+    pub target: Option<Track>,
     /// Der Suchkopf (bzw. der Laser) hatte das Ziel bei der letzten Prüfung;
     /// sonst fliegt die Waffe ungelenkt weiter.
     pub tracking: bool,
@@ -618,8 +682,6 @@ pub struct Weapon {
     /// Feindliche Rakete: gestartet von der Radarstellung mit diesem Index in
     /// `Sim::targets`; `None` = eigene Waffe.
     pub owner: Option<usize>,
-    /// Feindliche Rakete verfolgt noch das Flugzeug (aufgegeben: `false`).
-    pub chasing: bool,
 }
 
 impl Weapon {
@@ -635,7 +697,6 @@ impl Weapon {
             searching: false,
             boresight: velocity.normalize_or_zero(),
             owner: None,
-            chasing: false,
         }
     }
 
@@ -651,14 +712,16 @@ impl Weapon {
         match kind.spec().seeker {
             Seeker::None => {}
             Seeker::Laser => {
-                w.target = lock.filter(|(_, t)| l.lock_optical && t.is_intact()).map(|(i, _)| i);
+                w.target =
+                    lock.filter(|(_, t)| l.lock_optical && t.is_intact()).map(|(i, _)| Track::Ground(i));
             }
             seeker => {
                 let nose = l.attitude.rotate(DVec3::new(1.0, 0.0, 0.0));
                 w.boresight = nose;
                 let optical_ok = seeker != Seeker::Optical || l.lock_optical;
                 w.target = lock.filter(|_| optical_ok).and_then(|(i, t)| {
-                    seeker_sees(kind, l.position, nose, LAUNCH_CIRCLE_RAD, t, l.terrain, true).map(|_| i)
+                    seeker_sees(kind, l.position, nose, LAUNCH_CIRCLE_RAD, t, l.terrain, true)
+                        .map(|_| Track::Ground(i))
                 });
                 w.searching = w.target.is_none();
             }
@@ -682,10 +745,18 @@ impl Weapon {
         s.deployed_drag_area_m2 != s.drag_area_m2 && self.age_s >= s.deploy_s
     }
 
-    /// Punkt, den die Waffe gerade anfliegt: die Zielmitte, solange der
-    /// Suchkopf sie hat.
+    /// Verfolgtes Bodenziel (Index in `Sim::targets`).
+    pub fn ground_target(&self) -> Option<usize> {
+        match self.target? {
+            Track::Ground(i) => Some(i),
+            _ => None,
+        }
+    }
+
+    /// Punkt, den eine Waffe gegen Bodenziele gerade anfliegt: die Zielmitte,
+    /// solange der Suchkopf sie hat.
     pub fn aim_point(&self, targets: &[Target]) -> Option<DVec3> {
-        let t = targets.get(self.target?).filter(|_| self.tracking)?;
+        let t = targets.get(self.ground_target()?).filter(|_| self.tracking)?;
         let c = t.center_ned();
         Some(DVec3::new(c[0], c[1], c[2]))
     }
@@ -764,6 +835,13 @@ pub enum WeaponEvent {
         id: u32,
         site: usize,
     },
+    /// Eine Rakete hat sich von einem Täuschkörper ablenken lassen.
+    Decoyed {
+        kind: WeaponKind,
+        id: u32,
+    },
+    /// Täuschkörper dieser Art sind aufgebraucht.
+    DecoyEmpty(DecoyKind),
     /// Eine feindliche Rakete hat das Flugzeug getroffen und diese Systeme
     /// beschädigt.
     AircraftHit {
@@ -787,6 +865,11 @@ pub struct Stores {
     /// Klappen sollen offen sein.
     pub door_cmd: bool,
     pub in_flight: Vec<Weapon>,
+    /// Vorrat an Düppeln und Fackeln.
+    pub chaff: u8,
+    pub flares: u8,
+    /// Täuschkörper in der Luft.
+    pub decoys: Vec<Decoy>,
     next_id: u32,
     rng: Pcg32,
     /// Letzte Ereignisse mit Tick, neueste zuletzt.
@@ -883,6 +966,9 @@ impl Stores {
             door: 0.0,
             door_cmd: false,
             in_flight: Vec::new(),
+            chaff: DECOY_STOCK,
+            flares: DECOY_STOCK,
+            decoys: Vec::new(),
             next_id: 0,
             rng: Pcg32::new(seed, STREAM_WEAPONS),
             events: Vec::new(),
@@ -964,7 +1050,7 @@ impl Stores {
         self.next_id += 1;
         let w = Weapon::launched(id, kind, l);
         self.log(l.tick, WeaponEvent::Released { kind, bay: self.selected, id });
-        if let Some(target) = w.target {
+        if let Some(target) = w.ground_target() {
             self.log(l.tick, WeaponEvent::Acquired { kind, id, target });
         }
         self.in_flight.push(w);
@@ -1001,51 +1087,76 @@ impl Stores {
         self.next_id += 1;
         let mut w = Weapon::new(id, kind, from, dir * SAM_LAUNCH_MPS);
         w.owner = Some(site);
-        w.chasing = true;
+        w.target = Some(Track::Aircraft);
         self.in_flight.push(w);
         self.log(tick, WeaponEvent::SamLaunch { kind, id, site });
         true
     }
 
+    /// Wirft einen Täuschkörper bei `position` ab (höchstens
+    /// [`MAX_DECOYS`] gleichzeitig; leerer Vorrat meldet sich).
+    pub fn drop_decoy(&mut self, tick: u64, kind: DecoyKind, position: DVec3) {
+        let stock = match kind {
+            DecoyKind::Chaff => &mut self.chaff,
+            DecoyKind::Flare => &mut self.flares,
+        };
+        if *stock == 0 {
+            self.log(tick, WeaponEvent::DecoyEmpty(kind));
+            return;
+        }
+        if self.decoys.len() >= MAX_DECOYS {
+            return;
+        }
+        *stock -= 1;
+        let id = self.next_id;
+        self.next_id += 1;
+        self.decoys.push(Decoy { id, kind, position, age_s: 0.0 });
+    }
+
     /// Alle Waffen im Flug einen Zeitschritt weiterbewegen; Zünder und
     /// Einschläge auswerten.
     pub fn step(&mut self, world: &mut World<'_>) {
+        for d in &mut self.decoys {
+            d.age_s += world.dt;
+        }
+        self.decoys.retain(|d| d.age_s < DECOY_LIFE_S);
+        let decoys = self.decoys.clone();
         let mut i = 0;
         while i < self.in_flight.len() {
             let mut w = self.in_flight[i];
-            let aircraft = world.flying.then_some(world.aircraft);
+            let view = View {
+                targets: world.targets,
+                terrain: world.terrain,
+                designated: world.designated,
+                aircraft: world.flying.then_some((world.aircraft, world.aircraft_velocity)),
+                decoys: &decoys,
+                painted: w.owner.is_some_and(|o| world.painting.contains(&o)),
+                los: true,
+            };
             if w.kind.is_guided() && (world.tick + u64::from(w.id)).is_multiple_of(SEEKER_TICKS) {
-                if w.owner.is_some() {
-                    let painted = w.owner.is_some_and(|o| world.painting.contains(&o));
-                    seek_aircraft(&mut w, aircraft, painted);
-                } else {
-                    let had = w.tracking;
-                    if let Some(e) = seek(&mut w, world.targets, world.terrain, world.designated, true) {
-                        self.log(world.tick, e);
-                    }
-                    if had && !w.tracking && w.kind.spec().seeker == Seeker::Laser {
-                        self.log(world.tick, WeaponEvent::LaserLost { kind: w.kind, id: w.id });
-                    }
+                let had = w.tracking;
+                if let Some(e) = seek(&mut w, &view) {
+                    self.log(world.tick, e);
+                }
+                if had && !w.tracking && w.kind.spec().seeker == Seeker::Laser {
+                    self.log(world.tick, WeaponEvent::LaserLost { kind: w.kind, id: w.id });
                 }
             }
-            // Ort und Geschwindigkeit dessen, was der Suchkopf hat (Bodenziele
-            // stehen noch).
-            let aim = if w.owner.is_some() {
-                aircraft.filter(|_| w.tracking).map(|a| (a, world.aircraft_velocity))
-            } else {
-                w.aim_point(world.targets).map(|p| (p, DVec3::ZERO))
-            };
+            let aim = w.target.filter(|_| w.tracking).and_then(|t| view.locate(t));
             match advance(&mut w, aim, world.terrain, world.dt) {
                 Fate::Flying => {
                     self.in_flight[i] = w;
                     i += 1;
                 }
-                Fate::Fuze(_) if w.owner.is_some() => {
+                Fate::Fuze(_) if w.target == Some(Track::Aircraft) => {
                     self.in_flight.remove(i);
                     let systems = self.pick_systems();
                     self.log(world.tick, WeaponEvent::AircraftHit { kind: w.kind, id: w.id, systems });
                 }
-                Fate::Ground(p) if w.owner.is_some() => {
+                // Am Täuschkörper oder (feindlich) im Gelände: wirkungslos.
+                Fate::Fuze(p) | Fate::Ground(p)
+                    if w.owner.is_some() || matches!(w.target, Some(Track::Decoy(_))) =>
+                {
                     self.in_flight.remove(i);
                     let result = ImpactResult::Ground;
                     self.log(world.tick, WeaponEvent::Impact { kind: w.kind, id: w.id, position: p, result });
@@ -1164,75 +1275,140 @@ enum Fate {
     Expired,
 }
 
-/// Suchkopf prüfen (gemeinsam für den echten Flug und die Vorausberechnung):
-/// Laserbombe – wird das Ziel noch beleuchtet (`designated`)? Rakete – liegt
-/// das Ziel noch in Suchkegel und Reichweite (optisch und mit `los` auch in
-/// Sicht)? Liegt es weit hinter ihr, gibt sie auf. Ohne Ziel sucht sie selbst
-/// das nächste passende vor dem Suchkopf (auch zivile). Liefert ein neues
-/// Ziel als Ereignis.
-fn seek(
-    w: &mut Weapon,
-    targets: &[Target],
-    terrain: &Terrain,
+/// Was ein Suchkopf von der Welt sieht.
+struct View<'a> {
+    targets: &'a [Target],
+    terrain: &'a Terrain,
+    /// Optisch aufgeschaltetes Ziel des Flugzeugs (Laserbeleuchtung).
     designated: Option<usize>,
+    /// Ort und Geschwindigkeit des eigenen Flugzeugs, solange es fliegt.
+    aircraft: Option<(DVec3, DVec3)>,
+    decoys: &'a [Decoy],
+    /// Die Stellung dieser (feindlichen) Rakete hat das Flugzeug beim letzten
+    /// Umlauf erfasst (halbaktive Beleuchtung).
+    painted: bool,
+    /// Sichtlinie prüfen (die Vorausberechnung spart sie sich).
     los: bool,
-) -> Option<WeaponEvent> {
-    if w.age_s < GUIDANCE_DELAY_S {
-        return None;
-    }
-    let s = w.kind.spec();
-    if let Some(i) = w.target {
-        let t = &targets[i];
-        if s.seeker == Seeker::Laser {
-            w.tracking = designated == Some(i) && t.is_intact();
-            return None;
-        }
-        let c = t.center_ned();
-        if angle_between(w.velocity, DVec3::new(c[0], c[1], c[2]) - w.position) > GIVE_UP_RAD {
-            w.target = None;
-            w.tracking = false;
-            return None;
-        }
-        w.tracking =
-            seeker_sees(w.kind, w.position, w.velocity, s.seeker_cone_rad, t, terrain, los).is_some();
-        return None;
-    }
-    if !w.searching {
-        return None;
-    }
-    let (_, i) = targets
-        .iter()
-        .enumerate()
-        .filter_map(|(i, t)| {
-            seeker_sees(w.kind, w.position, w.velocity, s.seeker_cone_rad, t, terrain, los).map(|r| (r, i))
-        })
-        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))?;
-    w.target = Some(i);
-    w.tracking = true;
-    w.searching = false;
-    Some(WeaponEvent::Acquired { kind: w.kind, id: w.id, target: i })
 }
 
-/// Suchkopf einer feindlichen Rakete prüfen (halbaktiv, wie im Original):
-/// Liegt das Flugzeug weit hinter ihr, gibt sie auf. Sonst lenkt sie, wenn es
-/// in ihrem Suchkegel liegt und – weiter als [`SEMI_ACTIVE_M`] – ihre Stellung
-/// es beim letzten Umlauf erfasst hat (`painted`). Kegel und Aufgabe gelten
-/// wie im Original nur in der Peilung (waagerecht) – so findet auch eine
-/// senkrecht gestartete Rakete ihr Ziel.
-fn seek_aircraft(w: &mut Weapon, aircraft: Option<DVec3>, painted: bool) {
-    // Im Boost sucht sie noch nicht.
-    if w.age_s < w.kind.spec().boost_s.max(GUIDANCE_DELAY_S) {
-        return;
+impl View<'_> {
+    /// Ort und Geschwindigkeit eines verfolgten Ziels (Bodenziele stehen);
+    /// `None`, wenn es nicht mehr da ist.
+    fn locate(&self, track: Track) -> Option<(DVec3, DVec3)> {
+        match track {
+            Track::Ground(i) => {
+                let c = self.targets.get(i)?.center_ned();
+                Some((DVec3::new(c[0], c[1], c[2]), DVec3::ZERO))
+            }
+            Track::Aircraft => self.aircraft,
+            Track::Decoy(id) => self.decoys.iter().find(|d| d.id == id).map(|d| (d.position, DVec3::ZERO)),
+        }
     }
-    let Some(to) = aircraft.filter(|_| w.chasing).map(|a| a - w.position) else {
-        w.tracking = false;
-        return;
-    };
+}
+
+/// Peilungsabweichung (waagerecht, rad) der Richtung `to` von der
+/// Flugrichtung – wie im Original prüfen Raketen gegen Luftziele nur die
+/// Peilung, so findet auch eine steil gestartete ihr Ziel.
+fn bearing_off(velocity: DVec3, to: DVec3) -> f64 {
     let flat = |v: DVec3| DVec3::new(v.x, v.y, 0.0);
-    let off = if flat(w.velocity).length() < 1.0 { 0.0 } else { angle_between(flat(w.velocity), flat(to)) };
-    w.chasing = off <= GIVE_UP_RAD;
-    w.tracking =
-        w.chasing && off <= w.kind.spec().seeker_cone_rad && (painted || to.length() <= SEMI_ACTIVE_M);
+    if flat(velocity).length() < 1.0 { 0.0 } else { angle_between(flat(velocity), flat(to)) }
+}
+
+/// Suchkopf prüfen (gemeinsam für den echten Flug und die Vorausberechnung).
+/// Ein Täuschkörper der passenden Art im Suchkegel lenkt ab (wie im
+/// Original). Dann je Ziel:
+/// - **Bodenziel:** Laserbombe – wird es noch beleuchtet? Rakete – liegt es
+///   noch in Suchkegel und Reichweite (optisch und mit `los` auch in Sicht)?
+///   Weit hinter ihr gibt sie auf.
+/// - **Flugzeug / Täuschkörper:** Peilung im Suchkegel; halbaktiv weiter als
+///   [`SEMI_ACTIVE_M`] nur mit Beleuchtung durch die Stellung, optisch
+///   (Infrarot) nur in Reichweite und mit freier Sicht. Weit hinter ihr gibt
+///   sie auf.
+/// - **Keines:** sucht selbst das nächste passende Bodenziel vor dem Suchkopf
+///   (auch zivile), wenn sie ohne Übergabe abgefeuert wurde.
+///
+/// Liefert ein neues Ziel oder die Ablenkung als Ereignis.
+fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
+    let s = w.kind.spec();
+    // Erst fallen (eigene) bzw. im Boost steigen (feindliche).
+    if w.age_s < s.boost_s.max(GUIDANCE_DELAY_S) {
+        return None;
+    }
+    if w.target.is_some_and(|t| !matches!(t, Track::Decoy(_)))
+        && let Some(d) = v.decoys.iter().find(|d| {
+            s.seeker.lured_by(d.kind) && {
+                let to = d.position - w.position;
+                to.length() <= s.max_range_m && bearing_off(w.velocity, to) <= s.seeker_cone_rad
+            }
+        })
+    {
+        w.target = Some(Track::Decoy(d.id));
+        w.tracking = true;
+        return Some(WeaponEvent::Decoyed { kind: w.kind, id: w.id });
+    }
+    match w.target {
+        Some(Track::Ground(i)) => {
+            let t = &v.targets[i];
+            if s.seeker == Seeker::Laser {
+                w.tracking = v.designated == Some(i) && t.is_intact();
+                return None;
+            }
+            let c = t.center_ned();
+            if angle_between(w.velocity, DVec3::new(c[0], c[1], c[2]) - w.position) > GIVE_UP_RAD {
+                w.target = None;
+                w.tracking = false;
+                return None;
+            }
+            w.tracking =
+                seeker_sees(w.kind, w.position, w.velocity, s.seeker_cone_rad, t, v.terrain, v.los).is_some();
+            None
+        }
+        Some(track) => {
+            let Some((p, _)) = v.locate(track) else {
+                w.target = None;
+                w.tracking = false;
+                return None;
+            };
+            let to = p - w.position;
+            let off = bearing_off(w.velocity, to);
+            if off > GIVE_UP_RAD {
+                w.target = None;
+                w.tracking = false;
+                return None;
+            }
+            let decoy = matches!(track, Track::Decoy(_));
+            let sees = match s.seeker {
+                Seeker::SemiActive => decoy || v.painted || to.length() <= SEMI_ACTIVE_M,
+                _ => {
+                    to.length() <= s.max_range_m
+                        && (!v.los
+                            || line_of_sight(
+                                |n, e| v.terrain.elevation(n, e),
+                                [w.position.x, w.position.y, -w.position.z],
+                                [p.x, p.y, -p.z],
+                            ))
+                }
+            };
+            w.tracking = off <= s.seeker_cone_rad && sees;
+            None
+        }
+        None if w.searching => {
+            let (_, i) = v
+                .targets
+                .iter()
+                .enumerate()
+                .filter_map(|(i, t)| {
+                    seeker_sees(w.kind, w.position, w.velocity, s.seeker_cone_rad, t, v.terrain, v.los)
+                        .map(|r| (r, i))
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))?;
+            w.target = Some(Track::Ground(i));
+            w.tracking = true;
+            w.searching = false;
+            Some(WeaponEvent::Acquired { kind: w.kind, id: w.id, target: i })
+        }
+        None => None,
+    }
 }
 
 /// Ein Zeitschritt einer Waffe (gemeinsam für den echten Flug und die
@@ -1528,10 +1704,15 @@ mod tests {
         (w, targets, terrain)
     }
 
+    /// Sicht auf Bodenziele für die Tests (ohne Flugzeug, ohne Täuschkörper).
+    fn ground_view<'a>(targets: &'a [Target], terrain: &'a Terrain) -> View<'a> {
+        View { targets, terrain, designated: None, aircraft: None, decoys: &[], painted: false, los: true }
+    }
+
     #[test]
     fn optical_seeker_takes_only_an_optical_lock() {
         let (w, _, _) = launch_at_target(true);
-        assert_eq!(w.target, Some(0));
+        assert_eq!(w.target, Some(Track::Ground(0)));
         assert!(!w.searching && w.tracking);
         let (w, _, _) = launch_at_target(false);
         assert_eq!(w.target, None, "reine Radaraufschaltung wird nicht übernommen");
@@ -1545,7 +1726,7 @@ mod tests {
         let mut fate = Fate::Flying;
         for k in 0..(120 * 30) {
             if k % 12 == 0 {
-                seek(&mut w, &targets, &terrain, None, true);
+                seek(&mut w, &ground_view(&targets, &terrain));
             }
             let aim = w.aim_point(&targets).map(|p| (p, DVec3::ZERO));
             fate = advance(&mut w, aim, &terrain, 1.0 / 120.0);
@@ -1566,7 +1747,7 @@ mod tests {
         let nose = w.boresight;
         // Lange genug, um auf Marschfahrt zu kommen (gemächliche Beschleunigung).
         for _ in 0..(120 * 12) {
-            seek(&mut w, &none, &terrain, None, true);
+            seek(&mut w, &ground_view(&none, &terrain));
             guide(&mut w, None, 1.0 / 120.0);
         }
         let dir = w.velocity.normalize_or_zero();
@@ -1574,28 +1755,81 @@ mod tests {
         assert!((w.velocity.length() - w.kind.spec().cruise_mps).abs() < 1.0);
     }
 
+    /// Feindliche Rakete auf das Flugzeug bei `at`, nach dem Start.
+    fn sam(kind: WeaponKind) -> Weapon {
+        let mut w = Weapon::new(0, kind, DVec3::ZERO, DVec3::new(700.0, 0.0, -1.0));
+        w.owner = Some(0);
+        w.target = Some(Track::Aircraft);
+        w.age_s = 10.0;
+        w
+    }
+
+    fn air_view<'a>(terrain: &'a Terrain, at: DVec3, painted: bool, decoys: &'a [Decoy]) -> View<'a> {
+        View {
+            targets: &[],
+            terrain,
+            designated: None,
+            aircraft: Some((at, DVec3::ZERO)),
+            decoys,
+            painted,
+            los: true,
+        }
+    }
+
     /// Halbaktiv: Weit weg lenkt die Boden-Luft-Rakete nur, solange ihre
     /// Stellung das Flugzeug erfasst; nah mit eigenem Suchkopf. Außerhalb des
     /// Suchkegels lenkt sie nicht, weit hinter ihr gibt sie auf.
     #[test]
     fn sam_guidance_is_semi_active() {
-        let mut w = Weapon::new(0, WeaponKind::MediumRangeSam, DVec3::ZERO, DVec3::new(700.0, 0.0, 0.0));
-        w.owner = Some(0);
-        w.chasing = true;
-        w.age_s = 10.0;
-        let far = Some(DVec3::new(10_000.0, 0.0, 0.0));
-        seek_aircraft(&mut w, far, true);
+        let terrain = Terrain::new(1);
+        let mut w = sam(WeaponKind::MediumRangeSam);
+        let far = DVec3::new(10_000.0, 0.0, 0.0);
+        seek(&mut w, &air_view(&terrain, far, true, &[]));
         assert!(w.tracking);
-        seek_aircraft(&mut w, far, false);
-        assert!(!w.tracking && w.chasing, "ohne Beleuchtung blind, aber noch dran");
-        seek_aircraft(&mut w, Some(DVec3::new(3_000.0, 0.0, 0.0)), false);
+        seek(&mut w, &air_view(&terrain, far, false, &[]));
+        assert!(!w.tracking && w.target.is_some(), "ohne Beleuchtung blind, aber noch dran");
+        seek(&mut w, &air_view(&terrain, DVec3::new(3_000.0, 0.0, 0.0), false, &[]));
         assert!(w.tracking, "nah: eigener Suchkopf");
-        seek_aircraft(&mut w, Some(DVec3::new(3_000.0, 3_000.0, 0.0)), true);
-        assert!(!w.tracking && w.chasing, "45° neben der Flugrichtung: außerhalb des Kegels");
-        seek_aircraft(&mut w, Some(DVec3::new(-3_000.0, 0.0, 0.0)), true);
-        assert!(!w.chasing, "hinter ihr: aufgegeben");
-        seek_aircraft(&mut w, far, true);
+        seek(&mut w, &air_view(&terrain, DVec3::new(3_000.0, 3_000.0, 0.0), true, &[]));
+        assert!(!w.tracking && w.target.is_some(), "45° neben der Flugrichtung: außerhalb des Kegels");
+        seek(&mut w, &air_view(&terrain, DVec3::new(-3_000.0, 0.0, 0.0), true, &[]));
+        assert!(w.target.is_none(), "hinter ihr: aufgegeben");
+        seek(&mut w, &air_view(&terrain, far, true, &[]));
         assert!(!w.tracking, "aufgegeben bleibt aufgegeben");
+    }
+
+    /// Täuschkörper wie im Original: Ein Düppel im Suchkegel lenkt die
+    /// Radarrakete ab, nicht die Infrarotrakete – bei der Fackel umgekehrt.
+    #[test]
+    fn decoys_lure_only_their_kind_of_seeker() {
+        let terrain = Terrain::new(1);
+        // Hoch über allem Gelände: freie Sicht
+        let at = DVec3::new(8_000.0, 0.0, -9_000.0);
+        let place = DVec3::new(4_000.0, 200.0, -9_000.0);
+        let chaff = [Decoy { id: 7, kind: DecoyKind::Chaff, position: place, age_s: 0.0 }];
+        let flare = [Decoy { id: 8, kind: DecoyKind::Flare, position: place, age_s: 0.0 }];
+        let start = |kind| {
+            let mut w = sam(kind);
+            w.position = DVec3::new(0.0, 0.0, -9_000.0);
+            w
+        };
+        let mut radar = start(WeaponKind::MediumRangeSam);
+        assert!(seek(&mut radar, &air_view(&terrain, at, true, &flare)).is_none());
+        assert_eq!(radar.target, Some(Track::Aircraft));
+        assert!(matches!(
+            seek(&mut radar, &air_view(&terrain, at, true, &chaff)),
+            Some(WeaponEvent::Decoyed { .. })
+        ));
+        assert_eq!(radar.target, Some(Track::Decoy(7)));
+        let mut ir = start(WeaponKind::ShortRangeSam);
+        seek(&mut ir, &air_view(&terrain, DVec3::new(5_000.0, 0.0, -9_000.0), false, &chaff));
+        assert_eq!(ir.target, Some(Track::Aircraft));
+        assert!(ir.tracking, "Infrarot braucht keine Beleuchtung");
+        seek(&mut ir, &air_view(&terrain, at, false, &flare));
+        assert_eq!(ir.target, Some(Track::Decoy(8)));
+        // Ausgebrannt: Die Rakete hat kein Ziel mehr.
+        seek(&mut ir, &air_view(&terrain, at, false, &[]));
+        assert!(ir.target.is_none() && !ir.tracking);
     }
 
     /// Vorhalt: stehendes Ziel → Zielmitte; bewegtes Ziel → Treffpunkt
@@ -1622,7 +1856,7 @@ mod tests {
         let (mut w, mut targets, terrain) = launch_at_target(true);
         w.age_s = 1.0;
         targets[0].north = -20_000.0;
-        seek(&mut w, &targets, &terrain, None, true);
+        seek(&mut w, &ground_view(&targets, &terrain));
         assert_eq!(w.target, None);
         assert!(!w.tracking);
     }
