@@ -1016,6 +1016,14 @@ Format jedes Eintrags:
 - **Lesephase (eigene Worte, keine Werte):** Ein Treffer setzt zufällig eine oder
   mehrere Schadensmarken aus einer festen, kleinen Liste von Systemen; auf schweren
   Stufen mehr. Das Cockpit zeigt die Schäden auf einer eigenen Anzeige.
+- **Lesephase v0.2.9** (`bombTarget`, `egflight.c`): Ein Raketentreffer setzt
+  so viele zufällige Schadensmarken aus acht Systemen, wie die Konfliktstufe
+  plus eins vorgibt, und zählt einen Trefferzähler hoch. Wirkung je System,
+  jeweils mit dem Trefferzähler wachsend: Höchstschub sinkt, die Steuerung
+  zittert zufällig (in der Luft), Treibstoff leckt, Raketenwarnung, Karte und
+  Störsender fallen aus. Viele Treffer verstärken außerdem das Durchsacken
+  beim Strömungsabriss. Einen festen „Lebensbalken“ gibt es nicht – das
+  Flugzeug geht über die Folgen verloren (Absturz, kein Treibstoff).
 - **Unser Design (Gerüst, Spielerentscheidung):** `f29_core::systems`. Acht Systeme
   (Triebwerk, Treibstoff, Hydraulik, Flugsteuerung, Radar, Optik, Waffenschacht,
   Anzeigen), jedes intakt, eingeschränkt (Restleistung 0..1) oder ausgefallen.
@@ -1163,6 +1171,43 @@ Format jedes Eintrags:
 - **Lesephase v0.2:** Täuschkörper (Fackeln, Düppel) und ein Störsender sind begrenzt
   vorrätig; ein Täuschkörper lockt Flugkörper der passenden Lenkart an, solange er in
   ihrem Suchkegel liegt.
+- **Lesephase v0.2.9** (`egcombat.c`: `fireGroundThreat`,
+  `updateThreatTargeting`, `samCanAcquireTarget`, `bombTarget`; `egframe.c`:
+  `countermeasures`; `egflight.c`: Wirkung der Schäden):
+  - **Start:** Erst wenn die Alarmstufe einer Stellung fast voll ist, meldet
+    sie „Radar ID“; bei den folgenden Bewertungen schießt sie, sofern das
+    Flugzeug innerhalb der Aufschaltreichweite ihres Raketentyps ist, ihr
+    Startplatz frei ist (eine Rakete je Stellung in der Luft) und insgesamt
+    nicht schon zu viele Raketen fliegen (Grenze steigt mit der
+    Konfliktstufe). Reine Radarstellungen ohne Werfer schießen nicht.
+  - **Raketentypen:** je Typ Aufschaltreichweite, Höchstgeschwindigkeit,
+    Drehrate und Lenkart (radar- oder infrarotgelenkt, verschiedene Klassen).
+    Die Flugzeit ist begrenzt, etwa so lang, wie die Rakete für ihre
+    Aufschaltreichweite braucht.
+  - **Flug:** Die Rakete dreht in Kurs und Steigwinkel auf das Ziel, begrenzt
+    durch ihre Drehrate und zusätzlich durch die Konfliktstufe (auf niedrigen
+    Stufen träger). Sie lenkt nur auf Ziele in einem Suchkegel von etwa ±22°
+    um ihre Flugrichtung; liegt das Ziel weit hinter ihr und ist es weiter weg
+    als ein Flugschritt, gibt sie auf.
+  - **Halbaktive Lenkung:** Ist die Rakete noch weit vom Ziel entfernt
+    (mehrere km), lenkt sie nur, solange ihre Stellung das Flugzeug weiter
+    verfolgt (Alarmmarke der Stellung). Verliert die Stellung den Kontakt,
+    fliegt die Rakete ungelenkt weiter – Stealth wirkt also auch während des
+    Anflugs.
+  - **Treffer:** rein geometrisch, nicht gewürfelt – kommt die Rakete näher als
+    ihren Flugschritt (Höhe gewichtet), trifft sie. Dazu Raketenwarnung:
+    Leuchte und Warnton, wenn eine gelenkte Rakete in der Nähe ist.
+  - **Täuschkörper:** zwei Arten (gegen Radar- bzw. Infrarotlenkung) in
+    begrenztem Vorrat, je bis zu drei gleichzeitig. Ein Täuschkörper bleibt
+    am Abwurfort stehen und brennt einige Sekunden (auf höheren Stufen
+    kürzer). Liegt er im Suchkegel einer Rakete der passenden Lenkart, lenkt
+    sie auf ihn statt auf das Flugzeug – kein Würfeln. Leerer Vorrat meldet
+    „erschöpft“.
+  - **Störsender:** begrenzt, läuft deutlich länger als ein Täuschkörper;
+    radargelenkte Raketen verlieren außerhalb kurzer Entfernung die
+    Aufschaltung, und die Alarmstufen der Stellungen steigen nur halb so
+    schnell (M-020). Ein Störer für Infrarot wirkt entsprechend.
+
 - **Unser Design (Entwurf):** Start bei Alarmstufe 3 (M-020): SAM-Stellungen
   mit mittlerer Reichweite, Frühwarnradare mit Langstreckenraketen, die auch
   aus großer Entfernung treffen können – Täuschkörper müssen geopfert werden
