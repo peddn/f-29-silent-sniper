@@ -1246,8 +1246,12 @@ Format jedes Eintrags:
     plus Geschwindigkeit × Restflugzeit, höchstens 10 s): Abweichung vom
     Original, das auch hier rein verfolgt – im Spieltest rettete sonst das
     Hineindrehen in die Rakete, im Luftkampf das Falscheste (Spielerwunsch
-    v0.2.9). Eigene Raketen gegen stehende Ziele bleiben bei reiner
-    Verfolgung. Eine „Pitbull“-Phase mit mehr Leistung im Endanflug gibt es im
+    v0.2.9). Der Vorhalt gilt für **alle Lenkwaffen** (gemeinsamer Flug): Bei
+    stehenden Zielen ergibt er die reine Verfolgung des Originals, bei
+    bewegten (feindliche Flugzeuge, Schiffe, Kolonnen – später) den
+    Kollisionskurs. Ein **Vorhaltfaktor** je Waffe (0 = reine Verfolgung,
+    1 = voller Vorhalt) stellt die Gefährlichkeit ein – vorgesehen auch für
+    Schwierigkeitsgrade; vorerst haben alle Waffen 1 (Spielerwunsch). Eine „Pitbull“-Phase mit mehr Leistung im Endanflug gibt es im
     Original nicht; nur die Unabhängigkeit von der Stellung auf kurze
     Entfernung (unten). Weiter als
     5 km lenkt die Rakete nur, solange ihre Stellung das Flugzeug beim
