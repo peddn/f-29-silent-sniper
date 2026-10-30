@@ -159,8 +159,9 @@ fn radar_state_is_deterministic() {
     assert_eq!(run(), run());
 }
 
-/// Start auf der Heimatbasis: am Boden unsichtbar, und keine feindliche
-/// Radarstellung steht näher als 35 km an der Basis.
+/// Start auf der Heimatbasis: Der Boden ist kein Sonderfall, aber keine
+/// feindliche Radarstellung steht näher als 35 km an der Basis – beim Anrollen
+/// reicht kein Impuls über das Stealth-Level.
 #[test]
 fn takeoff_roll_stays_undetected() {
     for seed in [SEED, 1, 77, 1234] {

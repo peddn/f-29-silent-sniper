@@ -579,7 +579,9 @@ fn signature(dl: &mut DisplayList, fd: &FlightData, r: Rect) {
     let h = bar.max[1] - bar.min[1];
     let y_of = |v: f64| bar.min[1] + h * v.clamp(0.0, 1.0) as f32;
     let ping = th.last_ping.filter(|p| p.age_s < PING_SHOW_S);
-    let stealth = ping.map_or(th.stealth, |p| p.stealth);
+    // Der Balken folgt immer dem aktuellen Stealth-Level; der Ping-Strich
+    // bleibt in seiner Stärke stehen.
+    let stealth = th.stealth;
     // Füllung als waagerechte Linien (wie der Treibstoffbalken)
     let top = y_of(stealth);
     let mut y = bar.min[1] + h * 0.01;

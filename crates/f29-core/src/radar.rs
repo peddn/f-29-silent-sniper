@@ -16,7 +16,8 @@
 //!
 //! Das Stealth-Level ist wie im Original ein Wert für alle Radare: tief und
 //! waagerecht ist am unauffälligsten; Höhe über Grund, Querlage, offener
-//! Schacht und eigenes Radar kosten. Am Boden ist das Flugzeug unsichtbar.
+//! Schacht und eigenes Radar kosten. Ganz unten (auch am Boden) bleibt ein
+//! kleiner Grundwert – ganz unsichtbar ist das Flugzeug nie.
 //!
 //! Zwei Radartypen unterscheiden sich im Impuls:
 //! - **Impulsradar** (Frühwarnung, große Reichweite): richtungsunabhängig.
@@ -109,18 +110,14 @@ pub struct Exposure {
     pub door: f64,
     /// Eigenes Radar eingeschaltet.
     pub radar_on: bool,
-    /// Am Boden: in den Bodenechos verborgen, für jedes Radar unsichtbar.
-    pub on_ground: bool,
 }
 
 impl Exposure {
     /// Eigene Sichtbarkeit 0..1 – ein Wert für alle Radare (wie im
     /// Original): Grundwert, Höhe über Grund, Querlage, offener Schacht,
-    /// eigenes Radar. Am Boden 0.
+    /// eigenes Radar. Auch am Boden kein Sonderfall: ganz unten bleibt der
+    /// Grundwert, perfekt unsichtbar ist das Flugzeug nie.
     pub fn signature(&self) -> f64 {
-        if self.on_ground {
-            return 0.0;
-        }
         let above = (self.height_agl_m - LOW_LEVEL_M).max(0.0);
         let altitude = SIG_ALTITUDE * detmath::atan(above / ALTITUDE_SCALE_M) / std::f64::consts::FRAC_PI_2;
         let bank = detmath::wrap_pi(self.roll).abs();
@@ -141,7 +138,7 @@ impl Exposure {
     pub fn signal(&self, spec: &RadarSpec, site: DVec3) -> f64 {
         let to = self.position - site;
         let r = to.length() / spec.range_m;
-        if r >= 1.0 || self.on_ground {
+        if r >= 1.0 {
             return 0.0;
         }
         let base = 1.0 - r;
@@ -330,7 +327,6 @@ mod tests {
             height_agl_m: 1_000.0,
             door: 0.0,
             radar_on: false,
-            on_ground: false,
         }
     }
 
@@ -343,8 +339,6 @@ mod tests {
         let far = level(-40_000.0, 0.0).signal(&EARLY_WARNING, SITE);
         assert!(near > far && far > 0.0);
         assert_eq!(level(-61_000.0, 0.0).signal(&EARLY_WARNING, SITE), 0.0);
-        // Am Boden in den Bodenechos verborgen
-        assert_eq!(Exposure { on_ground: true, ..x }.signal(&SAM, SITE), 0.0);
     }
 
     #[test]
@@ -359,7 +353,7 @@ mod tests {
     }
 
     /// Tief und waagerecht ist am unauffälligsten; Höhe, Querlage, Schacht und
-    /// Radar kosten; am Boden 100 %.
+    /// Radar kosten; ganz unten (auch am Boden) bleibt der Grundwert.
     #[test]
     fn stealth_is_low_and_level() {
         let base = level(-10_000.0, 0.0);
@@ -377,6 +371,7 @@ mod tests {
         let radar = Exposure { radar_on: true, ..low };
         assert!((low.stealth() - bay.stealth() - SIG_BAY).abs() < 1e-9);
         assert!((low.stealth() - radar.stealth() - SIG_RADAR).abs() < 1e-9);
-        assert_eq!(Exposure { on_ground: true, door: 1.0, ..base }.stealth(), 1.0);
+        let ground = Exposure { height_agl_m: 0.0, ..base };
+        assert!((ground.stealth() - (1.0 - SIG_BASE)).abs() < 1e-9, "nie ganz unsichtbar");
     }
 }

@@ -1112,10 +1112,10 @@ Format jedes Eintrags:
   - **Impulsstärke** am Flugzeug: fällt linear mit der Entfernung bis zur
     Reichweitengrenze. Doppler: schwach, wenn das Flugzeug quer zur Stellung
     fliegt (nur die Bewegung auf sie zu oder von ihr weg zählt). Impuls:
-    richtungsunabhängig. Am Boden ist das Flugzeug für jedes Radar unsichtbar
-    (Bodenechos); feindliche Radare stehen mindestens 35 km von der
-    Heimatbasis entfernt (nach dem ersten Spieltest v0.2.9: entdeckt beim
-    Anrollen).
+    richtungsunabhängig. Der Boden ist kein Sonderfall (Spielerentscheidung
+    v0.2.9: auch gelandet kommen Pings an); feindliche Radare stehen
+    mindestens 35 km von der Heimatbasis entfernt, damit das Anrollen nicht
+    schon entdeckt wird.
   - **Stealth-Level** = 1 − eigene Sichtbarkeit, **ein Wert für alle
     Radare** wie im Original (Umbau v0.2.9 nach dem zweiten Spieltest; die
     erste Fassung rechnete je Radar aus der Blickrichtung auf Bug, Flanke oder
@@ -1125,8 +1125,9 @@ Format jedes Eintrags:
     steigend wie im Original), der **Querlage** (linear bis 90°, Rückenflug wie
     waagerecht), dem offenen Schacht und dem eigenen Radar (ein kleiner Verlust
     wie der offene Schacht). Nicklage, Fahrwerk und Klappen zählen nicht – das
-    Original kennt sie nicht. Am Boden 100 %. Kurz: tief und waagerecht
-    fliegen.
+    Original kennt sie nicht. Ganz unten, auch am Boden, bleibt der
+    Grundwert: höchstens 90 %, ganz unsichtbar ist das Flugzeug nie. Kurz:
+    tief und waagerecht fliegen.
   - **Alarmstufe:** Ein Ping, dessen Impuls stärker ist als das Stealth-Level,
     hebt die Stufe der Stellung um eins: 1 „RADAR DETECTED“ (Stellung mit
     Reichweitenkreis auf der Karte), 2 „TRACKED“ (Ping-Ort gemerkt – Ziel
@@ -1137,9 +1138,8 @@ Format jedes Eintrags:
   - **Anzeigen:** SIG-Säule zwischen den MFDs mit **einem** Balken für das
     Stealth-Level (Spielerwunsch v0.2.9). Jeder Ping erscheint für eine
     Sekunde als Querstrich in seiner Stärke – rot und über dem Balken ist ein
-    Treffer (Alarmstufe dieses Radars +1), gelb darunter keiner; solange der
-    Strich steht, zeigt der Balken das Stealth-Level gegenüber genau diesem
-    Radar. Drei Alarmlampen, Radartyp PLS/DOP, Pieps des
+    Treffer (Alarmstufe dieses Radars +1), gelb darunter keiner; der Balken
+    folgt dabei weiter dem aktuellen Stealth-Level. Drei Alarmlampen, Radartyp PLS/DOP, Pieps des
     Radarwarnempfängers (Treffer doppelt und höher), Reichweitenkreise und
     gemerkter Ping-Ort auf der Karte. Der Zustand geht in den Zustandshash ein.
 - **Unsere Werte:** Frühwarnradar 60 km, Umlauf 10 s; SAM 30 km, Umlauf 5 s.

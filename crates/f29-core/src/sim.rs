@@ -692,7 +692,6 @@ impl Sim {
             height_agl_m: a.height_agl_m,
             door: self.stores.door,
             radar_on: self.sensors.radar_on,
-            on_ground: a.on_ground,
         }
     }
 
