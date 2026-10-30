@@ -403,10 +403,9 @@ pub struct FlightData {
 /// Lage gegenüber den feindlichen Radaren (M-020).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ThreatInfo {
-    /// Eigenes Stealth-Level 0..1 gegenüber der gefährlichsten Stellung in
-    /// Reichweite (sonst der nächsten).
+    /// Eigenes Stealth-Level 0..1 (ein Wert für alle Radare).
     pub stealth: f64,
-    /// Die Stellung, deren Impuls dem Stealth-Level am nächsten kommt.
+    /// Die Stellung mit dem stärksten Impuls am Flugzeug.
     pub worst: Option<ThreatSite>,
     /// Höchste Alarmstufe aller Stellungen.
     pub max_alert: u8,
@@ -429,8 +428,6 @@ pub struct ThreatSite {
     pub kind: RadarKind,
     /// Stärke ihres Impulses am Flugzeug 0..1.
     pub signal: f64,
-    /// Stealth-Level ihr gegenüber 0..1.
-    pub stealth: f64,
     pub alert: u8,
     pub range_m: f64,
 }
@@ -691,12 +688,9 @@ impl Sim {
         Exposure {
             position: a.position,
             velocity: a.velocity,
-            attitude: a.attitude,
+            roll: a.attitude.to_euler().2,
             height_agl_m: a.height_agl_m,
             door: self.stores.door,
-            gear: a.gear,
-            flaps: a.flaps,
-            airbrake: a.airbrake,
             radar_on: self.sensors.radar_on,
             on_ground: a.on_ground,
         }
@@ -711,7 +705,6 @@ impl Sim {
     fn threat_info(&self) -> ThreatInfo {
         let x = self.exposure();
         let mut worst: Option<ThreatSite> = None;
-        let mut nearest: Option<(f64, f64)> = None;
         for (k, s) in self.radar.sites.iter().enumerate() {
             let t = &self.targets[s.target];
             if !t.is_intact() {
@@ -720,10 +713,6 @@ impl Sim {
             let c = t.center_ned();
             let at = DVec3::new(c[0], c[1], c[2]);
             let range_m = (at - x.position).length();
-            let stealth = x.stealth(at);
-            if nearest.is_none_or(|(d, _)| range_m < d) {
-                nearest = Some((range_m, stealth));
-            }
             let signal = x.signal(&s.spec, at);
             if signal <= 0.0 {
                 continue;
@@ -734,20 +723,15 @@ impl Sim {
                 name: t.name,
                 kind: s.spec.kind,
                 signal,
-                stealth,
                 alert: s.alert,
                 range_m,
             };
-            if worst.is_none_or(|w| site.signal - site.stealth > w.signal - w.stealth) {
+            if worst.is_none_or(|w| site.signal > w.signal) {
                 worst = Some(site);
             }
         }
-        let stealth = worst.map_or_else(
-            || nearest.map_or(1.0 - x.signature(x.position + DVec3::new(0.0, 1.0, 0.0)), |(_, s)| s),
-            |w| w.stealth,
-        );
         ThreatInfo {
-            stealth,
+            stealth: x.stealth(),
             worst,
             max_alert: self.radar.max_alert(),
             last_ping: self.radar.last_ping.map(|p| PingInfo {

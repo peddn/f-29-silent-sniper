@@ -684,7 +684,6 @@ fn signature_gauge_and_radar_circles() {
         name: "SAM SITE",
         kind: RadarKind::Doppler,
         signal,
-        stealth: 0.6,
         alert,
         range_m: 10_000.0,
     };

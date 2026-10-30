@@ -231,8 +231,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Schaden pro Treffer bei jedem Ziel, Kanonenkreuz am Aufschlagpunkt,
       Leuchtspur (v0.2.8)
 - [x] Entdeckungsmodell: SAM-Stellungen (Doppler) und Frühwarnradare (Impuls)
-      pingen je Antennenumlauf; Impuls gegen Stealth-Level (Lage zum Radar,
-      Schacht, Fahrwerk, Klappen, eigenes Radar); Alarmstufen 1–3 mit
+      pingen je Antennenumlauf; Impuls gegen Stealth-Level (wie im Original
+      ein Wert: Höhe über Grund, Querlage, Schacht, eigenes Radar – tief und
+      waagerecht fliegen); Alarmstufen 1–3 mit
       Abklingen, gemerkter Ping-Ort; SIG-Anzeige, Pieps, Reichweitenkreise
       (v0.2.9)
 - [ ] Boden-Luft-Raketen ab Stufe 3: SAM-Stellungen und Langstreckenraketen

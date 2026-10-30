@@ -1110,18 +1110,23 @@ Format jedes Eintrags:
   - **Pings:** Jede Stellung pingt einmal je Antennenumlauf (versetzt je
     Stellung). Nur dann wird gerechnet.
   - **Impulsstärke** am Flugzeug: fällt linear mit der Entfernung bis zur
-    Reichweitengrenze. Am Boden ist das Flugzeug für jedes Radar unsichtbar
+    Reichweitengrenze. Doppler: schwach, wenn das Flugzeug quer zur Stellung
+    fliegt (nur die Bewegung auf sie zu oder von ihr weg zählt). Impuls:
+    richtungsunabhängig. Am Boden ist das Flugzeug für jedes Radar unsichtbar
     (Bodenechos); feindliche Radare stehen mindestens 35 km von der
     Heimatbasis entfernt (nach dem ersten Spieltest v0.2.9: entdeckt beim
-    Anrollen). Doppler: schwach, wenn das Flugzeug quer zur Stellung
-    fliegt (nur die Bewegung auf sie zu oder von ihr weg zählt). Impuls:
-    richtungsunabhängig, im Tiefflug schwach (Bodenechos, glatt zwischen
-    50 und 400 m über Grund).
-  - **Stealth-Level** gegenüber dieser Stellung = 1 − Sichtbarkeit.
-    Sichtbarkeit aus der Blickrichtung des Radars auf das Flugzeug (Bug klein,
-    Flanke größer, Ober-/Unterseite am größten – die Querlage zeigt den Bauch)
-    plus Zuschläge: offener Schacht, Fahrwerk, Landeklappen, Luftbremse,
-    eigenes Radar (ein kleiner Verlust wie der offene Schacht).
+    Anrollen).
+  - **Stealth-Level** = 1 − eigene Sichtbarkeit, **ein Wert für alle
+    Radare** wie im Original (Umbau v0.2.9 nach dem zweiten Spieltest; die
+    erste Fassung rechnete je Radar aus der Blickrichtung auf Bug, Flanke oder
+    Bauch – die Querlage wirkte kaum, die Höhe gar nicht). Die Sichtbarkeit
+    setzt sich zusammen aus einem Grundwert, der **Höhe über Grund** (bis
+    100 m am unauffälligsten, darüber zunächst schnell, dann immer langsamer
+    steigend wie im Original), der **Querlage** (linear bis 90°, Rückenflug wie
+    waagerecht), dem offenen Schacht und dem eigenen Radar (ein kleiner Verlust
+    wie der offene Schacht). Nicklage, Fahrwerk und Klappen zählen nicht – das
+    Original kennt sie nicht. Am Boden 100 %. Kurz: tief und waagerecht
+    fliegen.
   - **Alarmstufe:** Ein Ping, dessen Impuls stärker ist als das Stealth-Level,
     hebt die Stufe der Stellung um eins: 1 „RADAR DETECTED“ (Stellung mit
     Reichweitenkreis auf der Karte), 2 „TRACKED“ (Ping-Ort gemerkt – Ziel
@@ -1138,13 +1143,13 @@ Format jedes Eintrags:
     Radarwarnempfängers (Treffer doppelt und höher), Reichweitenkreise und
     gemerkter Ping-Ort auf der Karte. Der Zustand geht in den Zustandshash ein.
 - **Unsere Werte:** Frühwarnradar 60 km, Umlauf 10 s; SAM 30 km, Umlauf 5 s.
-  Sichtbarkeit Bug 0,15, Flanke 0,30, Ober-/Unterseite 0,40; Zuschläge Schacht
-  0,15, eigenes Radar 0,15, Fahrwerk 0,10, Klappen und Luftbremse je 0,05.
-  Doppler im reinen Querflug 25 %, Impuls ganz unten 30 % der Stärke.
-  Beispiele: Unauffällig mit dem Bug voraus entdeckt eine SAM-Stellung das
-  Flugzeug erst unter etwa 4,5 km; im Querflug gar nicht. Ein Frühwarnradar
-  sieht die Flanke in 1500 m bis etwa 18 km, mit offenem Schacht bis etwa
-  27 km.
+  Sichtbarkeit: Grundwert 0,10; Höhe bis 0,40 (Arkustangens über
+  (Höhe − 100 m) / 1500 m: 1000 m ≈ 0,14, 3000 m ≈ 0,28); Querlage bis 0,30
+  bei 90°; Schacht 0,15; eigenes Radar 0,15. Doppler im reinen Querflug 25 %.
+  Beispiele: Tief, waagerecht und clean (Stealth 90 %) entdeckt eine
+  SAM-Stellung das Flugzeug erst unter 3 km, ein Frühwarnradar unter 6 km; in
+  3000 m (Stealth ≈ 62 %) unter etwa 11 bzw. 23 km; dort mit 90° Querlage
+  (≈ 32 %) unter etwa 20 bzw. 41 km.
 - **Status:** Entdeckung umgesetzt (v0.2.9); Raketen, Patrouillen und
   Störsender folgen.
 

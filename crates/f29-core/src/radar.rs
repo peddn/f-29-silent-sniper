@@ -14,14 +14,18 @@
 //! Ohne Treffer sinkt die Stufe nach [`DECAY_S`] um eins. Radare sehen durch
 //! das Gelände (keine Sichtlinie, Spielerentscheidung v0.2.8).
 //!
-//! Zwei Radartypen, die sich unterschiedlich überlisten lassen:
-//! - **Impulsradar** (Frühwarnung, große Reichweite): richtungsunabhängig, aber
-//!   im Tiefflug in den Bodenechos schwach.
+//! Das Stealth-Level ist wie im Original ein Wert für alle Radare: tief und
+//! waagerecht ist am unauffälligsten; Höhe über Grund, Querlage, offener
+//! Schacht und eigenes Radar kosten. Am Boden ist das Flugzeug unsichtbar.
+//!
+//! Zwei Radartypen unterscheiden sich im Impuls:
+//! - **Impulsradar** (Frühwarnung, große Reichweite): richtungsunabhängig.
 //! - **Dopplerradar** (SAM-Stellung): sieht Bewegung auf sich zu oder von sich
 //!   weg; wer quer zu ihm fliegt, ist schwer zu sehen.
 
 use crate::TICK_HZ;
-use crate::math::{DQuat, DVec3};
+use crate::detmath;
+use crate::math::DVec3;
 use crate::targets::{Target, TargetClass};
 
 /// Ohne Treffer sinkt die Alarmstufe nach so vielen Sekunden um eins.
@@ -73,24 +77,22 @@ pub fn spec_for(class: TargetClass) -> Option<RadarSpec> {
     }
 }
 
-/// Höhe über Grund, ab der das Impulsradar ungestört sieht (m), und Faktor
-/// ganz unten (Bodenechos).
-const CLUTTER_CLEAR_M: f64 = 400.0;
-const CLUTTER_LOW_M: f64 = 50.0;
-const CLUTTER_FLOOR: f64 = 0.3;
 /// Dopplerradar im reinen Querflug.
 const BEAM_FLOOR: f64 = 0.25;
 
-/// Sichtbarkeit nach Blickrichtung des Radars auf das Flugzeug: Bug, Flanke,
-/// Ober-/Unterseite (eigene Werte; die Querlage zeigt dem Radar den Bauch).
-const SIG_NOSE: f64 = 0.15;
-const SIG_SIDE: f64 = 0.30;
-const SIG_BELLY: f64 = 0.40;
-/// Zuschläge, jeweils voll ausgefahren bzw. eingeschaltet.
+/// Sichtbarkeit, die immer bleibt (tief, waagerecht, alles zu).
+pub const SIG_BASE: f64 = 0.10;
+/// Höhe über Grund: bis hier am unauffälligsten (m), darüber steigt die
+/// Sichtbarkeit wie im Original zunächst schnell, dann immer langsamer
+/// (Arkustangens) bis höchstens [`SIG_ALTITUDE`].
+pub const LOW_LEVEL_M: f64 = 100.0;
+const ALTITUDE_SCALE_M: f64 = 1_500.0;
+pub const SIG_ALTITUDE: f64 = 0.40;
+/// Querlage: linear bis 90° (dann zeigt das Flugzeug seine ganze Draufsicht);
+/// darüber wieder fallend (Rückenflug wie waagerecht).
+pub const SIG_BANK: f64 = 0.30;
+/// Offener Schacht.
 pub const SIG_BAY: f64 = 0.15;
-pub const SIG_GEAR: f64 = 0.10;
-pub const SIG_FLAPS: f64 = 0.05;
-pub const SIG_AIRBRAKE: f64 = 0.05;
 /// Eigenes Radar an: ein kleiner Verlust wie der offene Schacht
 /// (Spielerentscheidung v0.2.8).
 pub const SIG_RADAR: f64 = 0.15;
@@ -100,13 +102,11 @@ pub const SIG_RADAR: f64 = 0.15;
 pub struct Exposure {
     pub position: DVec3,
     pub velocity: DVec3,
-    pub attitude: DQuat,
+    /// Querlage (rad).
+    pub roll: f64,
     pub height_agl_m: f64,
-    /// Schachtklappen, Fahrwerk, Landeklappen, Luftbremse 0..1.
+    /// Schachtklappen 0..1.
     pub door: f64,
-    pub gear: f64,
-    pub flaps: f64,
-    pub airbrake: f64,
     /// Eigenes Radar eingeschaltet.
     pub radar_on: bool,
     /// Am Boden: in den Bodenechos verborgen, für jedes Radar unsichtbar.
@@ -114,25 +114,30 @@ pub struct Exposure {
 }
 
 impl Exposure {
-    /// Sichtbarkeit 0..1 gegenüber einem Radar bei `site` (NED): Grundwert
-    /// aus der Blickrichtung plus Zuschläge.
-    pub fn signature(&self, site: DVec3) -> f64 {
-        let d = self.attitude.inverse_rotate(site - self.position).normalize_or_zero();
-        let aspect = SIG_NOSE * d.x * d.x + SIG_SIDE * d.y * d.y + SIG_BELLY * d.z * d.z;
-        let extra = SIG_BAY * self.door.clamp(0.0, 1.0)
-            + SIG_GEAR * self.gear.clamp(0.0, 1.0)
-            + SIG_FLAPS * self.flaps.clamp(0.0, 1.0)
-            + SIG_AIRBRAKE * self.airbrake.clamp(0.0, 1.0)
-            + if self.radar_on { SIG_RADAR } else { 0.0 };
-        (aspect + extra).clamp(0.0, 1.0)
+    /// Eigene Sichtbarkeit 0..1 – ein Wert für alle Radare (wie im
+    /// Original): Grundwert, Höhe über Grund, Querlage, offener Schacht,
+    /// eigenes Radar. Am Boden 0.
+    pub fn signature(&self) -> f64 {
+        if self.on_ground {
+            return 0.0;
+        }
+        let above = (self.height_agl_m - LOW_LEVEL_M).max(0.0);
+        let altitude = SIG_ALTITUDE * detmath::atan(above / ALTITUDE_SCALE_M) / std::f64::consts::FRAC_PI_2;
+        let bank = detmath::wrap_pi(self.roll).abs();
+        let bank = if bank > std::f64::consts::FRAC_PI_2 { std::f64::consts::PI - bank } else { bank };
+        let bank = SIG_BANK * bank / std::f64::consts::FRAC_PI_2;
+        let extra = SIG_BAY * self.door.clamp(0.0, 1.0) + if self.radar_on { SIG_RADAR } else { 0.0 };
+        (SIG_BASE + altitude + bank + extra).clamp(0.0, 1.0)
     }
 
-    /// Stealth-Level gegenüber einem Radar bei `site`: 1 − Sichtbarkeit.
-    pub fn stealth(&self, site: DVec3) -> f64 {
-        1.0 - self.signature(site)
+    /// Stealth-Level: 1 − Sichtbarkeit.
+    pub fn stealth(&self) -> f64 {
+        1.0 - self.signature()
     }
 
-    /// Stärke des Impulses eines Radars `spec` bei `site` am Flugzeug, 0..1.
+    /// Stärke des Impulses eines Radars `spec` bei `site` am Flugzeug, 0..1:
+    /// linear mit der Entfernung fallend; das Dopplerradar sieht nur die
+    /// Bewegung auf sich zu oder von sich weg.
     pub fn signal(&self, spec: &RadarSpec, site: DVec3) -> f64 {
         let to = self.position - site;
         let r = to.length() / spec.range_m;
@@ -141,13 +146,8 @@ impl Exposure {
         }
         let base = 1.0 - r;
         let factor = match spec.kind {
-            RadarKind::Pulse => {
-                let k =
-                    ((self.height_agl_m - CLUTTER_LOW_M) / (CLUTTER_CLEAR_M - CLUTTER_LOW_M)).clamp(0.0, 1.0);
-                CLUTTER_FLOOR + (1.0 - CLUTTER_FLOOR) * k * k * (3.0 - 2.0 * k)
-            }
+            RadarKind::Pulse => 1.0,
             RadarKind::Doppler => {
-                // Anteil der Bewegung auf das Radar zu oder von ihm weg.
                 let v = self.velocity;
                 let radial = if v.length() > 1.0 {
                     (v.dot(to) / (v.length() * to.length().max(1.0))).abs()
@@ -274,7 +274,7 @@ impl RadarNet {
             if signal <= 0.0 {
                 continue;
             }
-            let stealth = x.stealth(at);
+            let stealth = x.stealth();
             let hit = signal > stealth;
             self.last_ping = Some(Ping { tick, site: k, signal, stealth, hit });
             if hit {
@@ -319,18 +319,16 @@ impl RadarNet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::math::DQuat;
 
     fn level(north: f64, heading: f64) -> Exposure {
         let attitude = DQuat::from_euler(heading, 0.0, 0.0);
         Exposure {
             position: DVec3::new(north, 0.0, -1_000.0),
             velocity: attitude.rotate(DVec3::new(200.0, 0.0, 0.0)),
-            attitude,
+            roll: 0.0,
             height_agl_m: 1_000.0,
             door: 0.0,
-            gear: 0.0,
-            flaps: 0.0,
-            airbrake: 0.0,
             radar_on: false,
             on_ground: false,
         }
@@ -350,36 +348,35 @@ mod tests {
     }
 
     #[test]
-    fn doppler_is_weak_across_and_pulse_is_weak_down_low() {
+    fn doppler_is_weak_across_and_pulse_does_not_care() {
         // 10 km südlich, Kurs Nord (auf das Radar zu) bzw. Ost (quer)
         let toward = level(-10_000.0, 0.0).signal(&SAM, SITE);
         let across = level(-10_000.0, std::f64::consts::FRAC_PI_2).signal(&SAM, SITE);
         assert!(across < toward * 0.4, "{across} vs {toward}");
-        // Impuls: Kurs egal, Tiefflug schwach
         let p_toward = level(-10_000.0, 0.0).signal(&EARLY_WARNING, SITE);
         let p_across = level(-10_000.0, std::f64::consts::FRAC_PI_2).signal(&EARLY_WARNING, SITE);
         assert!((p_toward - p_across).abs() < 1e-9);
-        let mut low = level(-10_000.0, 0.0);
-        low.height_agl_m = 40.0;
-        assert!(low.signal(&EARLY_WARNING, SITE) < p_toward * 0.35);
     }
 
+    /// Tief und waagerecht ist am unauffälligsten; Höhe, Querlage, Schacht und
+    /// Radar kosten; am Boden 100 %.
     #[test]
-    fn stealth_depends_on_aspect_and_configuration() {
-        let nose = level(-10_000.0, 0.0).stealth(SITE);
-        let side = level(-10_000.0, std::f64::consts::FRAC_PI_2).stealth(SITE);
-        assert!(nose > side, "Bug zum Radar ist am unauffälligsten");
+    fn stealth_is_low_and_level() {
         let base = level(-10_000.0, 0.0);
-        for (name, x) in [
-            ("bay", Exposure { door: 1.0, ..base }),
-            ("gear", Exposure { gear: 1.0, ..base }),
-            ("radar", Exposure { radar_on: true, ..base }),
-        ] {
-            assert!(x.stealth(SITE) < nose - 0.04, "{name}");
-        }
-        // Radar an kostet höchstens so viel wie der offene Schacht.
-        assert!(
-            Exposure { radar_on: true, ..base }.stealth(SITE) >= Exposure { door: 1.0, ..base }.stealth(SITE)
-        );
+        let low = Exposure { height_agl_m: 50.0, ..base };
+        assert!((low.stealth() - (1.0 - SIG_BASE)).abs() < 1e-9, "tief: {}", low.stealth());
+        let mid = base.stealth();
+        let high = Exposure { height_agl_m: 3_000.0, ..base }.stealth();
+        assert!(low.stealth() > mid && mid > high, "{} {mid} {high}", low.stealth());
+        // Querlage: 90° kostet die volle Zulage, Rückenflug wie waagerecht.
+        let knife = Exposure { roll: std::f64::consts::FRAC_PI_2, ..low };
+        let inverted = Exposure { roll: std::f64::consts::PI, ..low };
+        assert!((low.stealth() - knife.stealth() - SIG_BANK).abs() < 1e-9);
+        assert!((inverted.stealth() - low.stealth()).abs() < 1e-9);
+        let bay = Exposure { door: 1.0, ..low };
+        let radar = Exposure { radar_on: true, ..low };
+        assert!((low.stealth() - bay.stealth() - SIG_BAY).abs() < 1e-9);
+        assert!((low.stealth() - radar.stealth() - SIG_RADAR).abs() < 1e-9);
+        assert_eq!(Exposure { on_ground: true, door: 1.0, ..base }.stealth(), 1.0);
     }
 }

@@ -559,13 +559,11 @@ pub(crate) fn target_symbol(dl: &mut DisplayList, p: [f32; 2], s: f32, class: Ta
 }
 
 /// Stealth-Anzeige zwischen den MFDs (M-020): ein Balken für das eigene
-/// Stealth-Level. Trifft ein Ping ein, erscheint für eine Sekunde ein
-/// Querstrich in seiner Stärke: liegt er über dem Balken (rot), war es ein
-/// Treffer und die Alarmstufe dieses Radars steigt um eins. Solange der
-/// Strich steht, zeigt der Balken das Stealth-Level gegenüber genau diesem
-/// Radar, sonst gegenüber dem gefährlichsten in Reichweite. Darüber drei
-/// Lampen für die höchste Alarmstufe, unten der Radartyp (PLS Impuls, DOP
-/// Doppler).
+/// Stealth-Level (ein Wert für alle Radare). Trifft ein Ping ein, erscheint
+/// für eine Sekunde ein Querstrich in seiner Stärke: liegt er über dem Balken
+/// (rot), war es ein Treffer und die Alarmstufe dieses Radars steigt um eins.
+/// Darüber drei Lampen für die höchste Alarmstufe, unten der Radartyp (PLS
+/// Impuls, DOP Doppler).
 fn signature(dl: &mut DisplayList, fd: &FlightData, r: Rect) {
     let w = r.max[0] - r.min[0];
     let txt = w * 0.32;
