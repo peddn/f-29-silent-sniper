@@ -29,15 +29,14 @@
 
 use crate::TICK_HZ;
 use crate::detmath;
+use crate::events::EventLog;
 use crate::math::DVec3;
-use crate::targets::{Target, TargetClass};
+use crate::targets::Target;
 
 /// Ohne Treffer sinkt die Alarmstufe nach so vielen Sekunden um eins.
 pub const DECAY_S: f64 = 30.0;
 /// Höchste Alarmstufe.
 pub const MAX_ALERT: u8 = 3;
-/// Einträge im Ereignisprotokoll.
-const EVENT_LOG: usize = 16;
 
 /// Art des Radars.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,16 +72,6 @@ pub const EARLY_WARNING: RadarSpec = RadarSpec { kind: RadarKind::Pulse, range_m
 pub const SAM: RadarSpec = RadarSpec { kind: RadarKind::Doppler, range_m: 30_000.0, sweep_s: 5.0 };
 /// Radar der Kurzstrecken-Flugabwehr: kurz, sehr schneller Umlauf.
 pub const SHORAD: RadarSpec = RadarSpec { kind: RadarKind::Doppler, range_m: 12_000.0, sweep_s: 2.5 };
-
-/// Radar einer Zielklasse, falls sie eines hat.
-pub fn spec_for(class: TargetClass) -> Option<RadarSpec> {
-    match class {
-        TargetClass::EarlyWarning => Some(EARLY_WARNING),
-        TargetClass::AirDefense => Some(SAM),
-        TargetClass::ShortRangeSam => Some(SHORAD),
-        _ => None,
-    }
-}
 
 /// Dopplerradar im reinen Querflug.
 const BEAM_FLOOR: f64 = 0.25;
@@ -229,7 +218,7 @@ pub enum RadarEvent {
 pub struct RadarNet {
     pub sites: Vec<RadarSite>,
     pub last_ping: Option<Ping>,
-    pub events: Vec<(u64, RadarEvent)>,
+    pub events: EventLog<RadarEvent>,
 }
 
 impl RadarNet {
@@ -239,7 +228,7 @@ impl RadarNet {
             .iter()
             .enumerate()
             .filter_map(|(i, t)| {
-                let spec = spec_for(t.class)?;
+                let (spec, _) = t.class.air_defense()?;
                 let mut s = RadarSite {
                     target: i,
                     spec,
@@ -253,7 +242,7 @@ impl RadarNet {
                 Some(s)
             })
             .collect();
-        Self { sites, last_ping: None, events: Vec::new() }
+        Self { sites, last_ping: None, events: EventLog::default() }
     }
 
     /// Ein Tick: Antennenumläufe, Pings, Alarmstufen. `exposure` ist `None`,
@@ -281,7 +270,7 @@ impl RadarNet {
                     s.ping_point = None;
                 }
                 if s.alert == 0 {
-                    self.log(tick, RadarEvent::Lost { site: k });
+                    self.events.push(tick, RadarEvent::Lost { site: k });
                 }
             }
             let Some(x) = exposure else {
@@ -310,15 +299,15 @@ impl RadarNet {
                     if level >= 2 {
                         s.ping_point = Some(x.position);
                     }
-                    self.log(tick, RadarEvent::Alert { site: k, level });
+                    self.events.push(tick, RadarEvent::Alert { site: k, level });
                     // Schon mit „RADAR ID“ starten (Spielerentscheidung
                     // v0.2.9; im Original erst bei der nächsten Bewertung).
                     if level == MAX_ALERT {
-                        self.log(tick, RadarEvent::Fire { site: k });
+                        self.events.push(tick, RadarEvent::Fire { site: k });
                     }
                 } else {
                     s.ping_point = Some(x.position);
-                    self.log(tick, RadarEvent::Fire { site: k });
+                    self.events.push(tick, RadarEvent::Fire { site: k });
                 }
             }
         }
@@ -336,13 +325,6 @@ impl RadarNet {
             .filter(|s| s.ping_point.is_some())
             .max_by_key(|s| s.last_change_tick)
             .and_then(|s| s.ping_point)
-    }
-
-    fn log(&mut self, tick: u64, e: RadarEvent) {
-        if self.events.len() >= EVENT_LOG {
-            self.events.remove(0);
-        }
-        self.events.push((tick, e));
     }
 }
 

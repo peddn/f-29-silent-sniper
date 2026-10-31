@@ -2,20 +2,15 @@
 //! Verfolgung mit gewürfelter Wirkung, Selbstsuche, vorausberechnete
 //! Abschusszonen, Laserbombe mit Dauerbeleuchtung.
 
+mod common;
+use common::*;
+
 use f29_core::controls::{flags, weapon_flags};
 use f29_core::sensors::LookDir;
 use f29_core::sim::Spawn;
 use f29_core::targets::TargetClass;
 use f29_core::weapons::{self, ImpactResult, LaunchZone, Loadout, WeaponEvent, WeaponKind};
-use f29_core::{ControlFrame, Sim, SimConfig, TICK_HZ};
-
-fn ticks(s: f64) -> usize {
-    (s * f64::from(TICK_HZ)) as usize
-}
-
-fn step(sim: &mut Sim, f: u8, w: u16) {
-    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, f).with_weapons(w));
-}
+use f29_core::{ControlFrame, Sim};
 
 /// Flug auf das erste Ziel der Klasse zu, `dist` m davor, 1500 m darüber;
 /// Radar an und auf dieses Ziel weitergeschaltet. `None`, wenn das Ziel nicht
@@ -32,22 +27,14 @@ fn lined_up_at(
     height: f64,
     loadout: Loadout,
 ) -> Option<(Sim, usize)> {
-    let probe = Sim::new(SimConfig::new(seed));
-    let (i, t) = probe.targets().iter().enumerate().find(|(_, t)| t.class == class)?;
-    let mut sim = Sim::new(SimConfig {
+    let (mut sim, i) = approach(
         seed,
-        spawn: Spawn {
-            north: t.north - dist,
-            east: t.east,
-            altitude: t.elevation + height,
-            min_clearance: 150.0,
-            heading: 0.0,
-            speed: 200.0,
-            throttle: 0.7,
-            loadout,
-            ..Spawn::default()
-        },
-    });
+        class,
+        dist,
+        0.0,
+        height,
+        Spawn { min_clearance: 150.0, loadout, ..Spawn::default() },
+    )?;
     // Startwahl ist die Kanone: weiter zu Schacht 1.
     step(&mut sim, flags::RADAR_TOGGLE, weapon_flags::NEXT_BAY);
     step(&mut sim, ControlFrame::look_flags(LookDir::Right.code()), 0);
@@ -76,7 +63,7 @@ fn shoot(sim: &mut Sim) -> Vec<WeaponEvent> {
             break;
         }
     }
-    sim.weapon_events().iter().filter(|(t, _)| *t > t0).map(|(_, e)| *e).collect()
+    events_since(sim, t0)
 }
 
 fn impact(events: &[WeaponEvent]) -> Option<ImpactResult> {
@@ -206,11 +193,7 @@ fn laser_run(seed: u64, mut after: impl FnMut(&mut Sim, u64)) -> Option<(Sim, us
     let (mut sim, target) = lined_up_at(seed, TargetClass::Soft, 6_000.0, 900.0, lgb())?;
     // Ohne Flugabwehr: Ein Treffer könnte die Optik und damit den Laser
     // ausschalten – das prüfen diese Tests nicht.
-    for i in 0..sim.targets().len() {
-        if sim.targets()[i].class.is_radar() {
-            sim.destroy_target(i);
-        }
-    }
+    no_air_defense(&mut sim);
     step(&mut sim, 0, weapon_flags::BAY_DOORS);
     for _ in 0..ticks(30.0) {
         if sim.stores().door_open() && sim.flight_data().target.and_then(|t| t.zone) == Some(LaunchZone::Good)
@@ -223,7 +206,7 @@ fn laser_run(seed: u64, mut after: impl FnMut(&mut Sim, u64)) -> Option<(Sim, us
                     break;
                 }
             }
-            let events = sim.weapon_events().iter().filter(|(t, _)| *t > t0).map(|(_, e)| *e).collect();
+            let events = events_since(&sim, t0);
             return Some((sim, target, events));
         }
         step(&mut sim, 0, 0);

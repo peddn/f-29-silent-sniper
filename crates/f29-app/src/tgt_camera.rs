@@ -15,7 +15,7 @@
 use crate::HUD_LAYER;
 use crate::mfd::MfdView;
 use crate::sim::{SimState, SimSystems};
-use crate::view::{WorldOrigin, layout_for, sky_color};
+use crate::view::{WorldOrigin, layout_for, place, rotation, sky_color};
 use bevy::camera::RenderTarget;
 use bevy::camera::visibility::RenderLayers;
 use bevy::core_pipeline::fullscreen_material::{FullscreenMaterial, FullscreenMaterialPlugin};
@@ -27,7 +27,6 @@ use bevy::render::{RenderApp, extract_component::ExtractComponent, render_resour
 use bevy::shader::ShaderRef;
 use bevy::window::PrimaryWindow;
 use f29_hud::{RightPage, target_image_rect};
-use f29_render::coords;
 
 /// Bildzeilen der Kameratextur (bewusst grob, wie ein frühes TV-Bild).
 const LINES_PX: u32 = 144;
@@ -162,19 +161,18 @@ fn update(
     let shot = match view.0.right_page {
         RightPage::Target => fd.target.filter(|t| t.optical && on).map(|t| {
             let pose = state.render_pose();
-            let [x, y, z, w] = coords::quat_ned_to_yup(pose.attitude);
-            let rot = Quat::from_xyzw(x as f32, y as f32, z as f32, w as f32).normalize();
+            let rot = rotation(pose.attitude);
             let tgt = &state.sim.targets()[t.index];
             let [n, e, d] = tgt.center_ned();
-            let aim = Vec3::from_array(coords::relative_yup(f29_core::DVec3::new(n, e, d), origin.0));
+            let aim = place(f29_core::DVec3::new(n, e, d), origin.0);
             let eye = rot * MOUNT;
             let half = (tgt.class.radius() / TARGET_FILL).atan2((aim - eye).length().max(1.0) as f64) as f32;
             let optical = state.sim.sensors().optical_range().max(1.0);
             (eye, aim, half, NEAR_M, 0.6 + 0.8 * (t.range / optical) as f32)
         }),
         RightPage::WeaponCam => fd.weapon_cam.filter(|_| on).map(|c| {
-            let eye = Vec3::from_array(coords::relative_yup(c.position, origin.0));
-            let aim = Vec3::from_array(coords::relative_yup(c.position + c.look * 100.0, origin.0));
+            let eye = place(c.position, origin.0);
+            let aim = place(c.position + c.look * 100.0, origin.0);
             (eye, aim, WPN_FOV_RAD * 0.5, WPN_NEAR_M, 0.7)
         }),
         _ => None,

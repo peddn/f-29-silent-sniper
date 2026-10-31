@@ -4,11 +4,11 @@
 //! sowie die Rauchspur feindlicher Raketen und die Täuschkörper (M-021).
 
 use crate::sim::{SimState, SimSystems};
-use crate::view::WorldOrigin;
+use crate::view::{WorldOrigin, place, rotation};
 use bevy::prelude::*;
 use f29_core::DVec3;
 use f29_core::weapons::{DECOY_LIFE_S, DecoyKind, WeaponEvent, WeaponKind};
-use f29_render::{coords, palette};
+use f29_render::palette;
 use std::collections::BTreeMap;
 
 pub struct WeaponsPlugin;
@@ -167,7 +167,7 @@ fn sync_tracers(
         match rounds.get(k) {
             // Erst ein Stück vor dem Flugzeug sichtbar.
             Some(r) if r.age_s >= TRACER_DELAY_S => {
-                let dir = Vec3::from_array(coords::relative_yup(r.position + r.velocity, r.position));
+                let dir = place(r.position + r.velocity, r.position);
                 // Die Spur liegt hinter der Patrone.
                 let at = place(r.position, origin.0) - dir.normalize_or_zero() * (TRACER_LENGTH_M * 0.5);
                 // In der Ferne dicker, damit sie im Retro-Raster sichtbar bleibt.
@@ -222,7 +222,7 @@ fn spawn_puffs(mut commands: Commands, state: Res<SimState>, mut visuals: ResMut
         ));
     }
     // Täuschkörper: Düppel als helle Wolke, Fackel als glühender Punkt
-    let decoys = &state.sim.stores().decoys;
+    let decoys = &state.sim.stores().countermeasures.decoys;
     visuals.decoys_seen.retain(|id| decoys.iter().any(|d| d.id == *id));
     for d in decoys {
         if visuals.decoys_seen.contains(&d.id) {
@@ -265,15 +265,6 @@ fn animate_puffs(
         t.translation = at + Vec3::Y * radius * 0.4;
         t.scale = Vec3::splat(radius);
     }
-}
-
-fn place(at: DVec3, origin: DVec3) -> Vec3 {
-    Vec3::from_array(coords::relative_yup(at, origin))
-}
-
-fn rotation(q: f29_core::DQuat) -> Quat {
-    let [x, y, z, w] = coords::quat_ned_to_yup(q);
-    Quat::from_xyzw(x as f32, y as f32, z as f32, w as f32).normalize()
 }
 
 /// Entitäten zu den Waffen im Flug anlegen, bewegen und entfernen.

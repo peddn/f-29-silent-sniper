@@ -1,15 +1,12 @@
 //! Flugtests: fliegen das Modell headless und prüfen Verhalten statt Formeln.
 
+mod common;
+use common::*;
+
 use f29_core::autopilot::Autopilot;
 use f29_core::controls::flags;
 use f29_core::sim::Spawn;
-use f29_core::{ControlFrame, DT, Sim, SimConfig, Status, TICK_HZ};
-
-const SEED: u64 = 0x0F29;
-
-fn ticks(seconds: f64) -> u64 {
-    (seconds * f64::from(TICK_HZ)).round() as u64
-}
+use f29_core::{ControlFrame, DT, Sim, SimConfig, Status};
 
 /// Spawn hoch über allem Gelände, damit Manöver nicht in Bergen enden.
 fn high_sim(altitude: f64, speed: f64, throttle: f64) -> Sim {
@@ -21,8 +18,8 @@ fn high_sim(altitude: f64, speed: f64, throttle: f64) -> Sim {
 
 /// Halbe Rolle auf den Rücken, dann ziehen, bis die Nase steil nach unten zeigt.
 fn enter_steep_dive(sim: &mut Sim) {
-    fly(sim, 1.2, ControlFrame::from_analog(0.0, 1.0, 0.0, 1.0, 0));
-    fly(sim, 3.0, ControlFrame::from_analog(1.0, 0.0, 0.0, 1.0, 0));
+    fly_with(sim, 1.2, ControlFrame::from_analog(0.0, 1.0, 0.0, 1.0, 0));
+    fly_with(sim, 3.0, ControlFrame::from_analog(1.0, 0.0, 0.0, 1.0, 0));
     assert!(sim.flight_data().pitch < -0.4, "kein Sturzflug: θ = {}", sim.flight_data().pitch);
 }
 
@@ -35,7 +32,7 @@ fn banked(sim: &Sim, bank: f64, pull: f64, throttle: f64, flags: u8) -> ControlF
     ControlFrame::from_analog(pull, roll, 0.0, throttle, flags)
 }
 
-fn fly(sim: &mut Sim, seconds: f64, c: ControlFrame) {
+fn fly_with(sim: &mut Sim, seconds: f64, c: ControlFrame) {
     for _ in 0..ticks(seconds) {
         sim.step(c);
         assert!(sim.aircraft().is_finite(), "Zustand nicht endlich bei Tick {}", sim.tick());
@@ -86,7 +83,7 @@ fn neutral_stick_holds_flight_path() {
     // Fly-by-Wire mit Bahnhaltung: Knüppel los ⇒ Flugbahn bleibt annähernd gerade.
     let mut sim = high_sim(5_000.0, 220.0, 0.6);
     let start = sim.flight_data();
-    fly(&mut sim, 30.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.6, 0));
+    fly_with(&mut sim, 30.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.6, 0));
     let end = sim.flight_data();
     assert_eq!(sim.status(), Status::Flying);
     let dh = (end.altitude_m - start.altitude_m).abs();
@@ -97,7 +94,7 @@ fn neutral_stick_holds_flight_path() {
 #[test]
 fn full_roll_input_reaches_expected_rate() {
     let mut sim = high_sim(5_000.0, 220.0, 0.6);
-    fly(&mut sim, 0.5, ControlFrame::from_analog(0.0, 1.0, 0.0, 0.6, 0));
+    fly_with(&mut sim, 0.5, ControlFrame::from_analog(0.0, 1.0, 0.0, 0.6, 0));
     let roll = sim.flight_data().roll;
     // ~2,6 rad/s mit 0,18 s Verzögerung ⇒ nach 0,5 s etwa 0,85 rad
     assert!((0.6..1.2).contains(&roll), "Querlage nach 0,5 s: {roll:.3} rad");
@@ -266,7 +263,7 @@ fn full_throttle_climbs_and_idle_descends() {
     let mut glide = high_sim(5_000.0, 200.0, 0.0);
     let h0 = glide.flight_data().altitude_m;
     let v0 = glide.flight_data().tas_mps;
-    fly(&mut glide, 20.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.0, 0));
+    fly_with(&mut glide, 20.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.0, 0));
     let fd = glide.flight_data();
     // Ohne Schub verliert das Flugzeug Energie: Höhe oder Fahrt (oder beides).
     let e0 = 9.81 * h0 + 0.5 * v0 * v0;
@@ -305,8 +302,8 @@ fn top_speed_is_subsonic_at_sea_level() {
 fn airbrake_decelerates() {
     let mut a = high_sim(5_000.0, 230.0, 0.3);
     let mut b = high_sim(5_000.0, 230.0, 0.3);
-    fly(&mut a, 10.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.3, 0));
-    fly(&mut b, 10.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.3, flags::AIRBRAKE));
+    fly_with(&mut a, 10.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.3, 0));
+    fly_with(&mut b, 10.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.3, flags::AIRBRAKE));
     assert!(b.flight_data().tas_mps < a.flight_data().tas_mps - 15.0);
     assert!((b.aircraft().airbrake - 1.0).abs() < 1e-9);
 }
@@ -357,7 +354,7 @@ fn throttle_changes_speed_noticeably() {
     // 10 s Vollgas gegen 10 s Leerlauf aus demselben Reiseflug.
     let run = |thr: f64| {
         let mut sim = high_sim(3_000.0, 200.0, 0.55);
-        fly(&mut sim, 10.0, ControlFrame::from_analog(0.0, 0.0, 0.0, thr, 0));
+        fly_with(&mut sim, 10.0, ControlFrame::from_analog(0.0, 0.0, 0.0, thr, 0));
         sim.flight_data().tas_mps
     };
     let (full, idle) = (run(1.0), run(0.0));
@@ -398,7 +395,7 @@ fn flaps_lower_stall_speed_and_work_at_any_speed() {
     let alpha_at = |with_flaps: bool| {
         let mut sim = high_sim(2_000.0, 95.0, 0.8);
         let f = if with_flaps { flags::FLAPS } else { 0 };
-        fly(&mut sim, 6.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, f));
+        fly_with(&mut sim, 6.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, f));
         (sim.flight_data().alpha, sim.flight_data().flaps)
     };
     let (alpha_clean, _) = alpha_at(false);
@@ -408,6 +405,6 @@ fn flaps_lower_stall_speed_and_work_at_any_speed() {
 
     // Auch schnell fahren sie aus (Manöverklappen).
     let mut fast = high_sim(2_000.0, 220.0, 0.8);
-    fly(&mut fast, 4.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, flags::FLAPS));
+    fly_with(&mut fast, 4.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, flags::FLAPS));
     assert!(fast.flight_data().flaps > 0.99, "Klappen bei 220 m/s nicht ausgefahren");
 }

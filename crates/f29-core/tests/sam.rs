@@ -1,14 +1,15 @@
 //! Feindliche Boden-Luft-Raketen (M-021): Start nach „Radar ID“, Lenkung auf
 //! das Flugzeug, Treffer mit Folgen nur über die Bordsysteme.
 
+mod common;
+use common::*;
+
 use f29_core::controls::weapon_flags;
 use f29_core::sim::Spawn;
 use f29_core::systems::System;
 use f29_core::targets::TargetClass;
 use f29_core::weapons::{WeaponEvent, WeaponKind};
 use f29_core::{ControlFrame, Sim, SimConfig, TICK_HZ};
-
-const SEED: u64 = 0x0F29;
 
 /// Luftstart `dist` m südlich der ersten Stellung der Klasse, Kurs Nord auf
 /// sie zu, `height` m darüber, Schacht offen (gut sichtbar).
@@ -19,33 +20,17 @@ fn toward_site(class: TargetClass, dist: f64, height: f64) -> (Sim, usize) {
 /// Wie [`toward_site`]; `visible` schaltet das Stealth-Level ab (jeder Ping
 /// trifft).
 fn toward_site_with(class: TargetClass, dist: f64, height: f64, visible: bool) -> (Sim, usize) {
-    let probe = Sim::new(SimConfig::new(SEED));
-    let (i, t) = probe.targets().iter().enumerate().find(|(_, t)| t.class == class).expect("Stellung");
-    let mut sim = Sim::new(SimConfig {
-        seed: SEED,
-        spawn: Spawn {
-            north: t.north - dist,
-            east: t.east,
-            altitude: t.elevation + height,
-            min_clearance: 300.0,
-            heading: 0.0,
-            speed: 200.0,
-            throttle: 0.7,
-            visible,
-            ..Spawn::default()
-        },
-    });
-    sim.step(
-        ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0)
-            .with_weapons(weapon_flags::NEXT_BAY | weapon_flags::BAY_DOORS),
-    );
+    let (mut sim, i) =
+        approach(SEED, class, dist, 0.0, height, Spawn { min_clearance: 300.0, visible, ..Spawn::default() })
+            .expect("Stellung");
+    step(&mut sim, 0, weapon_flags::NEXT_BAY | weapon_flags::BAY_DOORS);
     (sim, i)
 }
 
 /// Fliegt geradeaus, bis `done` oder `seconds` vorbei sind.
 fn fly_until(sim: &mut Sim, seconds: f64, mut done: impl FnMut(&Sim) -> bool) -> bool {
-    for _ in 0..(seconds * f64::from(TICK_HZ)) as usize {
-        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0));
+    for _ in 0..ticks(seconds) {
+        step(sim, 0, 0);
         if done(sim) {
             return true;
         }
@@ -70,7 +55,7 @@ fn sam_site_fires_after_radar_id() {
     assert_eq!(sim.radar().sites.iter().find(|s| s.target == site).unwrap().alert, 3);
     let hostile: Vec<_> = sim.weapons_in_flight().iter().filter(|w| w.owner.is_some()).collect();
     assert_eq!(hostile.len(), 1, "eine Rakete je Stellung");
-    fly_until(&mut sim, 1.0, |_| false);
+    fly(&mut sim, 1.0, 0, 0);
     let fd = sim.flight_data();
     assert!(fd.warnings.missile);
     assert!(fd.munitions.iter().any(|m| m.hostile && m.missile));
@@ -117,7 +102,7 @@ fn early_warning_radar_fires_long_range_missile() {
 fn sam_engagement_is_deterministic() {
     let run = || {
         let (mut sim, _) = toward_site(TargetClass::AirDefense, 7_000.0, 800.0);
-        fly_until(&mut sim, 40.0, |_| false);
+        fly(&mut sim, 40.0, 0, 0);
         sim.state_hash()
     };
     assert_eq!(run(), run());
@@ -128,8 +113,7 @@ fn sam_engagement_is_deterministic() {
 /// dem Start harte Kurve auf die Rakete zu.
 #[test]
 fn turning_into_the_missile_does_not_help() {
-    let probe = Sim::new(SimConfig::new(SEED));
-    let t = probe.targets().iter().find(|t| t.class == TargetClass::AirDefense).expect("Stellung").clone();
+    let (_, t) = first_of(SEED, TargetClass::AirDefense).expect("Stellung");
     let mut sim = Sim::new(SimConfig {
         seed: SEED,
         spawn: Spawn {
@@ -216,13 +200,13 @@ fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) 
             .any(|w| (w.position - sim.aircraft().position).length() < at_m);
         let w = if near && !thrown { decoy } else { 0 };
         thrown |= w != 0;
-        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(w));
+        step(&mut sim, 0, w);
         if thrown && sim.weapons_in_flight().iter().all(|w| w.owner.is_none()) {
             break;
         }
     }
     assert!(thrown, "Rakete kam nicht nah genug");
-    sim.weapon_events().iter().filter(|(t, _)| *t > t0).map(|(_, e)| *e).collect()
+    events_since(&sim, t0)
 }
 
 /// Ein Düppel kurz vor dem Einschlag lenkt die Radarrakete (SA-6) ab.
@@ -263,13 +247,13 @@ fn flare_decoys_the_infrared_missile_but_chaff_does_not() {
 fn decoy_stock_is_limited() {
     let (mut sim, _) = toward_site(TargetClass::AirDefense, 30_000.0, 4_000.0);
     for _ in 0..5 {
-        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::FLARE));
+        step(&mut sim, 0, weapon_flags::FLARE);
     }
     assert_eq!(sim.flight_data().decoys.len(), 3);
     assert_eq!(sim.flight_data().stores.flares, 17);
     for _ in 0..40 {
-        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::FLARE));
-        fly_until(&mut sim, 2.0, |_| false);
+        step(&mut sim, 0, weapon_flags::FLARE);
+        fly(&mut sim, 2.0, 0, 0);
     }
     assert_eq!(sim.flight_data().stores.flares, 0);
     assert_eq!(sim.flight_data().stores.chaff, 20);
@@ -286,22 +270,22 @@ fn jammers_switch_and_cost_stealth() {
     let (mut sim, _) = toward_site(TargetClass::AirDefense, 30_000.0, 4_000.0);
     let stealth = |s: &Sim| s.flight_data().threat.stealth;
     let before = stealth(&sim);
-    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::ECM));
+    step(&mut sim, 0, weapon_flags::ECM);
     assert!(sim.flight_data().ecm);
     assert!(stealth(&sim) < before - 0.1, "ECM kostet Stealth");
-    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::ECM));
+    step(&mut sim, 0, weapon_flags::ECM);
     assert!(!sim.flight_data().ecm);
     let off = stealth(&sim);
-    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::IR_JAMMER));
+    step(&mut sim, 0, weapon_flags::IR_JAMMER);
     assert!(sim.flight_data().ir_jammer_s > 29.0);
     assert!((stealth(&sim) - off).abs() < 0.01, "Infrarotstörer ohne Zuschlag");
-    fly_until(&mut sim, 30.5, |_| false);
+    fly(&mut sim, 30.5, 0, 0);
     assert_eq!(sim.flight_data().ir_jammer_s, 0.0);
     // Abklingzeit: erneutes Einschalten wirkt erst nach 60 s
     assert!(sim.flight_data().ir_cooldown_s > 59.0);
-    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::IR_JAMMER));
+    step(&mut sim, 0, weapon_flags::IR_JAMMER);
     assert_eq!(sim.flight_data().ir_jammer_s, 0.0, "noch in der Abklingzeit");
-    fly_until(&mut sim, 60.0, |_| false);
-    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::IR_JAMMER));
+    fly(&mut sim, 60.0, 0, 0);
+    step(&mut sim, 0, weapon_flags::IR_JAMMER);
     assert!(sim.flight_data().ir_jammer_s > 29.0, "wieder bereit");
 }

@@ -12,7 +12,9 @@
 
 use crate::detmath;
 use crate::nav::Steerpoint;
+use crate::radar::{self, RadarSpec};
 use crate::rng::Pcg32;
+use crate::weapons::WeaponKind;
 use f29_terrain::{AirfieldKind, Surface, Terrain};
 
 /// RNG-Strom der Zielplatzierung.
@@ -139,9 +141,20 @@ impl TargetClass {
         }
     }
 
+    /// Flugabwehr dieser Klasse: ihr Radar (M-020) und die Boden-Luft-Rakete,
+    /// die sie startet (M-021). Eine Tabelle für alle Stellungstypen.
+    pub fn air_defense(self) -> Option<(RadarSpec, WeaponKind)> {
+        match self {
+            TargetClass::ShortRangeSam => Some((radar::SHORAD, WeaponKind::ShortRangeSam)),
+            TargetClass::AirDefense => Some((radar::SAM, WeaponKind::MediumRangeSam)),
+            TargetClass::EarlyWarning => Some((radar::EARLY_WARNING, WeaponKind::LongRangeSam)),
+            _ => None,
+        }
+    }
+
     /// Strahlt ein Radar ab (Radarstellung, M-020).
     pub fn is_radar(self) -> bool {
-        matches!(self, TargetClass::AirDefense | TargetClass::EarlyWarning | TargetClass::ShortRangeSam)
+        self.air_defense().is_some()
     }
 
     pub fn is_naval(self) -> bool {

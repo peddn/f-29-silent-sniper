@@ -39,6 +39,7 @@
 
 use crate::atmosphere::{self, G0};
 use crate::detmath;
+use crate::events::EventLog;
 use crate::math::{DQuat, DVec3};
 use crate::rng::Pcg32;
 use crate::sensors::line_of_sight;
@@ -75,8 +76,6 @@ const MAX_FALL_S: f64 = 180.0;
 /// Sicherheitsabstand über dem Boden, ab dem die Vorhersage das Gelände nur
 /// noch selten abfragt (m).
 const PREDICT_MARGIN_M: f64 = 300.0;
-/// Nur so viele Ereignisse merken (für Meldungen).
-const EVENT_LOG: usize = 16;
 /// Lenkwaffen fallen erst frei aus dem Schacht, dann setzt die Lenkung ein (s).
 const GUIDANCE_DELAY_S: f64 = 0.4;
 /// Suchkopf und Laser alle so viele Ticks prüfen (Sichtlinie ist teuer).
@@ -457,16 +456,6 @@ impl WeaponKind {
         }
     }
 
-    /// Boden-Luft-Rakete, die eine Radarstellung der Klasse startet.
-    pub fn sam_for(class: TargetClass) -> Option<Self> {
-        match class {
-            TargetClass::AirDefense => Some(WeaponKind::MediumRangeSam),
-            TargetClass::EarlyWarning => Some(WeaponKind::LongRangeSam),
-            TargetClass::ShortRangeSam => Some(WeaponKind::ShortRangeSam),
-            _ => None,
-        }
-    }
-
     /// Rakete mit Abschusskreis (alle Lenkwaffen außer der Laserbombe).
     pub fn uses_launch_circle(self) -> bool {
         self.is_guided() && self.spec().seeker != Seeker::Laser
@@ -664,6 +653,50 @@ pub struct Decoy {
     /// NED (m).
     pub position: DVec3,
     pub age_s: f64,
+}
+
+/// Selbstschutz: Täuschkörper und Störer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Countermeasures {
+    /// Vorrat an Düppeln und Fackeln.
+    pub chaff: u8,
+    pub flares: u8,
+    /// Täuschkörper in der Luft.
+    pub decoys: Vec<Decoy>,
+    /// Störsender (gegen Radarlenkung) an.
+    pub ecm: bool,
+    /// Infrarotstörer: Restzeit aus Wirkdauer und anschließender
+    /// Abklingzeit (s, 0 = bereit); er wirkt, solange sie über der
+    /// Abklingzeit liegt.
+    pub ir_jammer_s: f64,
+}
+
+impl Default for Countermeasures {
+    fn default() -> Self {
+        Self { chaff: DECOY_STOCK, flares: DECOY_STOCK, decoys: Vec::new(), ecm: false, ir_jammer_s: 0.0 }
+    }
+}
+
+impl Countermeasures {
+    /// Störer bedienen (ECM umschalten, Infrarotstörer starten, wenn
+    /// bereit) und einen Zeitschritt weiterzählen.
+    pub fn jammers(&mut self, toggle_ecm: bool, start_ir: bool, dt: f64) {
+        self.ecm ^= toggle_ecm;
+        if start_ir && self.ir_jammer_s <= 0.0 {
+            self.ir_jammer_s = IR_JAMMER_S + IR_COOLDOWN_S;
+        }
+        self.ir_jammer_s = (self.ir_jammer_s - dt).max(0.0);
+    }
+
+    /// Der Infrarotstörer wirkt.
+    pub fn ir_active(&self) -> bool {
+        self.ir_jammer_s > IR_COOLDOWN_S
+    }
+
+    /// Restliche Wirkdauer und Abklingzeit des Infrarotstörers (s).
+    pub fn ir_left(&self) -> (f64, f64) {
+        if self.ir_active() { (self.ir_jammer_s - IR_COOLDOWN_S, 0.0) } else { (0.0, self.ir_jammer_s) }
+    }
 }
 
 /// Eine Waffe im Flug.
@@ -873,15 +906,11 @@ pub struct Stores {
     /// Klappen sollen offen sein.
     pub door_cmd: bool,
     pub in_flight: Vec<Weapon>,
-    /// Vorrat an Düppeln und Fackeln.
-    pub chaff: u8,
-    pub flares: u8,
-    /// Täuschkörper in der Luft.
-    pub decoys: Vec<Decoy>,
+    pub countermeasures: Countermeasures,
     next_id: u32,
     rng: Pcg32,
     /// Letzte Ereignisse mit Tick, neueste zuletzt.
-    pub events: Vec<(u64, WeaponEvent)>,
+    pub events: EventLog<WeaponEvent>,
 }
 
 /// Umgebung eines Waffen-Ticks.
@@ -901,9 +930,6 @@ pub struct World<'a> {
     /// Radarstellungen (Index in `Sim::targets`), die das Flugzeug beim letzten
     /// Umlauf erfasst haben: Sie beleuchten es für ihre Raketen.
     pub painting: &'a [usize],
-    /// Störsender (gegen Radarlenkung) bzw. Infrarotstörer laufen.
-    pub ecm: bool,
-    pub ir_jammer: bool,
 }
 
 /// Was der Abschuss über Flugzeug und Ziel wissen muss.
@@ -977,12 +1003,10 @@ impl Stores {
             door: 0.0,
             door_cmd: false,
             in_flight: Vec::new(),
-            chaff: DECOY_STOCK,
-            flares: DECOY_STOCK,
-            decoys: Vec::new(),
+            countermeasures: Countermeasures::default(),
             next_id: 0,
             rng: Pcg32::new(seed, STREAM_WEAPONS),
-            events: Vec::new(),
+            events: EventLog::default(),
         }
     }
 
@@ -1021,13 +1045,6 @@ impl Stores {
         }
     }
 
-    fn log(&mut self, tick: u64, e: WeaponEvent) {
-        if self.events.len() >= EVENT_LOG {
-            self.events.remove(0);
-        }
-        self.events.push((tick, e));
-    }
-
     /// Klappen bewegen; `speed` 0..1 aus dem Systemzustand (0 = klemmen).
     pub fn update_door(&mut self, dt: f64, speed: f64) {
         let step = speed * dt / DOOR_TIME_S;
@@ -1052,7 +1069,7 @@ impl Stores {
             _ => None,
         };
         if let Some(e) = event {
-            self.log(l.tick, e);
+            self.events.push(l.tick, e);
             return 0.0;
         }
         let kind = bay.kind.expect("geprüft");
@@ -1060,9 +1077,9 @@ impl Stores {
         let id = self.next_id;
         self.next_id += 1;
         let w = Weapon::launched(id, kind, l);
-        self.log(l.tick, WeaponEvent::Released { kind, bay: self.selected, id });
+        self.events.push(l.tick, WeaponEvent::Released { kind, bay: self.selected, id });
         if let Some(target) = w.ground_target() {
-            self.log(l.tick, WeaponEvent::Acquired { kind, id, target });
+            self.events.push(l.tick, WeaponEvent::Acquired { kind, id, target });
         }
         self.in_flight.push(w);
         kind.spec().mass_kg
@@ -1100,38 +1117,41 @@ impl Stores {
         w.owner = Some(site);
         w.target = Some(Track::Aircraft);
         self.in_flight.push(w);
-        self.log(tick, WeaponEvent::SamLaunch { kind, id, site });
+        self.events.push(tick, WeaponEvent::SamLaunch { kind, id, site });
         true
     }
 
     /// Wirft einen Täuschkörper bei `position` ab (höchstens
     /// [`MAX_DECOYS`] gleichzeitig; leerer Vorrat meldet sich).
     pub fn drop_decoy(&mut self, tick: u64, kind: DecoyKind, position: DVec3) {
+        let cm = &mut self.countermeasures;
         let stock = match kind {
-            DecoyKind::Chaff => &mut self.chaff,
-            DecoyKind::Flare => &mut self.flares,
+            DecoyKind::Chaff => &mut cm.chaff,
+            DecoyKind::Flare => &mut cm.flares,
         };
         if *stock == 0 {
-            self.log(tick, WeaponEvent::DecoyEmpty(kind));
+            self.events.push(tick, WeaponEvent::DecoyEmpty(kind));
             return;
         }
-        if self.decoys.len() >= MAX_DECOYS {
+        if cm.decoys.len() >= MAX_DECOYS {
             return;
         }
         *stock -= 1;
         let id = self.next_id;
         self.next_id += 1;
-        self.decoys.push(Decoy { id, kind, position, age_s: 0.0 });
+        cm.decoys.push(Decoy { id, kind, position, age_s: 0.0 });
     }
 
     /// Alle Waffen im Flug einen Zeitschritt weiterbewegen; Zünder und
     /// Einschläge auswerten.
     pub fn step(&mut self, world: &mut World<'_>) {
-        for d in &mut self.decoys {
+        let cm = &mut self.countermeasures;
+        for d in &mut cm.decoys {
             d.age_s += world.dt;
         }
-        self.decoys.retain(|d| d.age_s < DECOY_LIFE_S);
-        let decoys = self.decoys.clone();
+        cm.decoys.retain(|d| d.age_s < DECOY_LIFE_S);
+        let decoys = cm.decoys.clone();
+        let jammed = (cm.ecm, cm.ir_active());
         let mut i = 0;
         while i < self.in_flight.len() {
             let mut w = self.in_flight[i];
@@ -1142,16 +1162,16 @@ impl Stores {
                 aircraft: world.flying.then_some((world.aircraft, world.aircraft_velocity)),
                 decoys: &decoys,
                 painted: w.owner.is_some_and(|o| world.painting.contains(&o)),
-                jammed: (world.ecm, world.ir_jammer),
+                jammed,
                 los: true,
             };
             if w.kind.is_guided() && (world.tick + u64::from(w.id)).is_multiple_of(SEEKER_TICKS) {
                 let had = w.tracking;
                 if let Some(e) = seek(&mut w, &view) {
-                    self.log(world.tick, e);
+                    self.events.push(world.tick, e);
                 }
                 if had && !w.tracking && w.kind.spec().seeker == Seeker::Laser {
-                    self.log(world.tick, WeaponEvent::LaserLost { kind: w.kind, id: w.id });
+                    self.events.push(world.tick, WeaponEvent::LaserLost { kind: w.kind, id: w.id });
                 }
             }
             let aim = w.target.filter(|_| w.tracking).and_then(|t| view.locate(t));
@@ -1163,7 +1183,8 @@ impl Stores {
                 Fate::Fuze(_) if w.target == Some(Track::Aircraft) => {
                     self.in_flight.remove(i);
                     let systems = self.pick_systems();
-                    self.log(world.tick, WeaponEvent::AircraftHit { kind: w.kind, id: w.id, systems });
+                    self.events
+                        .push(world.tick, WeaponEvent::AircraftHit { kind: w.kind, id: w.id, systems });
                 }
                 // Am Täuschkörper oder (feindlich) im Gelände: wirkungslos.
                 Fate::Fuze(p) | Fate::Ground(p)
@@ -1171,7 +1192,10 @@ impl Stores {
                 {
                     self.in_flight.remove(i);
                     let result = ImpactResult::Ground;
-                    self.log(world.tick, WeaponEvent::Impact { kind: w.kind, id: w.id, position: p, result });
+                    self.events.push(
+                        world.tick,
+                        WeaponEvent::Impact { kind: w.kind, id: w.id, position: p, result },
+                    );
                 }
                 Fate::Fuze(p) | Fate::Ground(p) => {
                     self.in_flight.remove(i);
@@ -1179,7 +1203,7 @@ impl Stores {
                 }
                 Fate::Expired => {
                     self.in_flight.remove(i);
-                    self.log(world.tick, WeaponEvent::Expired { kind: w.kind, id: w.id });
+                    self.events.push(world.tick, WeaponEvent::Expired { kind: w.kind, id: w.id });
                 }
             }
         }
@@ -1220,9 +1244,9 @@ impl Stores {
         let v = w.velocity;
         let impact_rad = detmath::atan2(v.z, (v.x * v.x + v.y * v.y).sqrt());
         let result = self.blast(world, w, p, impact_rad);
-        self.log(world.tick, WeaponEvent::Impact { kind: w.kind, id: w.id, position: p, result });
+        self.events.push(world.tick, WeaponEvent::Impact { kind: w.kind, id: w.id, position: p, result });
         if (world.aircraft - p).length() < w.kind.spec().frag_radius_m {
-            self.log(world.tick, WeaponEvent::FragWarning);
+            self.events.push(world.tick, WeaponEvent::FragWarning);
         }
     }
 

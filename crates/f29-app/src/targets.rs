@@ -2,10 +2,10 @@
 
 use crate::sim::{SimState, SimSystems};
 use crate::terrain::{to_bevy_mesh, vertex_color_material};
-use crate::view::WorldOrigin;
+use crate::view::{WorldOrigin, place};
 use bevy::prelude::*;
 use f29_core::DVec3;
-use f29_render::{coords, target_mesh};
+use f29_render::target_mesh;
 
 pub struct TargetsPlugin;
 
@@ -85,7 +85,7 @@ fn position_targets(
 ) {
     let sim_targets = state.sim.targets();
     for (anchor, mut t, mut material) in &mut q {
-        t.translation = Vec3::from_array(coords::relative_yup(anchor.0, origin.0));
+        t.translation = place(anchor.0, origin.0);
         let destroyed = sim_targets.get(anchor.1).is_some_and(|t| !t.is_intact());
         let (scale, wanted) = if destroyed { (WRECK_HEIGHT, &targets.wreck) } else { (1.0, &targets.intact) };
         t.scale = Vec3::new(1.0, scale, 1.0);

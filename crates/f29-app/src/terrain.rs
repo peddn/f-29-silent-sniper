@@ -1,14 +1,13 @@
 //! Terrain-Streaming: Kacheln um das Flugzeug im Hintergrund erzeugen.
 
 use crate::sim::{SimState, SimSystems};
-use crate::view::WorldOrigin;
+use crate::view::{WorldOrigin, place};
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
 use bevy::tasks::futures::check_ready;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
 use f29_render::MeshData;
-use f29_render::coords;
 use f29_render::terrain_mesh::{CHUNK_SIZE, ChunkKey, Lod, build_chunk};
 use std::collections::HashMap;
 
@@ -176,6 +175,6 @@ fn stream_chunks(
 /// Kacheln relativ zum Floating Origin positionieren.
 fn position_chunks(origin: Res<WorldOrigin>, mut chunks: Query<(&TerrainChunk, &mut Transform)>) {
     for (chunk, mut t) in &mut chunks {
-        t.translation = Vec3::from_array(coords::relative_yup(chunk.0.origin_ned(), origin.0));
+        t.translation = place(chunk.0.origin_ned(), origin.0);
     }
 }

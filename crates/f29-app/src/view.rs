@@ -214,8 +214,7 @@ pub fn update_camera_and_aircraft(
     }
     let pose = state.render_pose();
     origin.0 = pose.position;
-    let [x, y, z, w] = coords::quat_ned_to_yup(pose.attitude);
-    let rot = Quat::from_xyzw(x as f32, y as f32, z as f32, w as f32).normalize();
+    let rot = rotation(pose.attitude);
 
     let (ac_transform, ac_visibility) = &mut *aircraft;
     ac_transform.translation = Vec3::ZERO;
@@ -250,4 +249,15 @@ fn update_gear(state: Res<SimState>, mut gear: Single<&mut Visibility, With<Land
     if **gear != want {
         **gear = want;
     }
+}
+
+/// Simulationsposition (NED) relativ zum Weltursprung in Bevy-Koordinaten.
+pub fn place(at: DVec3, origin: DVec3) -> Vec3 {
+    Vec3::from_array(coords::relative_yup(at, origin))
+}
+
+/// Simulationslage (NED) als Bevy-Rotation.
+pub fn rotation(q: f29_core::DQuat) -> Quat {
+    let [x, y, z, w] = coords::quat_ned_to_yup(q);
+    Quat::from_xyzw(x as f32, y as f32, z as f32, w as f32).normalize()
 }

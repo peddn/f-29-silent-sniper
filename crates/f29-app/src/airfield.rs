@@ -2,11 +2,11 @@
 
 use crate::sim::{SimState, SimSystems};
 use crate::terrain::{to_bevy_mesh, vertex_color_material};
-use crate::view::WorldOrigin;
+use crate::view::{WorldOrigin, place};
 use bevy::prelude::*;
 use f29_core::DVec3;
+use f29_render::palette;
 use f29_render::runway_mesh::{self, PapiLight};
-use f29_render::{coords, palette};
 
 pub struct AirfieldPlugin;
 
@@ -88,7 +88,7 @@ fn spawn_airfields(
 /// Relativ zum Floating Origin positionieren (wie die Terrain-Kacheln).
 fn position_airfields(origin: Res<WorldOrigin>, mut q: Query<(&Anchor, &mut Transform)>) {
     for (anchor, mut t) in &mut q {
-        t.translation = Vec3::from_array(coords::relative_yup(anchor.0, origin.0));
+        t.translation = place(anchor.0, origin.0);
     }
 }
 

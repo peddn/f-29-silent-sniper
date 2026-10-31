@@ -606,12 +606,6 @@ pub struct Sim {
     bomb_prediction: Option<(DVec3, f64)>,
     /// Vorausberechnete Abschusslage der gewählten Lenkwaffe: (Ziel, Zone).
     launch_zone: Option<(sensors::Lock, weapons::LaunchZone)>,
-    /// Störsender (ECM) an.
-    ecm: bool,
-    /// Infrarotstörer: Restzeit aus Wirkdauer und anschließender
-    /// Abklingzeit (s, 0 = bereit); er wirkt, solange sie über der
-    /// Abklingzeit liegt.
-    ir_jammer_s: f64,
     /// Ziele, die die eigenen Sensoren erfassen (sonst nur AWACS-Datalink);
     /// reihum aktualisiert, abgeleitet, nicht Teil des Zustandshashes.
     own_contacts: Vec<bool>,
@@ -692,8 +686,6 @@ impl Sim {
             gun_prediction: None,
             bomb_prediction: None,
             launch_zone: None,
-            ecm: false,
-            ir_jammer_s: 0.0,
             own_contacts: Vec::new(),
             contact_cursor: 0,
         };
@@ -797,7 +789,7 @@ impl Sim {
             .collect();
         for i in fire {
             let t = &self.targets[i];
-            let Some(kind) = WeaponKind::sam_for(t.class) else { continue };
+            let Some((_, kind)) = t.class.air_defense() else { continue };
             let from = DVec3::new(t.north, t.east, -t.elevation - t.class.height());
             self.stores.launch_sam(self.tick, kind, i, from, self.aircraft.position);
         }
@@ -813,7 +805,7 @@ impl Sim {
             height_agl_m: a.height_agl_m,
             door: self.stores.door,
             radar_on: self.sensors.radar_on,
-            ecm: self.ecm,
+            ecm: self.stores.countermeasures.ecm,
             visible: self.config.spawn.visible,
         }
     }
@@ -920,13 +912,11 @@ impl Sim {
         let fire = (controls.has_weapon(weapon_flags::GUN) || gun_trigger) && !a.on_ground;
         self.gun.trigger(self.tick, fire, a.position, a.velocity, a.attitude, DT);
         // Störer: ECM ein/aus, Infrarotstörer für seine Wirkdauer
-        if controls.has_weapon(weapon_flags::ECM) {
-            self.ecm = !self.ecm;
-        }
-        if controls.has_weapon(weapon_flags::IR_JAMMER) && self.ir_jammer_s <= 0.0 {
-            self.ir_jammer_s = weapons::IR_JAMMER_S + weapons::IR_COOLDOWN_S;
-        }
-        self.ir_jammer_s = (self.ir_jammer_s - DT).max(0.0);
+        self.stores.countermeasures.jammers(
+            controls.has_weapon(weapon_flags::ECM),
+            controls.has_weapon(weapon_flags::IR_JAMMER),
+            DT,
+        );
         // Täuschkörper (nicht am Boden)
         for (flag, kind) in [(weapon_flags::CHAFF, DecoyKind::Chaff), (weapon_flags::FLARE, DecoyKind::Flare)]
         {
@@ -943,7 +933,7 @@ impl Sim {
     }
 
     fn step_weapons(&mut self) {
-        if self.stores.in_flight.is_empty() && self.stores.decoys.is_empty() {
+        if self.stores.in_flight.is_empty() && self.stores.countermeasures.decoys.is_empty() {
             return;
         }
         let painting: Vec<usize> = self.radar.sites.iter().filter(|s| s.painted).map(|s| s.target).collect();
@@ -957,8 +947,6 @@ impl Sim {
             designated: self.sensors.lock.filter(|l| l.optical).map(|l| l.target),
             flying: self.status == Status::Flying,
             painting: &painting,
-            ecm: self.ecm,
-            ir_jammer: self.ir_jammer_s > weapons::IR_COOLDOWN_S,
         };
         // Die Aufschaltung bleibt auch auf einem zerstörten Ziel, bis der
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
@@ -1237,6 +1225,8 @@ impl Sim {
         let crashed = matches!(self.status, Status::Crashed { .. });
         let airborne = !crashed && !a.on_ground;
         let mass = a.mass(&self.spec);
+        let cm = &self.stores.countermeasures;
+        let (ir_jammer_s, ir_cooldown_s) = cm.ir_left();
 
         let target = self.sensors.lock.and_then(|lock| {
             let t = self.targets.get(lock.target)?;
@@ -1371,9 +1361,9 @@ impl Sim {
             stall_speed_mps: self.spec.stall_speed_1g(mass, aero.density, a.flaps),
             steerpoint,
             radar_on: self.sensors.radar_on,
-            ecm: self.ecm,
-            ir_jammer_s: (self.ir_jammer_s - weapons::IR_COOLDOWN_S).max(0.0),
-            ir_cooldown_s: if self.ir_jammer_s > weapons::IR_COOLDOWN_S { 0.0 } else { self.ir_jammer_s },
+            ecm: cm.ecm,
+            ir_jammer_s,
+            ir_cooldown_s,
             look: self.sensors.look,
             target,
             stores: StoresInfo {
@@ -1382,8 +1372,8 @@ impl Sim {
                 gun_selected: self.stores.gun_selected,
                 door: self.stores.door,
                 in_flight: self.stores.in_flight.iter().filter(|w| w.owner.is_none()).count(),
-                chaff: self.stores.chaff,
-                flares: self.stores.flares,
+                chaff: cm.chaff,
+                flares: cm.flares,
                 mass_kg: self.stores.mass_kg(),
             },
             weapon_messages: self.weapon_messages(),
@@ -1420,12 +1410,7 @@ impl Sim {
                     hostile: w.owner.is_some(),
                 })
                 .collect(),
-            decoys: self
-                .stores
-                .decoys
-                .iter()
-                .map(|d| DecoyInfo { kind: d.kind, position: d.position })
-                .collect(),
+            decoys: cm.decoys.iter().map(|d| DecoyInfo { kind: d.kind, position: d.position }).collect(),
             weapon_cam: self
                 .stores
                 .in_flight
@@ -1494,16 +1479,16 @@ impl Sim {
     /// Meldungen der letzten [`WEAPON_MESSAGE_S`] Sekunden, neueste zuletzt.
     fn weapon_messages(&self) -> Vec<WeaponMessage> {
         let name = |i: usize| self.targets[i].name;
+        let window = (WEAPON_MESSAGE_S / DT) as u64;
+        let message = |tick: u64, (text, warning): (String, bool)| {
+            (tick, WeaponMessage { text, warning, age_s: self.tick.saturating_sub(tick) as f64 * DT })
+        };
         let mut all: Vec<(u64, WeaponMessage)> = self
             .stores
             .events
-            .iter()
-            .filter_map(|&(tick, e)| {
-                let age_s = self.tick.saturating_sub(tick) as f64 * DT;
-                if age_s > WEAPON_MESSAGE_S {
-                    return None;
-                }
-                let (text, warning) = match e {
+            .recent(self.tick, window)
+            .map(|&(tick, e)| {
+                let text = match e {
                     WeaponEvent::Released { kind, .. } => (format!("{} AWAY", kind.label()), false),
                     WeaponEvent::BayClosed => ("BAY CLOSED".to_string(), true),
                     WeaponEvent::BayFault => ("BAY FAULT".to_string(), true),
@@ -1537,15 +1522,11 @@ impl Sim {
                         ImpactResult::Ground => (format!("{} MISSED", kind.label()), false),
                     },
                 };
-                Some((tick, WeaponMessage { text, warning, age_s }))
+                message(tick, text)
             })
-            .chain(self.radar.events.iter().filter_map(|&(tick, e)| {
-                let age_s = self.tick.saturating_sub(tick) as f64 * DT;
-                if age_s > WEAPON_MESSAGE_S {
-                    return None;
-                }
+            .chain(self.radar.events.recent(self.tick, window).filter_map(|&(tick, e)| {
                 let site_name = |k: usize| self.targets[self.radar.sites[k].target].name;
-                let (text, warning) = match e {
+                let text = match e {
                     RadarEvent::Alert { site, level: 1 } => {
                         (format!("RADAR DETECTED - {}", site_name(site)), true)
                     }
@@ -1554,21 +1535,17 @@ impl Sim {
                     RadarEvent::Lost { site } => (format!("{} LOST CONTACT", site_name(site)), false),
                     RadarEvent::Fire { .. } => return None,
                 };
-                Some((tick, WeaponMessage { text, warning, age_s }))
+                Some(message(tick, text))
             }))
-            .chain(self.gun.events.iter().filter_map(|&(tick, e)| {
-                let age_s = self.tick.saturating_sub(tick) as f64 * DT;
-                if age_s > WEAPON_MESSAGE_S {
-                    return None;
-                }
-                let (text, warning) = match e {
+            .chain(self.gun.events.recent(self.tick, window).map(|&(tick, e)| {
+                let text = match e {
                     GunEvent::Destroyed(i) if self.targets[i].civilian => {
                         (format!("CIVILIAN {} DESTROYED", name(i)), true)
                     }
                     GunEvent::Destroyed(i) => (format!("GUN {} DESTROYED", name(i)), false),
                     GunEvent::Empty => ("GUN EMPTY".to_string(), true),
                 };
-                Some((tick, WeaponMessage { text, warning, age_s }))
+                message(tick, text)
             }))
             .collect();
         // Waffen und Kanone zeitlich mischen (stabil: gleiche Ticks in Reihenfolge).
@@ -1654,9 +1631,10 @@ impl Sim {
             h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1);
             h.u64(w.owner.map_or(u64::MAX, |o| o as u64));
         }
-        h.u64(u64::from(st.chaff) | u64::from(st.flares) << 8 | u64::from(self.ecm) << 16);
-        h.f64(self.ir_jammer_s);
-        for d in &st.decoys {
+        let cm = &st.countermeasures;
+        h.u64(u64::from(cm.chaff) | u64::from(cm.flares) << 8 | u64::from(cm.ecm) << 16);
+        h.f64(cm.ir_jammer_s);
+        for d in &cm.decoys {
             h.u64(u64::from(d.id));
             h.f64(d.age_s);
         }

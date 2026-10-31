@@ -1,19 +1,20 @@
 //! Bordkanone (M-016) in der Simulation: eigene Feuertaste unabhängig von
 //! Schacht und Klappen, kein Feuer am Boden, Anzeigedaten, Determinismus.
 
+mod common;
+use common::*;
+
 use f29_core::controls::{flags, weapon_flags};
 use f29_core::gun;
 use f29_core::sim::Spawn;
 use f29_core::{ControlFrame, Sim, SimConfig, TICK_HZ};
 
 fn air() -> Sim {
-    Sim::new(SimConfig { seed: 0x0F29, spawn: Spawn::default() })
+    Sim::new(SimConfig { seed: SEED, spawn: Spawn::default() })
 }
 
 fn hold(sim: &mut Sim, seconds: f64, w: u16) {
-    for _ in 0..(seconds * f64::from(TICK_HZ)) as usize {
-        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(w));
-    }
+    fly(sim, seconds, 0, w);
 }
 
 #[test]

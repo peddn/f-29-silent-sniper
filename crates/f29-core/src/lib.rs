@@ -16,6 +16,7 @@ pub mod autopilot;
 pub mod controls;
 pub mod detmath;
 pub mod envelope;
+pub mod events;
 pub mod flight;
 pub mod gun;
 pub mod math;

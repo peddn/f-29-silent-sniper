@@ -1,21 +1,19 @@
 //! Entdeckung durch feindliche Radare (M-020): Pings je Antennenumlauf,
 //! Alarmstufen 1–3 mit Abklingen, Doppler gegen Querflug, Zuschläge.
 
+mod common;
+use common::*;
+
 use f29_core::controls::{flags, weapon_flags};
 use f29_core::radar::{self, RadarEvent};
 use f29_core::sim::Spawn;
 use f29_core::targets::TargetClass;
 use f29_core::{ControlFrame, Sim, SimConfig, TICK_HZ};
 
-const SEED: u64 = 0x0F29;
-
 /// Luftstart `dist` m südlich (Kurs Nord) bzw. westlich (Kurs Nord, quer)
 /// der ersten Stellung der Klasse, `height` m darüber.
 fn near_site(class: TargetClass, north_off: f64, east_off: f64, height: f64, heading: f64) -> (Sim, usize) {
-    let probe = Sim::new(SimConfig::new(SEED));
-    let (i, t) =
-        probe.targets().iter().enumerate().find(|(_, t)| t.class == class).expect("Radarstellung vorhanden");
-    let site = probe.radar().sites.iter().position(|s| s.target == i).expect("als Radar geführt");
+    let (i, t) = first_of(SEED, class).expect("Radarstellung vorhanden");
     let sim = Sim::new(SimConfig {
         seed: SEED,
         spawn: Spawn {
@@ -29,13 +27,8 @@ fn near_site(class: TargetClass, north_off: f64, east_off: f64, height: f64, hea
             ..Spawn::default()
         },
     });
+    let site = sim.radar().sites.iter().position(|s| s.target == i).expect("als Radar geführt");
     (sim, site)
-}
-
-fn fly(sim: &mut Sim, seconds: f64, w: u16, f: u8) {
-    for _ in 0..(seconds * f64::from(TICK_HZ)) as usize {
-        sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, f).with_weapons(w));
-    }
 }
 
 fn alert(sim: &Sim, site: usize) -> u8 {
@@ -58,11 +51,11 @@ fn every_mission_has_sam_and_early_warning_radars() {
 fn three_hits_climb_to_radar_id() {
     // 6 km südlich, Kurs Nord, mit offenem Schacht
     let (mut sim, site) = near_site(TargetClass::AirDefense, -6_000.0, 0.0, 800.0, 0.0);
-    fly(&mut sim, 1.0 / f64::from(TICK_HZ), weapon_flags::NEXT_BAY | weapon_flags::BAY_DOORS, 0);
+    step(&mut sim, 0, weapon_flags::NEXT_BAY | weapon_flags::BAY_DOORS);
     let sweep = radar::SAM.sweep_s;
     let mut ticks = 0;
     while alert(&sim, site) < 3 && ticks < (sweep * 3.0 * f64::from(TICK_HZ)) as usize + 2 {
-        fly(&mut sim, 1.0 / f64::from(TICK_HZ), 0, 0);
+        step(&mut sim, 0, 0);
         ticks += 1;
     }
     assert_eq!(alert(&sim, site), 3, "nach drei Umläufen nicht bei Stufe 3");
@@ -105,7 +98,7 @@ fn open_bay_and_own_radar_give_us_away() {
         // 20 km südlich des Frühwarnradars, Kurs Ost (Flanke zum Radar)
         let (mut sim, site) =
             near_site(TargetClass::EarlyWarning, -20_000.0, 0.0, 1_500.0, std::f64::consts::FRAC_PI_2);
-        fly(&mut sim, 1.0 / f64::from(TICK_HZ), w, f);
+        step(&mut sim, f, w);
         fly(&mut sim, seconds, 0, 0);
         alert(&sim, site)
     };

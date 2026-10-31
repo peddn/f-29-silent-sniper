@@ -8,10 +8,11 @@
 
 use crate::atmosphere::G0;
 use crate::detmath;
+use crate::events::EventLog;
 use crate::math::{DQuat, DVec3};
 use crate::rng::Pcg32;
 use crate::targets::Target;
-use crate::weapons::{ImpactResult, Stores};
+use crate::weapons::{ImpactResult, Stores, ground_crossing};
 use f29_terrain::Terrain;
 
 /// Eigener Zufallsstrom der Kanone (Streuung).
@@ -34,8 +35,6 @@ const MUZZLE_AHEAD_M: f64 = 8.0;
 const CHECK_RANGE_M: f64 = 4_000.0;
 /// Einschläge, die für die Darstellung aufgehoben werden.
 const IMPACT_LOG: usize = 128;
-/// Ereignisse (Meldungen), die aufgehoben werden.
-const EVENT_LOG: usize = 16;
 /// Schrittweite der Aufschlagvorhersage (s).
 const PREDICT_STEP_S: f64 = 0.05;
 
@@ -79,7 +78,7 @@ pub struct Gun {
     pub trigger: bool,
     rng: Pcg32,
     pub impacts: Vec<GunImpact>,
-    pub events: Vec<(u64, GunEvent)>,
+    pub events: EventLog<GunEvent>,
 }
 
 impl Gun {
@@ -91,7 +90,7 @@ impl Gun {
             trigger: false,
             rng: Pcg32::new(seed, STREAM_GUN),
             impacts: Vec::new(),
-            events: Vec::new(),
+            events: EventLog::default(),
         }
     }
 
@@ -121,7 +120,7 @@ impl Gun {
         }
         if self.rounds == 0 {
             if pressed {
-                self.log(tick, GunEvent::Empty);
+                self.events.push(tick, GunEvent::Empty);
             }
             return;
         }
@@ -173,22 +172,11 @@ impl Gun {
             let outcome = if let Some((i, at)) = hit {
                 let result = Stores::apply_damage(&mut targets[i], i, DAMAGE_PER_HIT);
                 if matches!(result, ImpactResult::Destroyed { .. }) {
-                    self.log(tick, GunEvent::Destroyed(i));
+                    self.events.push(tick, GunEvent::Destroyed(i));
                 }
                 Some((at, true))
             } else {
-                let ground = terrain.elevation(p.x, p.y);
-                if -p.z <= ground {
-                    // Zwischen beiden Punkten auf die Oberfläche legen.
-                    let h0 = -r.position.z - terrain.elevation(r.position.x, r.position.y);
-                    let h1 = -p.z - ground;
-                    let f = if h0 > h1 { (h0 / (h0 - h1)).clamp(0.0, 1.0) } else { 1.0 };
-                    let mut at = r.position + (p - r.position) * f;
-                    at.z = -terrain.elevation(at.x, at.y);
-                    Some((at, false))
-                } else {
-                    None
-                }
+                ground_crossing(terrain, r.position, p).map(|at| (at, false))
             };
             if let Some((at, hit)) = outcome {
                 if self.impacts.len() >= IMPACT_LOG {
@@ -206,13 +194,6 @@ impl Gun {
             self.in_flight[k] = Round { position: p, velocity: v, age_s };
             k += 1;
         }
-    }
-
-    fn log(&mut self, tick: u64, e: GunEvent) {
-        if self.events.len() >= EVENT_LOG {
-            self.events.remove(0);
-        }
-        self.events.push((tick, e));
     }
 }
 
@@ -250,16 +231,11 @@ pub fn predict_impact(
     while t < LIFE_S {
         let v1 = v + DVec3::new(0.0, 0.0, G0 * PREDICT_STEP_S);
         let p1 = p + (v + v1) * (0.5 * PREDICT_STEP_S);
-        if -p1.z <= ceiling {
-            let ground = terrain.elevation(p1.x, p1.y);
-            if -p1.z <= ground {
-                let h0 = -p.z - terrain.elevation(p.x, p.y);
-                let h1 = -p1.z - ground;
-                let f = if h0 > h1 { (h0 / (h0 - h1)).clamp(0.0, 1.0) } else { 1.0 };
-                let mut at = p + (p1 - p) * f;
-                at.z = -terrain.elevation(at.x, at.y);
-                return Some((at, t + PREDICT_STEP_S * f));
-            }
+        if -p1.z <= ceiling
+            && let Some(at) = ground_crossing(terrain, p, p1)
+        {
+            let f = (at - p).length() / (p1 - p).length().max(1e-9);
+            return Some((at, t + PREDICT_STEP_S * f));
         }
         p = p1;
         v = v1;

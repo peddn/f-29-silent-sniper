@@ -1,16 +1,13 @@
 //! Flugplätze, Fahrwerk, Landungen und Treibstoff im Zusammenspiel.
 
+mod common;
+use common::*;
+
 use f29_core::autopilot::{AIM_POINT_M, Approach, GLIDE_SLOPE};
 use f29_core::controls::flags;
 use f29_core::sim::{CrashCause, Spawn, SpawnKind};
 use f29_core::terrain::{AirfieldKind, Runway};
 use f29_core::{ControlFrame, DT, Sim, SimConfig, Status};
-
-const SEED: u64 = 0x0F29;
-
-fn ticks(seconds: f64) -> usize {
-    (seconds / DT).round() as usize
-}
 
 fn runway(seed: u64, kind: AirfieldKind) -> Runway {
     let sim = Sim::new(SimConfig::new(seed));

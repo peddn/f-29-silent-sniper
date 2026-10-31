@@ -1,25 +1,13 @@
 //! Waffen (M-014): Schacht, Auslösen, Ballistik, Wirkung beim Einschlag.
 
+mod common;
+use common::*;
+
 use f29_core::controls::weapon_flags;
 use f29_core::sim::Spawn;
 use f29_core::targets::{TargetClass, TargetState};
 use f29_core::weapons::{self, ImpactResult, Loadout, WeaponEvent, WeaponKind};
-use f29_core::{ControlFrame, DT, Sim, SimConfig, TICK_HZ};
-
-const SEED: u64 = 0x0F29;
-
-fn ticks(s: f64) -> usize {
-    (s * f64::from(TICK_HZ)) as usize
-}
-
-/// Geradeausflug mit Schub 0,7; `w` sind die Waffenbits.
-fn step(sim: &mut Sim, w: u16) {
-    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(w));
-}
-
-fn events_since(sim: &Sim, tick: u64) -> Vec<WeaponEvent> {
-    sim.weapon_events().iter().filter(|(t, _)| *t > tick).map(|(_, e)| *e).collect()
-}
+use f29_core::{ControlFrame, DT, Sim, SimConfig};
 
 /// Luftstart `height` m über einem Ziel der Klasse `class`, `back` m davor:
 /// positiv = südlich mit Kurs Nord, negativ = nördlich mit Kurs Süd.
@@ -31,30 +19,17 @@ fn approach_at(
     east_shift: f64,
     loadout: Loadout,
 ) -> (Sim, usize) {
-    let probe = Sim::new(SimConfig::new(SEED));
-    let (i, t) = probe
-        .targets()
-        .iter()
-        .enumerate()
-        .find(|(_, t)| t.class == class)
-        .map(|(i, t)| (i, t.clone()))
-        .expect("Zielklasse vorhanden");
-    let mut sim = Sim::new(SimConfig {
-        seed: SEED,
-        spawn: Spawn {
-            north: t.north - back,
-            east: t.east + east_shift,
-            altitude: t.elevation + height,
-            min_clearance: 0.0,
-            heading: if back >= 0.0 { 0.0 } else { std::f64::consts::PI },
-            speed: 200.0,
-            throttle: 0.7,
-            loadout,
-            ..Spawn::default()
-        },
-    });
+    let (mut sim, i) = approach(
+        SEED,
+        class,
+        back,
+        east_shift,
+        height,
+        Spawn { min_clearance: 0.0, loadout, ..Spawn::default() },
+    )
+    .expect("Zielklasse vorhanden");
     // Startwahl ist die Kanone: weiter zu Schacht 1.
-    step(&mut sim, weapon_flags::NEXT_BAY);
+    step(&mut sim, 0, weapon_flags::NEXT_BAY);
     (sim, i)
 }
 
@@ -63,25 +38,25 @@ fn release_needs_open_bay_and_drops_mass() {
     let mut sim = Sim::new(SimConfig::new(SEED));
     // Startwahl ist die Kanone; die Auslösetaste löst dann nichts aus.
     assert!(sim.stores().gun_selected);
-    step(&mut sim, weapon_flags::RELEASE);
+    step(&mut sim, 0, weapon_flags::RELEASE);
     assert!(sim.weapon_events().is_empty());
-    step(&mut sim, weapon_flags::NEXT_BAY);
+    step(&mut sim, 0, weapon_flags::NEXT_BAY);
     assert!(!sim.stores().gun_selected);
     let bay0 = sim.stores().bays[0];
     assert_eq!(bay0.kind, Some(WeaponKind::FreeFall));
     let mass0 = sim.flight_data().mass_kg;
 
-    step(&mut sim, weapon_flags::RELEASE);
+    step(&mut sim, 0, weapon_flags::RELEASE);
     assert!(events_since(&sim, 0).contains(&WeaponEvent::BayClosed));
     assert_eq!(sim.stores().bays[0].count, bay0.count);
 
-    step(&mut sim, weapon_flags::BAY_DOORS);
+    step(&mut sim, 0, weapon_flags::BAY_DOORS);
     for _ in 0..ticks(weapons::DOOR_TIME_S + 0.1) {
-        step(&mut sim, 0);
+        step(&mut sim, 0, 0);
     }
     assert!(sim.stores().door_open());
     let t0 = sim.flight_data().tick;
-    step(&mut sim, weapon_flags::RELEASE);
+    step(&mut sim, 0, weapon_flags::RELEASE);
     assert!(matches!(
         events_since(&sim, t0)[..],
         [WeaponEvent::Released { kind: WeaponKind::FreeFall, bay: 0, .. }]
@@ -92,19 +67,19 @@ fn release_needs_open_bay_and_drops_mass() {
     assert!(dropped > WeaponKind::FreeFall.spec().mass_kg - 5.0, "Masse {dropped:.0} kg");
 
     // Schacht wechseln und schließen.
-    step(&mut sim, weapon_flags::NEXT_BAY | weapon_flags::BAY_DOORS);
+    step(&mut sim, 0, weapon_flags::NEXT_BAY | weapon_flags::BAY_DOORS);
     assert_eq!(sim.stores().selected, 1);
     for _ in 0..ticks(weapons::DOOR_TIME_S + 0.1) {
-        step(&mut sim, 0);
+        step(&mut sim, 0, 0);
     }
     assert_eq!(sim.stores().door, 0.0);
     // Reihe GUN → BAY 1 … BAY 4 → GUN.
-    step(&mut sim, weapon_flags::NEXT_BAY);
-    step(&mut sim, weapon_flags::NEXT_BAY);
+    step(&mut sim, 0, weapon_flags::NEXT_BAY);
+    step(&mut sim, 0, weapon_flags::NEXT_BAY);
     assert_eq!(sim.stores().selected, 3);
-    step(&mut sim, weapon_flags::NEXT_BAY);
+    step(&mut sim, 0, weapon_flags::NEXT_BAY);
     assert!(sim.stores().gun_selected);
-    step(&mut sim, weapon_flags::NEXT_BAY);
+    step(&mut sim, 0, weapon_flags::NEXT_BAY);
     assert!(!sim.stores().gun_selected);
     assert_eq!(sim.stores().selected, 0);
 }
@@ -122,7 +97,7 @@ struct Run {
 /// vorhergesagte Aufschlagpunkt das Ziel erreicht.
 fn bomb_run(class: TargetClass, east_shift: f64) -> Run {
     let (mut sim, target) = approach_at(class, 900.0, 5_000.0, east_shift, Loadout::default());
-    step(&mut sim, weapon_flags::BAY_DOORS);
+    step(&mut sim, 0, weapon_flags::BAY_DOORS);
     let goal_north = sim.targets()[target].north;
     let mut released: Option<(u64, f29_core::DVec3)> = None;
     for _ in 0..ticks(60.0) {
@@ -143,7 +118,7 @@ fn bomb_run(class: TargetClass, east_shift: f64) -> Run {
                 released = Some((sim.flight_data().tick, p));
             }
         }
-        step(&mut sim, w);
+        step(&mut sim, 0, w);
         if released.is_some() && sim.weapons_in_flight().is_empty() {
             break;
         }
@@ -252,7 +227,7 @@ fn release_cue_puts_the_bomb_on_the_target_along_track() {
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, look));
     }
     assert_eq!(sim.sensors().lock.map(|l| l.target), Some(target));
-    step(&mut sim, weapon_flags::BAY_DOORS);
+    step(&mut sim, 0, weapon_flags::BAY_DOORS);
     let mut released = None;
     for _ in 0..ticks(40.0) {
         let aim = sim.flight_data().bomb_aim.expect("Zielhilfe bei gewählter Mk 82");
@@ -264,7 +239,7 @@ fn release_cue_puts_the_bomb_on_the_target_along_track() {
         } else {
             0
         };
-        step(&mut sim, w);
+        step(&mut sim, 0, w);
         if released.is_some() && sim.weapons_in_flight().is_empty() {
             break;
         }
@@ -308,10 +283,10 @@ fn bomb_aim_warns_too_low_except_with_the_snakeye() {
                 ..Spawn::default()
             },
         });
-        step(&mut sim, weapon_flags::NEXT_BAY);
-        step(&mut sim, if bay_shift { weapon_flags::NEXT_BAY } else { 0 });
+        step(&mut sim, 0, weapon_flags::NEXT_BAY);
+        step(&mut sim, 0, if bay_shift { weapon_flags::NEXT_BAY } else { 0 });
         for _ in 0..12 {
-            step(&mut sim, 0);
+            step(&mut sim, 0, 0);
         }
         sim.flight_data().bomb_aim.expect("Zielhilfe").too_low
     };
