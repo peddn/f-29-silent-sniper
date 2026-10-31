@@ -104,6 +104,8 @@ const SAM_LAUNCH_MPS: f64 = 60.0;
 pub const BURN_THROUGH_M: f64 = 2_000.0;
 /// Wirkdauer des Infrarotstörers (s).
 pub const IR_JAMMER_S: f64 = 30.0;
+/// Danach muss er so lange abkühlen, bevor er wieder läuft (s).
+pub const IR_COOLDOWN_S: f64 = 60.0;
 /// Täuschkörper: Vorrat je Art, höchstens so viele gleichzeitig, Brenndauer (s).
 pub const DECOY_STOCK: u8 = 20;
 pub const MAX_DECOYS: usize = 3;
@@ -292,7 +294,7 @@ const SAM: WeaponSpec = WeaponSpec {
     seeker: Seeker::SemiActive,
     cruise_mps: 650.0,
     accel_mps2: 250.0,
-    turn_rate_rad: deg(30.0),
+    turn_rate_rad: deg(45.0),
     launch_rad: deg(45.0),
     boost_s: 1.5,
     loft: 0.1,
@@ -372,7 +374,7 @@ const SPECS: [WeaponSpec; 9] = [
         mass_kg: 7_000.0,
         cruise_mps: 450.0,
         accel_mps2: 100.0,
-        turn_rate_rad: deg(10.0),
+        turn_rate_rad: deg(20.0),
         launch_rad: deg(85.0),
         boost_s: 4.0,
         loft: 0.25,
@@ -393,7 +395,7 @@ const SPECS: [WeaponSpec; 9] = [
         mass_kg: 130.0,
         cruise_mps: 900.0,
         accel_mps2: 400.0,
-        turn_rate_rad: deg(40.0),
+        turn_rate_rad: deg(60.0),
         launch_rad: 0.0,
         boost_s: 0.0,
         loft: 0.0,

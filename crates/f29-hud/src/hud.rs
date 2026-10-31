@@ -523,6 +523,8 @@ fn selected_weapon(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     }
     if fd.ir_jammer_s > 0.0 {
         decoys += &format!(" IRJ {:.0}", fd.ir_jammer_s.ceil());
+    } else if fd.ir_cooldown_s > 0.0 {
+        decoys += &format!(" IRJ -{:.0}", fd.ir_cooldown_s.ceil());
     }
     let ink = if st.chaff == 0 || st.flares == 0 { Ink::HudWarning } else { Ink::HudDim };
     dl.text_mid([x, y + TXT_SMALL * 3.4], TXT_SMALL, Align::Left, &decoys, ink);

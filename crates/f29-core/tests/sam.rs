@@ -297,4 +297,11 @@ fn jammers_switch_and_cost_stealth() {
     assert!((stealth(&sim) - off).abs() < 0.01, "Infrarotstörer ohne Zuschlag");
     fly_until(&mut sim, 30.5, |_| false);
     assert_eq!(sim.flight_data().ir_jammer_s, 0.0);
+    // Abklingzeit: erneutes Einschalten wirkt erst nach 60 s
+    assert!(sim.flight_data().ir_cooldown_s > 59.0);
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::IR_JAMMER));
+    assert_eq!(sim.flight_data().ir_jammer_s, 0.0, "noch in der Abklingzeit");
+    fly_until(&mut sim, 60.0, |_| false);
+    sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, 0).with_weapons(weapon_flags::IR_JAMMER));
+    assert!(sim.flight_data().ir_jammer_s > 29.0, "wieder bereit");
 }

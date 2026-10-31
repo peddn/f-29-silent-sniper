@@ -82,7 +82,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | C | (frei belegbar: `chaff`) | Düppel abwerfen (gegen radargelenkte Raketen SA-6, SA-5) |
 | T | (frei belegbar: `flare`) | Fackel abwerfen (gegen die infrarotgelenkte SA-13) |
 | M | (frei belegbar: `ecm`) | Störsender (ECM) ein/aus: Radarraketen verlieren außerhalb von 2 km die Lenkung; sichtbarer wie ein offener Schacht |
-| U | (frei belegbar: `ir_jammer`) | Infrarotstörer für 30 s: Infrarotraketen verlieren außerhalb von 2 km die Lenkung |
+| U | (frei belegbar: `ir_jammer`) | Infrarotstörer für 30 s, danach 60 s Abklingzeit: Infrarotraketen verlieren außerhalb von 2 km die Lenkung |
 | Tab | 3 | nächste Waffe: GUN → BAY 1 → … → BAY 4 → GUN (Start: GUN) |
 | Leertaste | 2 | gewählte Waffe auslösen (Schachtwaffen nur bei offenem Schacht; die Kanone feuert, solange die Taste gehalten wird) |
 | Rücktaste (gehalten) | 1 (Abzug) | Bordkanone feuern, gleich welche Waffe gewählt ist (nicht am Boden) |

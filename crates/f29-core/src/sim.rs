@@ -404,6 +404,8 @@ pub struct FlightData {
     pub ecm: bool,
     /// Restliche Wirkdauer des Infrarotstörers (s, 0 = aus).
     pub ir_jammer_s: f64,
+    /// Restliche Abklingzeit des Infrarotstörers (s, 0 = bereit).
+    pub ir_cooldown_s: f64,
     /// Blickrichtung der Zielerfassung.
     pub look: LookDir,
     /// Aufgeschaltetes Ziel.
@@ -606,7 +608,9 @@ pub struct Sim {
     launch_zone: Option<(sensors::Lock, weapons::LaunchZone)>,
     /// Störsender (ECM) an.
     ecm: bool,
-    /// Restliche Wirkdauer des Infrarotstörers (s).
+    /// Infrarotstörer: Restzeit aus Wirkdauer und anschließender
+    /// Abklingzeit (s, 0 = bereit); er wirkt, solange sie über der
+    /// Abklingzeit liegt.
     ir_jammer_s: f64,
     /// Ziele, die die eigenen Sensoren erfassen (sonst nur AWACS-Datalink);
     /// reihum aktualisiert, abgeleitet, nicht Teil des Zustandshashes.
@@ -919,8 +923,8 @@ impl Sim {
         if controls.has_weapon(weapon_flags::ECM) {
             self.ecm = !self.ecm;
         }
-        if controls.has_weapon(weapon_flags::IR_JAMMER) {
-            self.ir_jammer_s = weapons::IR_JAMMER_S;
+        if controls.has_weapon(weapon_flags::IR_JAMMER) && self.ir_jammer_s <= 0.0 {
+            self.ir_jammer_s = weapons::IR_JAMMER_S + weapons::IR_COOLDOWN_S;
         }
         self.ir_jammer_s = (self.ir_jammer_s - DT).max(0.0);
         // Täuschkörper (nicht am Boden)
@@ -954,7 +958,7 @@ impl Sim {
             flying: self.status == Status::Flying,
             painting: &painting,
             ecm: self.ecm,
-            ir_jammer: self.ir_jammer_s > 0.0,
+            ir_jammer: self.ir_jammer_s > weapons::IR_COOLDOWN_S,
         };
         // Die Aufschaltung bleibt auch auf einem zerstörten Ziel, bis der
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
@@ -1368,7 +1372,8 @@ impl Sim {
             steerpoint,
             radar_on: self.sensors.radar_on,
             ecm: self.ecm,
-            ir_jammer_s: self.ir_jammer_s,
+            ir_jammer_s: (self.ir_jammer_s - weapons::IR_COOLDOWN_S).max(0.0),
+            ir_cooldown_s: if self.ir_jammer_s > weapons::IR_COOLDOWN_S { 0.0 } else { self.ir_jammer_s },
             look: self.sensors.look,
             target,
             stores: StoresInfo {

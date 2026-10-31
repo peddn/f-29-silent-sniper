@@ -1245,7 +1245,7 @@ Format jedes Eintrags:
     | Radar | Doppler 12 km, Umlauf 2,5 s | Doppler 30 km, 5 s | Impuls 60 km, 10 s |
     | Reichweite | 10 km | 25 km | 60 km |
     | Geschwindigkeit | 900 m/s | 650 m/s | 450 m/s |
-    | Drehrate | 30°/s | 22°/s | 10°/s |
+    | Drehrate | 60°/s | 45°/s | 20°/s |
     | Start | direkt aufs Ziel | 45°, 1,5 s Boost | 85° (fast senkrecht wie im Original), 4 s Boost |
     | Bogen | 0 | 0,1 | 0,25 |
     | Wirkradius / Flugzeit | 12 m / 20 s | 20 m / 50 s | 30 m / 150 s |
@@ -1316,7 +1316,8 @@ Format jedes Eintrags:
     zu Tabelleneinträgen.
   - **Störer** (v0.2.9, nach dem Original; dort zeitgesteuert mit Vorrat):
     **ECM** (Taste M) ein/aus gegen Radarlenkung, **Infrarotstörer** (Taste U)
-    für 30 s gegen Infrarotlenkung, ohne Vorrat (Spielerentscheidung). Eine
+    für 30 s gegen Infrarotlenkung, ohne Vorrat, danach 60 s Abklingzeit
+    (Spielerentscheidung; HUD „IRJ -40“ während des Abklingens). Eine
     Rakete der gestörten Lenkart verliert die Lenkung auf das Flugzeug, solange
     sie weiter als 2 km entfernt ist (wie im Original: nah brennt sie durch);
     Täuschkörper lenken sie weiterhin ab. ECM macht so sichtbarer wie der
@@ -1325,8 +1326,9 @@ Format jedes Eintrags:
     ist bewusst weggelassen (Aufwand ohne großen Nutzen). Anzeige im HUD
     „ECM“ bzw. „IRJ 25“.
   - **Stärkere Raketen** (v0.2.9, damit sich Störer und Täuschkörper lohnen):
-    Wirkradius ×1,5 (SA-13 18 m, SA-6 30 m, SA-5 45 m), Drehrate SA-6 30°/s,
-    SA-13 40°/s; Start schon mit „RADAR ID“ statt beim nächsten Treffer.
+    Wirkradius ×1,5 (SA-13 18 m, SA-6 30 m, SA-5 45 m), Drehrate SA-13
+    60°/s, SA-6 45°/s, SA-5 20°/s (zweite Anhebung, Spielerwunsch); Start
+    schon mit „RADAR ID“ statt beim nächsten Treffer. Reichweiten unverändert.
   - **Täuschkörper** (wie im Original, v0.2.9): **Düppel** (Taste C) gegen
     Radarlenkung (SA-6, SA-5), **Fackeln** (Taste T) gegen Infrarotlenkung
     (SA-13). Je 20 Stück, höchstens drei gleichzeitig in der Luft, leer meldet
