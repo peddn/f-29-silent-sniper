@@ -28,7 +28,7 @@ kompiliert und testet ohne Grafikkarte, ohne Fenster und ohne externe Crates.
 
 | Crate | Aufgabe |
 |---|---|
-| `f29-data` | Spieldaten als Typen + Plausibilitätsprüfung |
+| `f29-data` | Spieldaten als Typen und Konstanten |
 | `f29-terrain` | Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung, Flugplätze (Platzwahl, Einebnung) |
 | `f29-core` | Flugmodell, Atmosphäre, Sim-Schleife, Navigation, Replays, Autopilot, deterministische Mathematik |
 | `f29-hud` | HUD und MFDs (Karte mit Höhenlinien, Ressourcen) als Liniensegmente, Vektorfont, SVG-Export |

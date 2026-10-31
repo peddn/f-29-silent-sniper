@@ -1,5 +1,3 @@
-use crate::ValidationError;
-
 /// Parameter eines Flugzeugtyps für das Flugmodell in `f29-core`.
 ///
 /// Einheiten: SI (kg, m, N, s, rad). Winkelgeschwindigkeiten in rad/s.
@@ -218,126 +216,6 @@ pub const F29_SPEC: AircraftSpec = AircraftSpec {
 };
 
 impl AircraftSpec {
-    /// Prüft die Parameter auf physikalische Plausibilität.
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        let err = |field: &'static str, reason: String| ValidationError {
-            record: self.name.to_string(),
-            field,
-            reason,
-        };
-        let positive: [(&'static str, f64); 38] = [
-            ("empty_mass_kg", self.empty_mass_kg),
-            ("fuel_capacity_kg", self.fuel_capacity_kg),
-            ("fuel_flow_idle_kgps", self.fuel_flow_idle_kgps),
-            ("fuel_flow_max_kgps", self.fuel_flow_max_kgps),
-            ("gear_time_s", self.gear_time_s),
-            ("gear_max_speed_mps", self.gear_max_speed_mps),
-            ("gear_height_m", self.gear_height_m),
-            ("belly_height_m", self.belly_height_m),
-            ("wheel_brake_decel", self.wheel_brake_decel),
-            ("ground_steer_rate", self.ground_steer_rate),
-            ("hard_landing_sink_mps", self.hard_landing_sink_mps),
-            ("max_landing_sink_mps", self.max_landing_sink_mps),
-            ("max_landing_bank_rad", self.max_landing_bank_rad),
-            ("wing_area_m2", self.wing_area_m2),
-            ("thrust_max_n", self.thrust_max_n),
-            ("thrust_density_exponent", self.thrust_density_exponent),
-            ("engine_spool_time_s", self.engine_spool_time_s),
-            ("cl_alpha", self.cl_alpha),
-            ("alpha_stall_rad", self.alpha_stall_rad),
-            ("post_stall_lift_drop", self.post_stall_lift_drop),
-            ("cd0", self.cd0),
-            ("induced_drag_k", self.induced_drag_k),
-            ("cy_beta", self.cy_beta),
-            ("max_roll_rate", self.max_roll_rate),
-            ("max_pitch_rate", self.max_pitch_rate),
-            ("max_yaw_rate", self.max_yaw_rate),
-            ("rate_time_constant_s", self.rate_time_constant_s),
-            ("control_q_ref_pa", self.control_q_ref_pa),
-            ("g_limit_pos", self.g_limit_pos),
-            ("g_limit_neg", self.g_limit_neg),
-            ("alpha_warning_rad", self.alpha_warning_rad),
-            ("stall_pitch_break", self.stall_pitch_break),
-            ("stall_deficit_full", self.stall_deficit_full),
-            ("stall_stick_g", self.stall_stick_g),
-            ("flap_induced_factor", self.flap_induced_factor),
-            ("flap_rate", self.flap_rate),
-            ("stall_time_constant_s", self.stall_time_constant_s),
-            ("stall_recovery_time_s", self.stall_recovery_time_s),
-        ];
-        for (field, value) in positive {
-            if !(value.is_finite() && value > 0.0) {
-                return Err(err(field, format!("muss endlich und > 0 sein, ist {value}")));
-            }
-        }
-        for (field, value) in [
-            ("idle_ram_drag", self.idle_ram_drag),
-            ("flap_cl", self.flap_cl),
-            ("flap_cd", self.flap_cd),
-            ("gear_cd", self.gear_cd),
-            ("rolling_friction", self.rolling_friction),
-        ] {
-            if !(value.is_finite() && value >= 0.0) {
-                return Err(err(field, "muss >= 0 sein".into()));
-            }
-        }
-        if !(self.airbrake_cd.is_finite() && self.airbrake_cd >= 0.0) {
-            return Err(err("airbrake_cd", "muss >= 0 sein".into()));
-        }
-        if !(self.yaw_damper_gain.is_finite() && self.yaw_damper_gain >= 0.0) {
-            return Err(err("yaw_damper_gain", "muss >= 0 sein".into()));
-        }
-        if self.alpha_warning_rad >= self.alpha_stall_rad {
-            return Err(err(
-                "alpha_warning_rad",
-                "muss kleiner als alpha_stall_rad sein, sonst kommt die Warnung zu spät".into(),
-            ));
-        }
-        if !(self.sink_angle_max_rad.is_finite() && (0.0..0.5).contains(&self.sink_angle_max_rad)) {
-            return Err(err("sink_angle_max_rad", "muss in 0..0,5 rad liegen".into()));
-        }
-        if !(self.sink_onset_factor.is_finite() && self.sink_onset_factor > 1.0) {
-            return Err(err("sink_onset_factor", "muss größer als 1 sein".into()));
-        }
-        if !(0.0..=1.0).contains(&self.stall_stick_level_factor) {
-            return Err(err("stall_stick_level_factor", "muss zwischen 0 und 1 liegen".into()));
-        }
-        if !(0.0..=1.0).contains(&self.flap_stall_relief) {
-            return Err(err("flap_stall_relief", "muss zwischen 0 und 1 liegen".into()));
-        }
-        if self.flap_induced_factor > 1.0 {
-            return Err(err("flap_induced_factor", "darf höchstens 1 sein".into()));
-        }
-        if !(0.0..=1.0).contains(&self.stall_latch_strength) {
-            return Err(err("stall_latch_strength", "muss zwischen 0 und 1 liegen".into()));
-        }
-        if !(self.stall_recovery_factor.is_finite() && self.stall_recovery_factor >= 1.0) {
-            return Err(err("stall_recovery_factor", "muss mindestens 1 sein".into()));
-        }
-        if self.stall_deficit_full > 1.0 {
-            return Err(err("stall_deficit_full", "muss höchstens 1 sein".into()));
-        }
-        if !(0.0..=1.0).contains(&self.stall_lift_factor) {
-            return Err(err("stall_lift_factor", "muss zwischen 0 und 1 liegen".into()));
-        }
-        if self.alpha_stall_rad > 0.6 {
-            return Err(err("alpha_stall_rad", "unplausibel groß (> 0.6 rad)".into()));
-        }
-        if self.fuel_flow_idle_kgps >= self.fuel_flow_max_kgps {
-            return Err(err("fuel_flow_idle_kgps", "muss kleiner als der Vollgasverbrauch sein".into()));
-        }
-        if self.hard_landing_sink_mps >= self.max_landing_sink_mps {
-            return Err(err("hard_landing_sink_mps", "muss unter max_landing_sink_mps liegen".into()));
-        }
-        if self.belly_height_m >= self.gear_height_m {
-            return Err(err("belly_height_m", "muss unter gear_height_m liegen".into()));
-        }
-        if self.g_limit_pos < 1.0 {
-            return Err(err("g_limit_pos", "muss mindestens 1 g erlauben".into()));
-        }
-        Ok(())
-    }
-
     /// Masse mit vollen Tanks.
     pub fn full_mass_kg(&self) -> f64 {
         self.empty_mass_kg + self.fuel_capacity_kg
@@ -360,22 +238,15 @@ impl AircraftSpec {
 mod tests {
     use super::*;
 
+    /// Werte, deren Verhältnis zueinander die Simulation voraussetzt.
     #[test]
-    fn f29_spec_is_valid() {
-        F29_SPEC.validate().expect("F-29-Daten müssen plausibel sein");
-    }
-
-    #[test]
-    fn validation_rejects_warning_above_stall() {
-        let spec = AircraftSpec { alpha_warning_rad: F29_SPEC.alpha_stall_rad + 0.01, ..F29_SPEC };
-        let e = spec.validate().unwrap_err();
-        assert_eq!(e.field, "alpha_warning_rad");
-    }
-
-    #[test]
-    fn validation_rejects_non_finite_values() {
-        let spec = AircraftSpec { empty_mass_kg: f64::NAN, ..F29_SPEC };
-        assert_eq!(spec.validate().unwrap_err().field, "empty_mass_kg");
+    fn spec_relations_hold() {
+        let s = &F29_SPEC;
+        assert!(s.alpha_warning_rad < s.alpha_stall_rad, "Abrisswarnung käme zu spät");
+        assert!(s.fuel_flow_idle_kgps < s.fuel_flow_max_kgps);
+        assert!(s.hard_landing_sink_mps < s.max_landing_sink_mps);
+        assert!(s.belly_height_m < s.gear_height_m);
+        assert!(s.g_limit_pos >= 1.0);
     }
 
     #[test]

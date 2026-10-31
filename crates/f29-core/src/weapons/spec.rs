@@ -334,11 +334,7 @@ impl WeaponKind {
     }
 
     pub fn from_code(code: &str) -> Option<Self> {
-        match code {
-            // Ältere Replays (bis v0.2.6: Gleitbombe)
-            "glide" => Some(WeaponKind::GuidedBomb),
-            _ => Self::ALL.into_iter().find(|k| k.code() == code),
-        }
+        Self::ALL.into_iter().find(|k| k.code() == code)
     }
 
     /// Rakete mit Abschusskreis (alle Lenkwaffen außer der Laserbombe).

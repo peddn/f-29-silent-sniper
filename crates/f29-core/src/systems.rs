@@ -1,9 +1,9 @@
-//! Bordsysteme und ihr Zustand – Gerüst für das Schadensmodell (Etappe 4).
+//! Bordsysteme und ihr Zustand (Schadensmodell).
 //!
 //! Jedes System ist intakt, eingeschränkt (mit verbleibender Leistung 0..1)
-//! oder ausgefallen. Vorerst ist alles intakt; das Schadensmodell setzt die
-//! Zustände später über [`crate::Sim::set_condition`] (und einen eigenen
-//! Zufallsstrom). Die Wirkung steckt schon jetzt an genau einer Stelle je
+//! oder ausgefallen. Ein Raketentreffer verschlechtert zufällig gewählte
+//! Systeme ([`Systems::missile_hit`]); Tests setzen Zustände direkt über
+//! [`crate::Sim::set_condition`]. Die Wirkung steckt an genau einer Stelle je
 //! System:
 //!
 //! | System | Wirkung |

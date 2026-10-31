@@ -1,4 +1,4 @@
-//! Bordsysteme (Gerüst für das Schadensmodell): Jeder Systemzustand wirkt an
+//! Bordsysteme (Schadensmodell): Jeder Systemzustand wirkt an
 //! seiner Stelle; intakt ändert sich nichts.
 
 mod common;

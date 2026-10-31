@@ -1,7 +1,7 @@
 //! Navigationspunkte (Steerpoints).
 //!
-//! In v0.1 erzeugt der Seed eine kurze Route über Land. Ab v0.2 kommen
-//! Missionsziele aus den Szenariodaten hinzu.
+//! Der Seed erzeugt eine kurze Route über Land; die Simulation hängt die
+//! nächste geheime Piste und die Heimatbasis an.
 
 use crate::rng::Pcg32;
 use f29_terrain::Terrain;

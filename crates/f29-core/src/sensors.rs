@@ -7,8 +7,7 @@
 //! Ziel (etwa beim Überflug von voraus nach hinten). Erneutes Wählen der
 //! aktuellen Richtung schaltet zum nächstweiteren Ziel weiter.
 //! - **Radar:** große Reichweite, ohne Sichtlinie – es „sieht“ durch Berge.
-//!   Abschaltbar; eingeschaltet erhöht es später die eigene Sichtbarkeit
-//!   (M-020).
+//!   Abschaltbar; eingeschaltet erhöht es die eigene Sichtbarkeit (M-020).
 //! - **Optisch:** kürzere Reichweite und nur mit freier Sichtlinie, verrät
 //!   das Flugzeug aber nicht. Nur ein optisch erfasstes Ziel liefert ein Bild.
 //!

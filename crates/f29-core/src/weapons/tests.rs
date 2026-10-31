@@ -4,7 +4,6 @@ use super::*;
 fn loadout_text_roundtrip() {
     let l = Loadout::default();
     assert_eq!(l.to_text(), "fall,chute,lgb,agm");
-    assert_eq!(Loadout::parse("fall,chute,glide,agm"), Some(l), "alte Kennung");
     assert_eq!(Loadout::parse(&l.to_text()), Some(l));
     let e = Loadout::parse("arm,-,ship,fall").unwrap();
     assert_eq!(e.0[1], None);

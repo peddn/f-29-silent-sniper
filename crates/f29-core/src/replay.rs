@@ -17,13 +17,8 @@
 //! hash <hex>
 //! ```
 //!
-//! Ältere Versionen werden weiter gelesen: Version 5 ohne Stealth-Zeile (an),
-//! Version 4 zudem ohne AWACS-Zeile (an),
-//! Version 3 zudem ohne Tageszeit (Tag),
-//! Version 2 zudem ohne Beladungszeile und
-//! Waffenspalte (Standardbeladung, keine Waffenbedienung), Version 1 zudem ohne
-//! Startart und Tankfüllung (Luftstart, volle Tanks). Ihre Hashes passen aber
-//! nicht mehr, weil sich das Modell seitdem geändert hat.
+//! Ältere Versionen werden nicht gelesen: Seit dem Wechsel hat sich das
+//! Modell geändert, dieselben Eingaben ergäben einen anderen Flug.
 
 use crate::controls::ControlFrame;
 use crate::sim::{Sim, SimConfig, Spawn, SpawnKind};
@@ -31,11 +26,6 @@ use crate::weapons::Loadout;
 use std::fmt::Write as _;
 
 pub const MAGIC: &str = "F29REPLAY 6";
-const MAGIC_V5: &str = "F29REPLAY 5";
-const MAGIC_V4: &str = "F29REPLAY 4";
-const MAGIC_V3: &str = "F29REPLAY 3";
-const MAGIC_V2: &str = "F29REPLAY 2";
-const MAGIC_V1: &str = "F29REPLAY 1";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replay {
@@ -136,12 +126,7 @@ impl Replay {
         let err = |line: usize, message: String| ParseError { line, message };
 
         let (ln, magic) = next("Kopfzeile")?;
-        let v1 = magic == MAGIC_V1;
-        let old = v1 || magic == MAGIC_V2;
-        let v3 = magic == MAGIC_V3;
-        let v4 = magic == MAGIC_V4;
-        let v5 = magic == MAGIC_V5;
-        if magic != MAGIC && !old && !v3 && !v4 && !v5 {
+        if magic != MAGIC {
             return Err(err(ln, format!("erwartet `{MAGIC}`")));
         }
 
@@ -157,66 +142,37 @@ impl Replay {
             .ok_or_else(|| err(ln, "erwartet `spawn ...`".into()))?
             .split_whitespace()
             .peekable();
-        let kind = if v1 {
-            SpawnKind::Air
-        } else {
-            match tokens.next() {
-                Some("air") => SpawnKind::Air,
-                Some("runway") => SpawnKind::Runway,
-                other => return Err(err(ln, format!("unbekannte Startart {other:?}"))),
-            }
+        let kind = match tokens.next() {
+            Some("air") => SpawnKind::Air,
+            Some("runway") => SpawnKind::Runway,
+            other => return Err(err(ln, format!("unbekannte Startart {other:?}"))),
         };
         let vals: Vec<f64> = tokens
             .map(|t| u64::from_str_radix(t, 16).map(f64::from_bits))
             .collect::<Result<_, _>>()
             .map_err(|e| err(ln, format!("ungültiger Hexwert: {e}")))?;
         let (north, east, altitude, min_clearance, heading, speed, throttle, fuel) = match vals[..] {
-            [n, e, a, m, h, s, t] if v1 => (n, e, a, m, h, s, t, 1.0),
-            [n, e, a, m, h, s, t, f] if !v1 => (n, e, a, m, h, s, t, f),
+            [n, e, a, m, h, s, t, f] => (n, e, a, m, h, s, t, f),
             _ => return Err(err(ln, format!("spawn hat {} Werte", vals.len()))),
         };
 
-        let loadout = if old {
-            Loadout::default()
-        } else {
-            let (ln, l) = next("loadout")?;
-            l.strip_prefix("loadout ")
-                .and_then(Loadout::parse)
-                .ok_or_else(|| err(ln, "erwartet `loadout a,b,c,d`".into()))?
-        };
-
-        let night = if old || v3 {
-            false
-        } else {
-            let (ln, l) = next("time")?;
-            match l.strip_prefix("time ") {
-                Some("day") => false,
-                Some("night") => true,
-                _ => return Err(err(ln, "erwartet `time day|night`".into())),
+        let (ln, l) = next("loadout")?;
+        let loadout = l
+            .strip_prefix("loadout ")
+            .and_then(Loadout::parse)
+            .ok_or_else(|| err(ln, "erwartet `loadout a,b,c,d`".into()))?;
+        // Schalterzeile `<name> <wahr>|<falsch>`.
+        let mut switch = |name: &str, yes: &str, no: &str| {
+            let (ln, l) = next(name)?;
+            match l.strip_prefix(name).and_then(|v| v.strip_prefix(' ')) {
+                Some(v) if v == yes => Ok(true),
+                Some(v) if v == no => Ok(false),
+                _ => Err(err(ln, format!("erwartet `{name} {yes}|{no}`"))),
             }
         };
-
-        let awacs = if old || v3 || v4 {
-            true
-        } else {
-            let (ln, l) = next("awacs")?;
-            match l.strip_prefix("awacs ") {
-                Some("on") => true,
-                Some("off") => false,
-                _ => return Err(err(ln, "erwartet `awacs on|off`".into())),
-            }
-        };
-
-        let visible = if old || v3 || v4 || v5 {
-            false
-        } else {
-            let (ln, l) = next("stealth")?;
-            match l.strip_prefix("stealth ") {
-                Some("on") => false,
-                Some("off") => true,
-                _ => return Err(err(ln, "erwartet `stealth on|off`".into())),
-            }
-        };
+        let night = switch("time", "night", "day")?;
+        let awacs = switch("awacs", "on", "off")?;
+        let visible = switch("stealth", "off", "on")?;
 
         let (ln, frames_line) = next("frames")?;
         let count = frames_line
@@ -229,8 +185,7 @@ impl Replay {
             let (ln, l) = next("Eingabezeile")?;
             let t: Vec<&str> = l.split_whitespace().collect();
             let parse = || -> Option<(u32, ControlFrame)> {
-                let columns = if old { 6 } else { 7 };
-                if t.len() != columns {
+                if t.len() != 7 {
                     return None;
                 }
                 Some((
@@ -241,7 +196,7 @@ impl Replay {
                         yaw: t[3].parse().ok()?,
                         throttle: t[4].parse().ok()?,
                         flags: t[5].parse().ok()?,
-                        weapons: if old { 0 } else { t[6].parse().ok()? },
+                        weapons: t[6].parse().ok()?,
                     },
                 ))
             };
@@ -309,18 +264,9 @@ mod tests {
     }
 
     #[test]
-    fn reads_version_1() {
-        let v1 =
-            "F29REPLAY 1\nseed 9\nspawn 0 0 40a3880000000000 0 0 406a400000000000 0\nframes 1\n5 0 0 0 0 0\n";
-        let r = Replay::from_text(v1).expect("v1");
-        assert_eq!(r.config.spawn.kind, SpawnKind::Air);
-        assert_eq!(r.config.spawn.fuel, 1.0);
-        assert_eq!(r.tick_count(), 5);
-    }
-
-    #[test]
     fn rejects_garbage() {
         assert!(Replay::from_text("hallo").is_err());
-        assert!(Replay::from_text("F29REPLAY 1\nseed x\n").is_err());
+        assert!(Replay::from_text("F29REPLAY 5\nseed 9\n").is_err(), "alte Version");
+        assert!(Replay::from_text(&format!("{MAGIC}\nseed x\n")).is_err());
     }
 }

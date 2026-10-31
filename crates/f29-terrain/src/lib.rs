@@ -1,7 +1,7 @@
 //! Deterministisches, prozedurales Terrain.
 //!
 //! Das Terrain ist eine reine Funktion `(seed, x, y) -> Höhe`. Simulation
-//! (Kollision, Radarhöhe, später Sichtlinien) und Darstellung (Meshes)
+//! (Kollision, Radarhöhe, Sichtlinien) und Darstellung (Meshes)
 //! werten exakt dieselbe Funktion aus, daher gibt es keine Abweichung
 //! zwischen dem, was man sieht, und dem, womit man kollidiert.
 //!
@@ -18,7 +18,7 @@ use noise::{fbm, mix64, ridged, smoothstep};
 /// Höhe des Meeresspiegels in Metern.
 pub const SEA_LEVEL_M: f64 = 0.0;
 
-/// Oberflächenklasse für Darstellung und (später) Bodeneffekte.
+/// Oberflächenklasse für Darstellung und Zielplatzierung.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Surface {
     Water,
