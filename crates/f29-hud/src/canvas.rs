@@ -11,6 +11,8 @@ pub enum Ink {
     HudDim,
     /// Warnungen (Instrumente, MFDs).
     Warning,
+    /// Bedrohungen mit optischer bzw. Infrarotlenkung (orange, Karte).
+    WarningOptical,
     /// Warnungen und Hervorhebungen im HUD (blau, Spielerwunsch v0.2.7).
     HudWarning,
     /// Beschriftung und Skalen der Instrumente.

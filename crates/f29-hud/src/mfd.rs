@@ -427,7 +427,7 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
 
     // Waffen in der Luft: Raketen als kurzer Strich in Flugrichtung (Spitze
     // vorn), Bomben als Punkt; eigene in der Farbe des Flugzeugsymbols,
-    // feindliche rot.
+    // feindliche nach Lenkart: Radar rot, optisch/Infrarot orange.
     for w in &fd.munitions {
         let pos = [w.position.x, w.position.y];
         if !near(pos) {
@@ -437,7 +437,11 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
         if !screen.contains(p) {
             continue;
         }
-        let ink = if w.hostile { Ink::Warning } else { Ink::Hud };
+        let ink = match (w.hostile, w.optical) {
+            (false, _) => Ink::Hud,
+            (true, false) => Ink::Warning,
+            (true, true) => Ink::WarningOptical,
+        };
         let v = [w.velocity.x, w.velocity.y];
         let speed = v[0].hypot(v[1]);
         if w.missile && speed > 1.0 {

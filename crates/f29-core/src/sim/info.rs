@@ -336,6 +336,8 @@ pub struct MunitionInfo {
     pub missile: bool,
     /// Feindliche Waffe (Boden-Luft-Rakete).
     pub hostile: bool,
+    /// Optischer bzw. Infrarot-Suchkopf statt Radarlenkung.
+    pub optical: bool,
 }
 
 /// Ein Täuschkörper in der Luft (Karte).
@@ -619,6 +621,7 @@ impl Sim {
                     velocity: w.velocity,
                     missile: w.kind.spec().cruise_mps > 0.0,
                     hostile: w.owner.is_some(),
+                    optical: w.kind.spec().seeker == weapons::Seeker::Optical,
                 })
                 .collect(),
             decoys: cm.decoys.iter().map(|d| DecoyInfo { kind: d.kind, position: d.position }).collect(),

@@ -1306,8 +1306,9 @@ Format jedes Eintrags:
     `f29-headless sound` → `07c_detonationen.wav`.
   - **Raketenwarnung:** Solange eine feindliche Rakete das Flugzeug verfolgt,
     blinkt „MISSILE“ im HUD und ein schneller Wechselton warnt. Auf der Karte
-    erscheinen feindliche Raketen als roter Strich, in der 3D-Ansicht mit
-    Rauchspur.
+    erscheinen feindliche Raketen als Strich nach Lenkart – radargelenkt
+    (SA-6, SA-5) rot, optisch/infrarotgelenkt (SA-13) orange –, in der
+    3D-Ansicht mit Rauchspur.
   - **Ziele der Lenkwaffen** (v0.2.9): Eine Rakete verfolgt ein Bodenziel, das
     eigene Flugzeug oder einen Täuschkörper; jedes liefert Ort und
     Geschwindigkeit. Der Suchkopf richtet sich nur nach seiner Art: optisch

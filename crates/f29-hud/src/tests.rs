@@ -252,6 +252,7 @@ fn munitions_show_on_the_map() {
         (
             dl.lines.iter().filter(left).count(),
             dl.lines.iter().filter(left).filter(|l| l.ink == Ink::Warning).count(),
+            dl.lines.iter().filter(left).filter(|l| l.ink == Ink::WarningOptical).count(),
         )
     };
     let w = MunitionInfo {
@@ -259,11 +260,16 @@ fn munitions_show_on_the_map() {
         velocity: f29_core::DVec3::new(500.0, 0.0, 0.0),
         missile: true,
         hostile: false,
+        optical: false,
     };
-    let (none, none_red) = count(Vec::new());
+    let (none, none_red, none_orange) = count(Vec::new());
     assert_eq!(count(vec![w]).0, none + 1, "Rakete als ein Strich");
     assert_eq!(count(vec![MunitionInfo { missile: false, ..w }]).0, none + 6, "Bombe als Punkt");
-    assert_eq!(count(vec![MunitionInfo { hostile: true, ..w }]).1, none_red + 1, "feindlich rot");
+    assert_eq!(count(vec![MunitionInfo { hostile: true, ..w }]).1, none_red + 1, "Radarlenkung rot");
+    let ir = count(vec![MunitionInfo { hostile: true, optical: true, ..w }]);
+    assert_eq!((ir.1, ir.2), (none_red, none_orange + 1), "optisch/Infrarot orange");
+    let own = count(vec![MunitionInfo { optical: true, ..w }]);
+    assert_eq!(own.2, none_orange, "eigene Maverick bleibt in Flugzeugfarbe");
 }
 
 #[test]
