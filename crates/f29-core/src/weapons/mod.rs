@@ -42,7 +42,7 @@ use crate::detmath;
 use crate::events::EventLog;
 use crate::math::{DQuat, DVec3};
 use crate::rng::Pcg32;
-use crate::sensors::line_of_sight;
+use crate::sensors::{self, line_of_sight};
 use crate::systems::System;
 use crate::targets::{Target, TargetClass, TargetState};
 use f29_terrain::Terrain;
@@ -298,33 +298,32 @@ impl Weapon {
             Weapon::new(id, kind, l.position + down * EJECT_OFFSET_M, l.velocity + down * EJECT_SPEED_MPS);
         let lock = l.lock.and_then(|i| l.targets.get(i).map(|t| (i, t)));
         let nose = l.attitude.rotate(DVec3::new(1.0, 0.0, 0.0));
-        match kind.spec().seeker {
+        let s = kind.spec();
+        match s.seeker {
             Seeker::None => {}
-            // Luft-Luft: der gewählte Jäger, wenn er im Erfassungskreis liegt
-            // und der Suchkopf ihn übernimmt.
-            _ if kind.spec().anti_air => {
-                w.boresight = nose;
-                w.target = l
-                    .air
-                    .filter(|&(_, p, optical)| {
-                        let to = p - l.position;
-                        angle_between(nose, to) <= crate::sensors::AIR_CIRCLE_RAD
-                            && kind.takes_aircraft(to.length(), optical)
-                    })
-                    .map(|(i, _, _)| Track::Fighter(i));
-                w.searching = w.target.is_none();
-            }
             Seeker::Laser => {
                 w.target =
                     lock.filter(|(_, t)| l.lock_optical && t.is_intact()).map(|(i, _)| Track::Ground(i));
             }
+            // Raketen: das gewählte Ziel ihrer Art (Jäger bzw. Bodenziel),
+            // wenn es im Erfassungskreis liegt und ihr Suchkopf es sieht.
             seeker => {
                 w.boresight = nose;
-                let optical_ok = seeker != Seeker::Optical || l.lock_optical;
-                w.target = lock.filter(|_| optical_ok).and_then(|(i, t)| {
-                    seeker_sees(kind, l.position, nose, crate::sensors::GROUND_CIRCLE_RAD, t, l.terrain, true)
-                        .map(|_| Track::Ground(i))
-                });
+                let (picked, circle) = if s.anti_air {
+                    (l.air.map(|(i, p, optical)| (Track::Fighter(i), p, optical)), sensors::AIR_CIRCLE_RAD)
+                } else {
+                    let ground = lock.filter(|(_, t)| t.is_intact() && seeker.sees(t.class));
+                    (
+                        ground.map(|(i, t)| (Track::Ground(i), center(t), l.lock_optical)),
+                        sensors::GROUND_CIRCLE_RAD,
+                    )
+                };
+                w.target = picked
+                    .filter(|&(_, p, optical)| {
+                        (seeker != Seeker::Optical || optical)
+                            && seeker_sees(kind, l.position, nose, circle, p, l.terrain, true).is_some()
+                    })
+                    .map(|x| x.0);
                 w.searching = w.target.is_none();
             }
         }
@@ -533,31 +532,52 @@ fn angle_between(a: DVec3, b: DVec3) -> f64 {
     detmath::acos((a.dot(b) / (la * lb)).clamp(-1.0, 1.0))
 }
 
-/// Sieht der Suchkopf in `pos` mit Blickrichtung `dir` das Ziel innerhalb des
-/// Kegels `cone`? Prüft Klasse, Kegel, Reichweite und – optisch, wenn `los` –
-/// die Sichtlinie. Liefert die Entfernung.
+/// Mitte eines Bodenziels (NED).
+fn center(t: &Target) -> DVec3 {
+    let c = t.center_ned();
+    DVec3::new(c[0], c[1], c[2])
+}
+
+/// Was der Suchkopf der Waffe `kind` überhaupt sucht, mit Ort: Jäger für
+/// Luft-Luft-Raketen, sonst intakte Bodenziele einer Klasse, die er erfasst.
+fn candidates(
+    kind: WeaponKind,
+    targets: &[Target],
+    fighters: &[Option<(DVec3, DVec3)>],
+) -> Vec<(Track, DVec3)> {
+    if kind.spec().anti_air {
+        return fighters
+            .iter()
+            .enumerate()
+            .filter_map(|(i, f)| Some((Track::Fighter(i), f.as_ref()?.0)))
+            .collect();
+    }
+    let seeker = kind.spec().seeker;
+    let ground = targets.iter().enumerate().filter(|(_, t)| t.is_intact() && seeker.sees(t.class));
+    ground.map(|(i, t)| (Track::Ground(i), center(t))).collect()
+}
+
+/// Sieht der Suchkopf in `pos` mit Blickrichtung `dir` den Punkt `at`
+/// innerhalb des Kegels `cone`? Prüft Kegel, Reichweite und – optisch, wenn
+/// `los` – die Sichtlinie. Liefert die Entfernung.
 fn seeker_sees(
     kind: WeaponKind,
     pos: DVec3,
     dir: DVec3,
     cone: f64,
-    t: &Target,
+    at: DVec3,
     terrain: &Terrain,
     los: bool,
 ) -> Option<f64> {
     let s = kind.spec();
-    if !t.is_intact() || !s.seeker.sees(t.class) {
-        return None;
-    }
-    let c = t.center_ned();
-    let to = DVec3::new(c[0], c[1], c[2]) - pos;
+    let to = at - pos;
     let range = to.length();
     if angle_between(dir, to) > cone || range > s.max_range_m {
         return None;
     }
     if los
         && s.seeker == Seeker::Optical
-        && !line_of_sight(|n, e| terrain.elevation(n, e), [pos.x, pos.y, -pos.z], [c[0], c[1], -c[2]])
+        && !line_of_sight(|n, e| terrain.elevation(n, e), [pos.x, pos.y, -pos.z], [at.x, at.y, -at.z])
     {
         return None;
     }

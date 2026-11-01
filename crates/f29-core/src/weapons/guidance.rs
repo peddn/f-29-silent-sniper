@@ -100,8 +100,17 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
                 w.tracking = false;
                 return None;
             }
-            w.tracking =
-                seeker_sees(w.kind, w.position, w.velocity, s.seeker_cone_rad, t, v.terrain, v.los).is_some();
+            w.tracking = t.is_intact()
+                && seeker_sees(
+                    w.kind,
+                    w.position,
+                    w.velocity,
+                    s.seeker_cone_rad,
+                    center(t),
+                    v.terrain,
+                    v.los,
+                )
+                .is_some();
             None
         }
         Some(track) => {
@@ -151,38 +160,24 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
             }
             None
         }
-        // Luft-Luft ohne Übergabe: der nächste Jäger im Suchkegel.
-        None if w.searching && s.anti_air => {
-            let (_, i) = v
-                .fighters
-                .iter()
-                .enumerate()
-                .filter_map(|(i, f)| {
-                    let to = f.as_ref()?.0 - w.position;
-                    let ok =
-                        to.length() <= s.max_range_m && angle_between(w.velocity, to) <= s.seeker_cone_rad;
-                    ok.then_some((to.length(), i))
-                })
-                .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))?;
-            w.target = Some(Track::Fighter(i));
-            w.tracking = true;
-            w.searching = false;
-            None
-        }
+        // Ohne Übergabe: das nächste passende Ziel im Suchkegel (Bodenziele
+        // auch zivile, Luft-Luft-Raketen Jäger).
         None if w.searching => {
-            let (_, i) = v
-                .targets
-                .iter()
+            let (_, _, track) = candidates(w.kind, v.targets, v.fighters)
+                .into_iter()
                 .enumerate()
-                .filter_map(|(i, t)| {
-                    seeker_sees(w.kind, w.position, w.velocity, s.seeker_cone_rad, t, v.terrain, v.los)
-                        .map(|r| (r, i))
+                .filter_map(|(k, (track, p))| {
+                    seeker_sees(w.kind, w.position, w.velocity, s.seeker_cone_rad, p, v.terrain, v.los)
+                        .map(|r| (r, k, track))
                 })
                 .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))?;
-            w.target = Some(Track::Ground(i));
+            w.target = Some(track);
             w.tracking = true;
             w.searching = false;
-            Some(WeaponEvent::Acquired { kind: w.kind, id: w.id, target: i })
+            match track {
+                Track::Ground(i) => Some(WeaponEvent::Acquired { kind: w.kind, id: w.id, target: i }),
+                _ => None,
+            }
         }
         None => None,
     }
