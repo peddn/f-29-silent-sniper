@@ -347,10 +347,13 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
                 _ if t.destroyed => Ink::HudDim,
                 _ => ink,
             };
+            let inner = Rect::from_center(p, [s * INNER, s * INNER]);
             if zone == Some(LaunchZone::NoEffect) {
                 dashed_rect(dl, r, ink);
+                dashed_rect(dl, inner, ink);
             } else {
                 dl.rect(r, ink);
+                dl.rect(inner, ink);
             }
             if matches!(zone, Some(LaunchZone::Locked | LaunchZone::Good)) {
                 corners(dl, p, s, ink);
@@ -387,6 +390,9 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
 /// Seitenlänge aller Zielvierecke (Anteil der Bildhöhe), unabhängig von
 /// der Entfernung; das gewählte unterscheidet nur sein Rahmen.
 const MARK_SIZE: f32 = 0.02;
+/// Innerer Rahmen des gewählten Ziels (Anteil der Seitenlänge): doppelt
+/// gezogen wirkt er kräftiger.
+pub(crate) const INNER: f32 = 0.8;
 
 fn corners(dl: &mut DisplayList, p: [f32; 2], s: f32, ink: Ink) {
     let o = Rect::from_center(p, [s * 1.45, s * 1.45]);
@@ -419,8 +425,8 @@ fn marks(
     }
 }
 
-/// Gewähltes Ziel als Rahmen mit Ecken, darüber `top`, darunter `bottom`;
-/// außerhalb des Glases ein Pfeil zum Rand.
+/// Gewähltes Ziel als doppelter Rahmen, aufgeschaltet (`locked`) mit Ecken;
+/// darüber `top`, darunter `bottom`; außerhalb des Glases ein Pfeil zum Rand.
 #[allow(clippy::too_many_arguments)]
 fn picked_marker(
     dl: &mut DisplayList,
@@ -431,12 +437,16 @@ fn picked_marker(
     top: &str,
     bottom: &str,
     ink: Ink,
+    locked: bool,
 ) {
     let s = vh * MARK_SIZE;
     match layout.project_body(direction_body.to_array()) {
         Some(p) if glass.contains(p) => {
             dl.rect(Rect::from_center(p, [s, s]), ink);
-            corners(dl, p, s, ink);
+            dl.rect(Rect::from_center(p, [s * INNER, s * INNER]), ink);
+            if locked {
+                corners(dl, p, s, ink);
+            }
             dl.text_mid([p[0], p[1] + s * 2.4], TXT_SMALL * 0.8, Align::Center, top, ink);
             dl.text_mid([p[0], p[1] - s * 2.4], TXT_SMALL * 0.8, Align::Center, bottom, ink);
         }
@@ -454,7 +464,7 @@ fn air_target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayou
     };
     let ink = if t.in_circle { Ink::HudWarning } else { Ink::Hud };
     let info = format!("{:.1} {:+.0}", t.range / 1_000.0, t.closure_mps);
-    picked_marker(dl, layout, glass, vh, t.direction_body, t.label, &info, ink);
+    picked_marker(dl, layout, glass, vh, t.direction_body, t.label, &info, ink, t.in_circle);
 }
 
 /// Gewählte Landebahn (NAV-Modus): Name, Seite und Entfernung (km).
@@ -468,7 +478,7 @@ fn runway_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
         Side::Hostile => Ink::HudWarning,
     };
     let info = format!("{} {:.1}", r.side.label(), r.range / 1_000.0);
-    picked_marker(dl, layout, glass, vh, r.direction_body, r.name, &info, ink);
+    picked_marker(dl, layout, glass, vh, r.direction_body, r.name, &info, ink, false);
 }
 
 /// Rechteck aus Strichen (drei je Seite).

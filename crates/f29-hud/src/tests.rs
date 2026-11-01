@@ -348,7 +348,11 @@ fn picked_fighter_shows_on_map_and_target_page() {
     });
     let (map0, page0) = count(&fd, HudMode::AirToAir);
     let (map1, page1) = count(&picked, HudMode::AirToAir);
-    assert_eq!(map1, map0 + 8, "vier Ecken auf der Karte");
+    assert_eq!(map1, map0 + 16, "doppelter Rahmen und Ecken auf der Karte");
+    let mut chosen = picked.clone();
+    chosen.air_target = picked.air_target.map(|t| f29_core::AirTargetInfo { in_circle: false, ..t });
+    assert_eq!(count(&chosen, HudMode::AirToAir).0, map0 + 8, "gewählt, nicht aufgeschaltet: ohne Ecken");
+    assert_eq!(count(&picked, HudMode::AirToGround).0, count(&fd, HudMode::AirToGround).0, "nur die Modusart");
     assert!(page1 > page0 + 40, "Name und Angaben auf der TGT-Seite");
     assert_eq!(count(&picked, HudMode::AirToGround).1, count(&fd, HudMode::AirToGround).1);
 }

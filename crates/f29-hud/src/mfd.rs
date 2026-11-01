@@ -9,7 +9,9 @@
 use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::map::{MapData, MapProjection};
 use crate::{ScreenLayout, heading_deg};
+use crate::hud::HudMode;
 use f29_core::FlightData;
+use f29_core::weapons::LaunchZone;
 use f29_core::targets::{TargetClass, TargetRole};
 use f29_core::terrain::AirfieldKind;
 
@@ -221,7 +223,7 @@ pub(crate) fn draw(
         return;
     }
     dl.set_clip(Some(m.left_screen));
-    draw_map(dl, fd, m.left_screen, state, map);
+    draw_map(dl, fd, m.left_screen, state, opts.hud_mode, map);
     dl.set_clip(Some(m.right_screen));
     let rs = m.right_screen;
     match state.right_page {
@@ -238,13 +240,23 @@ pub(crate) fn draw(
     signature(dl, fd, m.center);
 }
 
-/// Ecken um das gewählte Ziel auf der Karte (halbe Breite `b`).
-fn selection(dl: &mut DisplayList, p: [f32; 2], b: f32) {
-    let c = b * 0.45;
-    for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
-        let corner = [p[0] + sx * b, p[1] + sy * b];
-        dl.line(corner, [corner[0] - sx * c, corner[1]], Ink::Hud);
-        dl.line(corner, [corner[0], corner[1] - sy * c], Ink::Hud);
+/// Viereck um ein Ziel der Art des HUD-Modus auf der Karte (halbe Breite
+/// `b`), wie im HUD: gedämpft; gewählt doppelt und hell; aufgeschaltet mit
+/// Ecken.
+fn frame(dl: &mut DisplayList, p: [f32; 2], b: f32, picked: bool, locked: bool) {
+    let ink = if picked { Ink::Hud } else { Ink::MfdDim };
+    dl.rect(Rect::from_center(p, [b, b]), ink);
+    if picked {
+        let i = b * crate::hud::INNER;
+        dl.rect(Rect::from_center(p, [i, i]), ink);
+    }
+    if locked {
+        let (o, c) = (b * 1.4, b * 0.6);
+        for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+            let corner = [p[0] + sx * o, p[1] + sy * o];
+            dl.line(corner, [corner[0] - sx * c, corner[1]], ink);
+            dl.line(corner, [corner[0], corner[1] - sy * c], ink);
+        }
     }
 }
 
@@ -276,7 +288,14 @@ fn grid_spacing(range_m: f64) -> f64 {
 }
 
 /// Karte: Flugrichtung oben, Flugzeug in der Mitte.
-fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdState, map: Option<&MapData>) {
+fn draw_map(
+    dl: &mut DisplayList,
+    fd: &FlightData,
+    screen: Rect,
+    state: &MfdState,
+    mode: HudMode,
+    map: Option<&MapData>,
+) {
     let half = (screen.max[0] - screen.min[0]) * 0.5;
     let c = screen.center();
     let txt = half * 0.075;
@@ -327,10 +346,15 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                 };
                 dl.polyline(&pts, true, ink);
                 let pc = proj.to_screen(rw.center);
+                if mode == HudMode::Nav {
+                    let picked = fd.runway_target.is_some_and(|r| r.name == rw.name);
+                    frame(dl, pc, txt * SYMBOL * 1.35, picked, false);
+                }
                 dl.text_mid([pc[0] + txt * 0.8, pc[1] - txt * 1.4], txt * 0.8, Align::Left, rw.name, ink);
             }
             // Ziele
-            let locked = fd.target.as_ref().map(|t| t.index);
+            let picked = fd.target.as_ref().map(|t| t.index);
+            let locked = fd.target.is_some_and(|t| matches!(t.zone, Some(LaunchZone::Locked | LaunchZone::Good)));
             for (k, t) in map.targets.iter().enumerate() {
                 // Zerstörte Ziele verschwinden von der Karte.
                 if !near(t.pos) || fd.destroyed_targets.binary_search(&k).is_ok() {
@@ -362,8 +386,9 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                     dl.circle(p, s * 1.6, 12, Ink::Warning);
                     dl.text_mid([p[0] + s * 1.9, p[1] + s * 1.2], txt * 0.8, Align::Left, tag, Ink::Warning);
                 }
-                if Some(k) == locked {
-                    selection(dl, p, s * 1.35);
+                if mode == HudMode::AirToGround {
+                    let picked = Some(k) == picked;
+                    frame(dl, p, s * 1.35, picked, picked && locked);
                 }
             }
             // Radarstellungen, die das Flugzeug entdeckt haben (M-020):
@@ -482,14 +507,9 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
         if f.pursuing {
             dl.circle(p, k * 2.0, 10, Ink::Warning);
         }
-        if fd.air_target.is_some_and(|t| t.id == f.id) {
-            selection(dl, p, txt * SYMBOL * 1.35);
-        }
-    }
-    if let Some(r) = &fd.runway_target {
-        let pos = [r.position.x, r.position.y];
-        if near(pos) {
-            selection(dl, proj.to_screen(pos), txt * SYMBOL * 1.35);
+        if mode == HudMode::AirToAir {
+            let picked = fd.air_target.filter(|t| t.id == f.id);
+            frame(dl, p, txt * SYMBOL * 1.35, picked.is_some(), picked.is_some_and(|t| t.in_circle));
         }
     }
 

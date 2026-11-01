@@ -1094,12 +1094,13 @@ Format jedes Eintrags:
   die frühere Wahl der Art wieder da.
   - **Vierecke:** Jedes bekannte Ziel der Art (eigene Sensoren oder AWACS) im
     Glas bekommt ein schlichtes, gedämpftes Viereck, auch weit außerhalb der
-    Mitte. Das gewählte trägt einen Rahmen mit Ecken, Typ und Entfernung;
-    außerhalb des Glases zeigt ein Randpfeil zu ihm.
+    Mitte. Das gewählte trägt einen doppelten, hellen Rahmen mit Typ und
+    Entfernung, aufgeschaltet (im Erfassungskreis) dazu Ecken; außerhalb des
+    Glases zeigt ein Randpfeil zu ihm. Die Karte rahmt ebenso nur die Ziele
+    der Modusart ein – gewählt ist so immer genau eines zu sehen.
     Alle Vierecke sind gleich groß, unabhängig von der Entfernung. Die
     TGT-Seite zeigt das gewählte Ziel des Modus (im AA-Modus den Jäger mit
-    Kamerabild, solange das Auge ihn sieht; in NAV die Landebahn), die Karte
-    rahmt es mit Ecken.
+    Kamerabild, solange das Auge ihn sieht; in NAV die Landebahn).
   - **Ein Erfassungskreis je Modus, eine Regel:** Liegt das gewählte Ziel im
     Kreis, ist es erfasst und wird an eine Rakete übergeben – AG ±6°, AA
     ±10°.
