@@ -414,7 +414,7 @@ impl Sim {
         }
         // Waffen im Flug fliegen auch nach einem Absturz weiter.
         self.step_weapons();
-        self.gun.step(self.tick, &self.terrain, &mut self.targets, self.aircraft.position, DT);
+        self.step_gun();
         if self.status != Status::Flying {
             self.gun.trigger(self.tick, false, DVec3::ZERO, DVec3::ZERO, DQuat::IDENTITY, DT);
             self.radar.step(self.tick, &self.targets, None);
@@ -548,6 +548,18 @@ impl Sim {
             let launch = launch!(self);
             let dropped = if self.aircraft.on_ground { 0.0 } else { self.stores.release(&launch) };
             self.aircraft.stores_kg = (self.aircraft.stores_kg - dropped).max(0.0);
+        }
+    }
+
+    /// Patronen im Flug; Treffer an Jägern zählen dort (M-022).
+    fn step_gun(&mut self) {
+        let jets: Vec<(usize, DVec3)> =
+            self.fighters.list.iter().filter(|f| f.airborne()).map(|f| (f.id as usize, f.position)).collect();
+        self.gun.step(self.tick, &self.terrain, &mut self.targets, &jets, self.aircraft.position, DT);
+        for (_, e) in self.gun.events.iter().filter(|(t, _)| *t == self.tick) {
+            if let GunEvent::FighterHit(i) = *e {
+                self.fighters.hit(self.tick, i, false);
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-//! Feindliche Jäger (M-022), Etappe 1: ohne Waffen.
+//! Feindliche Jäger (M-022), noch ohne eigene Waffen.
 //!
 //! Wie im Original stehen die Jäger auf den feindlichen Fliegerhorsten bereit
 //! und starten erst bei Alarm – wenn ein Radar am Boden das Flugzeug bis zur
@@ -21,6 +21,10 @@
 //!
 //! **Eigenes Radar:** pingt wie eine Radarstellung (gleiches Stealth-Level,
 //! M-020), aber nur in einem Kegel um die Nase.
+//!
+//! **Abschuss** (wie im Original): Eine Rakete zerstört, die Kanone braucht
+//! je Typ einige Treffer ([`FighterSpec::hits`]). Der getroffene Jäger stürzt
+//! ab und bleibt als Wrack aus dem Spiel.
 
 use crate::atmosphere::G0;
 use crate::detmath;
@@ -71,6 +75,8 @@ pub struct FighterSpec {
     pub radar: RadarSpec,
     /// Halber Öffnungswinkel des Radars um die Nase (rad).
     pub radar_cone_rad: f64,
+    /// Kanonentreffer bis zum Abschuss (Spielerentscheidung v0.2.9).
+    pub hits: u8,
 }
 
 const fn deg(d: f64) -> f64 {
@@ -87,6 +93,7 @@ const SPECS: [FighterSpec; 2] = [
         endurance_s: 900.0,
         radar: RadarSpec { kind: RadarKind::Pulse, range_m: 15_000.0, sweep_s: 2.0 },
         radar_cone_rad: deg(30.0),
+        hits: 5,
     },
     FighterSpec {
         label: "MIG-29",
@@ -97,6 +104,7 @@ const SPECS: [FighterSpec; 2] = [
         endurance_s: 1_200.0,
         radar: RadarSpec { kind: RadarKind::Doppler, range_m: 35_000.0, sweep_s: 2.0 },
         radar_cone_rad: deg(60.0),
+        hits: 8,
     },
 ];
 
@@ -115,6 +123,10 @@ pub enum Mode {
     Pursue,
     Patrol,
     Return,
+    /// Abgeschossen: stürzt ab.
+    Falling,
+    /// Am Boden zerschellt: aus dem Spiel.
+    Wreck,
 }
 
 /// Ein feindlicher Jäger.
@@ -138,6 +150,8 @@ pub struct Fighter {
     pub goal: DVec3,
     /// Tick des letzten eigenen Radartreffers.
     pub contact_tick: Option<u64>,
+    /// Erhaltene Kanonentreffer.
+    pub hits: u8,
 }
 
 impl Fighter {
@@ -159,6 +173,7 @@ impl Fighter {
             flight_s: 0.0,
             goal: position,
             contact_tick: None,
+            hits: 0,
         }
     }
 
@@ -166,8 +181,14 @@ impl Fighter {
         self.kind.spec()
     }
 
+    /// In der Luft und im Kampf (Ziel, Radar, Karte).
     pub fn airborne(&self) -> bool {
-        self.mode != Mode::Ready
+        !matches!(self.mode, Mode::Ready | Mode::Falling | Mode::Wreck)
+    }
+
+    /// In der Luft, auch im Absturz (Darstellung).
+    pub fn in_air(&self) -> bool {
+        self.airborne() || self.mode == Mode::Falling
     }
 
     /// Geschwindigkeit (NED, m/s).
@@ -205,6 +226,17 @@ impl Fighter {
         self.position += self.velocity() * dt;
         self.flight_s += dt;
     }
+
+    /// Absturz: rollt ab und senkt die Nase; am Boden zerschellt er.
+    fn fall(&mut self, terrain: &Terrain, dt: f64) {
+        self.bank = (self.bank + dt).min(1.2);
+        self.pitch = (self.pitch - 0.3 * dt).max(-1.0);
+        self.heading = detmath::wrap_pi(self.heading + G0 * detmath::tan(self.bank) / self.speed * dt);
+        self.position += self.velocity() * dt;
+        if -self.position.z <= terrain.elevation(self.position.x, self.position.y) {
+            self.mode = Mode::Wreck;
+        }
+    }
 }
 
 /// Ereignisse der Jäger (Meldungen).
@@ -221,6 +253,10 @@ pub enum FighterEvent {
     Landed {
         kind: FighterKind,
         base: usize,
+    },
+    /// Abgeschossen (stürzt ab).
+    Destroyed {
+        kind: FighterKind,
     },
 }
 
@@ -263,6 +299,10 @@ impl Fighters {
         self.scramble(tick, target);
         for k in 0..self.list.len() {
             let f = &mut self.list[k];
+            if f.mode == Mode::Falling {
+                f.fall(terrain, dt);
+                continue;
+            }
             if !f.airborne() {
                 continue;
             }
@@ -330,6 +370,19 @@ impl Fighters {
         }
     }
 
+    /// Treffer am Jäger `i`: eine Rakete (`missile`) zerstört, die Kanone
+    /// zählt Treffer bis [`FighterSpec::hits`].
+    pub fn hit(&mut self, tick: u64, i: usize, missile: bool) {
+        let Some(f) = self.list.get_mut(i).filter(|f| f.airborne()) else {
+            return;
+        };
+        f.hits = f.hits.saturating_add(1);
+        if missile || f.hits >= f.spec().hits {
+            f.mode = Mode::Falling;
+            self.events.push(tick, FighterEvent::Destroyed { kind: f.kind });
+        }
+    }
+
     /// Startet bereitstehende Jäger, deren Platz den Kontaktort erreicht –
     /// je Platz einer, solange dort keiner rollt.
     fn scramble(&mut self, tick: u64, target: Option<DVec3>) {
@@ -343,7 +396,7 @@ impl Fighters {
             let reach = f.spec().cruise_mps * f.spec().endurance_s * 0.5;
             let d = p - f.position;
             if airborne >= MAX_AIRBORNE
-                || f.airborne()
+                || f.mode != Mode::Ready
                 || rolling
                 || DVec3::new(d.x, d.y, 0.0).length() > reach
             {
@@ -477,6 +530,34 @@ mod tests {
         }
         assert_eq!(f.list[k].mode, Mode::Ready, "nicht gelandet");
         assert!(f.events.iter().any(|(_, e)| matches!(e, FighterEvent::Landed { .. })));
+    }
+
+    /// Die Kanone braucht je Typ ihre Treffer, eine Rakete einen; der
+    /// Abgeschossene stürzt ab, bleibt als Wrack liegen und startet nie wieder.
+    #[test]
+    fn hits_shoot_fighters_down_for_good() {
+        let (terrain, mut f) = setup();
+        let rw = &terrain.runways()[f.list[0].base];
+        let alert = Some(DVec3::new(rw.center[0] + 15_000.0, rw.center[1], -3_000.0));
+        run(&mut f, &terrain, 120.0, alert, None);
+        let up: Vec<usize> = (0..f.list.len()).filter(|&k| f.list[k].airborne()).collect();
+        let (gun, missile) = (up[0], up[1]);
+        let need = f.list[gun].spec().hits;
+        for k in 0..need {
+            assert!(f.list[gun].airborne(), "nach {k} Treffern schon unten");
+            f.hit(1, gun, false);
+        }
+        assert_eq!(f.list[gun].mode, Mode::Falling);
+        f.hit(1, missile, true);
+        assert_eq!(f.list[missile].mode, Mode::Falling, "Rakete zerstört sofort");
+        assert!(f.events.iter().any(|(_, e)| matches!(e, FighterEvent::Destroyed { .. })));
+        let t0 = (120.0 / TICK) as u64;
+        for t in t0..t0 + (120.0 / TICK) as u64 {
+            f.step(t, TICK, &terrain, alert, None);
+        }
+        assert_eq!(f.list[gun].mode, Mode::Wreck, "nicht aufgeschlagen");
+        assert_eq!(f.list[missile].mode, Mode::Wreck);
+        assert!(f.list.iter().filter(|x| x.airborne()).count() <= MAX_AIRBORNE);
     }
 
     /// Tief und waagerecht bleibt das Flugzeug für das Jägerradar unsichtbar

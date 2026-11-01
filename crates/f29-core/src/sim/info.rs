@@ -319,6 +319,9 @@ pub struct GunInfo {
     /// Wo eine jetzt abgefeuerte Patrone auf dem Gelände einschlüge – nur
     /// innerhalb ihrer Flugzeit.
     pub aim: Option<GunAim>,
+    /// Vorhaltemarke gegen den gewählten Jäger: Richtung (Körperachsen), in
+    /// die die Nase zeigen muss; nur in Kanonenreichweite.
+    pub lead: Option<DVec3>,
 }
 
 /// Aufschlagpunkt der Kanone.
@@ -546,9 +549,13 @@ impl Sim {
         });
         let air = self.fighters.list.iter().filter(|f| f.airborne()).map(|f| {
             let selected = p.air.index == Some(f.id as usize);
-            let in_circle = MarkKind::Air
-                .in_circle(a.attitude.inverse_rotate((f.position - a.position).normalize_or_zero()));
-            (MarkKind::Air, f.position, self.fighter_seen[f.id as usize], selected, selected && in_circle)
+            (
+                MarkKind::Air,
+                f.position,
+                self.fighter_seen[f.id as usize],
+                selected,
+                selected && self.air_locked(f.position),
+            )
         });
         let known = Seen { radar: false, optical: true };
         let runways = self.terrain.runways().iter().enumerate();
@@ -596,8 +603,29 @@ impl Sim {
             direction_body,
             // Landebahnen sind nur von der Karte bekannt.
             seen: if kind == MarkKind::Air { self.picks.air.seen } else { Seen::default() },
-            locked: kind.in_circle(direction_body),
+            locked: if kind == MarkKind::Air {
+                self.air_locked(position)
+            } else {
+                kind.in_circle(direction_body)
+            },
         }
+    }
+
+    /// Erfasst die gewählte Waffe den gewählten Jäger bei `at`? Im
+    /// Erfassungskreis und in Reichweite: Kanone bis [`gun::AIR_RANGE_M`],
+    /// Luft-Luft-Rakete mit ihrem Suchkopf.
+    fn air_locked(&self, at: DVec3) -> bool {
+        let a = &self.aircraft;
+        let to = at - a.position;
+        if !MarkKind::Air.in_circle(a.attitude.inverse_rotate(to.normalize_or_zero())) {
+            return false;
+        }
+        if self.stores.gun_selected {
+            return to.length() <= gun::AIR_RANGE_M;
+        }
+        self.stores
+            .selected_weapon()
+            .is_some_and(|k| k.takes_aircraft(to.length(), self.picks.air.seen.optical))
     }
 
     /// Anzeige- und Autopilot-Daten für den aktuellen Zustand.
@@ -776,6 +804,15 @@ impl Sim {
             gun: GunInfo {
                 rounds: self.gun.rounds,
                 firing: self.gun.trigger,
+                lead: self
+                    .picks
+                    .air
+                    .index
+                    .and_then(|i| self.fighters.list.get(i))
+                    .filter(|f| f.airborne() && (f.position - a.position).length() <= gun::AIR_RANGE_M * 1.5)
+                    .map(|f| {
+                        a.attitude.inverse_rotate(gun::lead(a.position, a.velocity, f.position, f.velocity()))
+                    }),
                 aim: self.gun_prediction.map(|(impact, _)| {
                     let to = impact - self.aircraft.position;
                     GunAim {
@@ -968,15 +1005,16 @@ impl Sim {
                 };
                 Some(message(tick, text))
             }))
-            .chain(self.gun.events.recent(self.tick, window).map(|&(tick, e)| {
+            .chain(self.gun.events.recent(self.tick, window).filter_map(|&(tick, e)| {
                 let text = match e {
                     GunEvent::Destroyed(i) if self.targets[i].civilian => {
                         (format!("CIVILIAN {} DESTROYED", name(i)), true)
                     }
                     GunEvent::Destroyed(i) => (format!("GUN {} DESTROYED", name(i)), false),
                     GunEvent::Empty => ("GUN EMPTY".to_string(), true),
+                    GunEvent::FighterHit(_) => return None,
                 };
-                message(tick, text)
+                Some(message(tick, text))
             }))
             .chain(self.fighters.events.recent(self.tick, window).map(|&(tick, e)| {
                 let base = |b: usize| self.terrain.runways()[b].name;
@@ -988,6 +1026,7 @@ impl Sim {
                     FighterEvent::Landed { kind, base: b } => {
                         (format!("{} - {} LANDED", base(b), kind.spec().label), false)
                     }
+                    FighterEvent::Destroyed { kind } => (format!("{} DESTROYED", kind.spec().label), false),
                 };
                 message(tick, text)
             }))

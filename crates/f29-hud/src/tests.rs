@@ -700,6 +700,29 @@ fn awacs_shows_targets_beyond_own_sensors() {
     assert!(lines(true) > lines(false) + 20, "AWACS-Daten fehlen auf der Karte");
 }
 
+/// Vorhaltemarke (Kreis mit Punkt) nur im AA-Modus, mit gewählter Kanone
+/// und Munition.
+#[test]
+fn lead_marker_shows_in_air_to_air() {
+    use crate::HudMode;
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let mut fd = sample();
+    fd.stores.gun_selected = true;
+    fd.gun.rounds = 100;
+    let count = |fd: &f29_core::FlightData, mode: HudMode| {
+        let opts = HudOptions { show_panel: false, hud_mode: mode, ..HudOptions::default() };
+        build(fd, &layout, &opts, None).lines.len()
+    };
+    let mut led = fd.clone();
+    led.gun.lead = Some(f29_core::DVec3::new(1.0, 0.03, -0.02).normalize_or_zero());
+    assert_eq!(count(&led, HudMode::AirToAir), count(&fd, HudMode::AirToAir) + 22);
+    assert_eq!(count(&led, HudMode::AirToGround), count(&fd, HudMode::AirToGround));
+    led.stores.gun_selected = false;
+    let mut plain = led.clone();
+    plain.gun.lead = None;
+    assert_eq!(count(&led, HudMode::AirToAir), count(&plain, HudMode::AirToAir), "ohne Kanone keine Marke");
+}
+
 /// Kanonenkreuz am Aufschlagpunkt (vier Striche), nur mit Munition; der
 /// Munitionsstand steht unten links.
 #[test]
@@ -708,7 +731,7 @@ fn gun_cross_marks_the_impact_point() {
     let base = sample();
     let count = |aim: Option<f29_core::GunAim>, rounds: u16| {
         let mut fd = base.clone();
-        fd.gun = f29_core::GunInfo { rounds, firing: false, aim };
+        fd.gun = f29_core::GunInfo { rounds, firing: false, aim, lead: None };
         build(
             &fd,
             &layout,

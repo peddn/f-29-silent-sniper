@@ -111,6 +111,8 @@ pub struct WeaponSpec {
     /// Chance (0..1), einen passenden Täuschkörper im Suchkegel zu
     /// übergehen; je Täuschkörper einmal gewürfelt.
     pub decoy_resistance: f64,
+    /// Luft-Luft-Rakete: verfolgt Jäger statt Bodenziele.
+    pub anti_air: bool,
 }
 
 pub(super) const fn deg(d: f64) -> f64 {
@@ -140,6 +142,7 @@ const BOMB: WeaponSpec = WeaponSpec {
     frag_radius_m: 180.0,
     life_s: MAX_FALL_S,
     decoy_resistance: 0.0,
+    anti_air: false,
 };
 
 /// Gemeinsame Grundwerte der Lenkwaffen.
@@ -167,6 +170,7 @@ const MISSILE: WeaponSpec = WeaponSpec {
     frag_radius_m: 90.0,
     life_s: 70.0,
     decoy_resistance: 0.0,
+    anti_air: false,
 };
 
 /// Boden-Luft-Rakete mittlerer Reichweite (Vorbild SA-6): mittelschnell,
@@ -333,6 +337,13 @@ impl WeaponKind {
 
     pub fn label(self) -> &'static str {
         self.spec().label
+    }
+
+    /// Würde diese Luft-Luft-Rakete einen Jäger in `range` übernehmen
+    /// (optische Suchköpfe nur, wenn er `optical` entdeckt ist)?
+    pub fn takes_aircraft(self, range: f64, optical: bool) -> bool {
+        let s = self.spec();
+        s.anti_air && range <= s.max_range_m && (s.seeker != Seeker::Optical || optical)
     }
 
     pub fn is_guided(self) -> bool {

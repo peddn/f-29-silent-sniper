@@ -100,7 +100,7 @@ impl Sim {
             for v in [f.heading, f.pitch, f.bank, f.speed, f.flight_s] {
                 h.f64(v);
             }
-            h.u64(f.contact_tick.unwrap_or(u64::MAX));
+            h.u64(f.contact_tick.unwrap_or(u64::MAX) ^ u64::from(f.hits) << 56);
         }
         for s in &self.radar.sites {
             h.u64(u64::from(s.alert));

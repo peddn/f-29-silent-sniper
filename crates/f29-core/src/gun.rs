@@ -58,11 +58,19 @@ pub struct GunImpact {
     pub hit: bool,
 }
 
+/// Gegen Jäger gilt die Kanone bis zu dieser Entfernung als erfasst (m).
+pub const AIR_RANGE_M: f64 = 2_000.0;
+/// Ein Jäger zählt als getroffen, wenn eine Patrone so nah an seiner Mitte
+/// vorbeifliegt (m).
+pub const FIGHTER_RADIUS_M: f64 = 7.0;
+
 /// Meldungswürdige Ereignisse der Kanone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GunEvent {
     /// Ziel durch Kanonentreffer zerstört.
     Destroyed(usize),
+    /// Treffer am Jäger (Index in `Fighters::list`).
+    FighterHit(usize),
     /// Abzug bei leerer Kanone.
     Empty,
 }
@@ -148,8 +156,17 @@ impl Gun {
         }
     }
 
-    /// Patronen bewegen; Treffer an Zielen und Gelände auswerten.
-    pub fn step(&mut self, tick: u64, terrain: &Terrain, targets: &mut [Target], aircraft: DVec3, dt: f64) {
+    /// Patronen bewegen; Treffer an Zielen, Jägern (`fighters`: Index, Lage)
+    /// und Gelände auswerten.
+    pub fn step(
+        &mut self,
+        tick: u64,
+        terrain: &Terrain,
+        targets: &mut [Target],
+        fighters: &[(usize, DVec3)],
+        aircraft: DVec3,
+        dt: f64,
+    ) {
         if self.in_flight.is_empty() {
             return;
         }
@@ -169,7 +186,16 @@ impl Gun {
             let p = r.position + v * dt;
             let hit =
                 near.iter().copied().find_map(|i| segment_hits(r.position, p, &targets[i]).map(|at| (i, at)));
-            let outcome = if let Some((i, at)) = hit {
+            let jet = fighters.iter().find_map(|&(i, c)| {
+                let d = p - r.position;
+                let k = ((c - r.position).dot(d) / d.dot(d).max(1e-9)).clamp(0.0, 1.0);
+                let at = r.position + d * k;
+                ((c - at).length() < FIGHTER_RADIUS_M).then_some((i, at))
+            });
+            let outcome = if let Some((i, at)) = jet {
+                self.events.push(tick, GunEvent::FighterHit(i));
+                Some((at, true))
+            } else if let Some((i, at)) = hit {
                 let result = Stores::apply_damage(&mut targets[i], i, DAMAGE_PER_HIT);
                 if matches!(result, ImpactResult::Destroyed { .. }) {
                     self.events.push(tick, GunEvent::Destroyed(i));
@@ -213,6 +239,22 @@ fn segment_hits(a: DVec3, b: DVec3, t: &Target) -> Option<DVec3> {
     let p = a + d * s;
     let h = -p.z - t.elevation;
     (-1.0..=t.class.height()).contains(&h).then_some(p)
+}
+
+/// Vorhalt gegen ein bewegtes Ziel (bei `at`, Geschwindigkeit `vel`): in
+/// welche Richtung (NED, normiert) die Kanone zeigen muss, damit eine
+/// Patrone es trifft – mit Flugzeit und Fall, ohne Streuung.
+pub fn lead(position: DVec3, velocity: DVec3, at: DVec3, vel: DVec3) -> DVec3 {
+    // Relativ zum Flugzeug: Die Patrone fliegt mit Mündungsgeschwindigkeit
+    // in Rohrrichtung und fällt; das Ziel bewegt sich mit `vel - velocity`.
+    let (rel, vrel) = (at - position, vel - velocity);
+    let mut t = rel.length() / MUZZLE_MPS;
+    let mut aim = rel;
+    for _ in 0..4 {
+        aim = rel + vrel * t - DVec3::new(0.0, 0.0, 0.5 * G0 * t * t);
+        t = aim.length() / MUZZLE_MPS;
+    }
+    aim.normalize_or_zero()
 }
 
 /// Wo eine jetzt abgefeuerte Patrone (ohne Streuung) auf das Gelände träfe,
@@ -316,7 +358,7 @@ mod tests {
             while targets[0].is_intact() && tick < 120 * 20 {
                 tick += 1;
                 gun.trigger(tick, gun.rounds > 0, p, v, a, DT);
-                gun.step(tick, &terrain, &mut targets, p, DT);
+                gun.step(tick, &terrain, &mut targets, &[], p, DT);
                 hits = gun.impacts.iter().filter(|i| i.hit).count().max(hits);
             }
             assert!(
@@ -328,6 +370,32 @@ mod tests {
             // Mindestens 50 Treffer waren nötig.
             assert!(ROUNDS - gun.rounds >= 50);
         }
+    }
+
+    /// Mit der Nase auf der Vorhaltemarke trifft ein Feuerstoß einen querab
+    /// fliegenden Jäger; auf den Jäger selbst gezielt geht er dahinter vorbei.
+    #[test]
+    fn leading_the_target_hits_a_crossing_fighter() {
+        let terrain = Terrain::new(1);
+        let hits = |lead: bool| {
+            let (mut pos, vel) = (DVec3::new(0.0, 0.0, -5_000.0), DVec3::new(250.0, 0.0, 0.0));
+            let (mut jet, jet_vel) = (DVec3::new(1_000.0, -300.0, -5_000.0), DVec3::new(0.0, 300.0, 0.0));
+            let mut gun = Gun::new(5);
+            let mut none: Vec<Target> = Vec::new();
+            // Eine Sekunde Feuer, die Nase folgt der Marke bzw. dem Jäger.
+            for tick in 1..(3.0 / DT) as u64 {
+                let d =
+                    if lead { super::lead(pos, vel, jet, jet_vel) } else { (jet - pos).normalize_or_zero() };
+                let att = DQuat::from_euler(detmath::atan2(d.y, d.x), detmath::asin(-d.z), 0.0);
+                gun.trigger(tick, tick < 120, pos, vel, att, DT);
+                gun.step(tick, &terrain, &mut none, &[(0, jet)], pos, DT);
+                jet += jet_vel * DT;
+                pos += vel * DT;
+            }
+            gun.events.iter().filter(|(_, e)| *e == GunEvent::FighterHit(0)).count()
+        };
+        assert!(hits(true) >= 10, "mit Vorhalt nur {} Treffer", hits(true));
+        assert_eq!(hits(false), 0, "ohne Vorhalt getroffen");
     }
 
     #[test]
@@ -347,7 +415,7 @@ mod tests {
         });
         let mut none: Vec<Target> = Vec::new();
         for tick in 0..(120 * 3) {
-            gun.step(tick, &terrain, &mut none, p, DT);
+            gun.step(tick, &terrain, &mut none, &[], p, DT);
         }
         let hit = gun.impacts.first().expect("Einschlag").position;
         assert!((hit - impact).length() < 15.0, "Abweichung {:.1} m", (hit - impact).length());

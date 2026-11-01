@@ -104,6 +104,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
             dl.circle(c, circle_radius(layout, sensors::AIR_CIRCLE_RAD), 48, Ink::Hud);
             marks(dl, fd, layout, &glass, vh, MarkKind::Air);
             picked_target(dl, fd.air_target.as_ref(), layout, &glass, vh);
+            lead_marker(dl, fd, layout, &glass, vh);
         }
     }
     heading_tape(dl, fd, &glass);
@@ -238,6 +239,18 @@ fn bomb_aim(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass:
         dl.circle(p, r, 12, ink);
         dl.line([p[0] - r * 0.2, p[1]], [p[0] + r * 0.2, p[1]], ink);
         dl.set_clip(None);
+    }
+}
+
+/// Vorhaltemarke der Kanone gegen den gewählten Jäger (AA-Modus): kleiner
+/// Kreis mit Punkt dort, wohin die Nase zeigen muss.
+fn lead_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
+    let Some(d) = fd.gun.lead.filter(|_| fd.stores.gun_selected && fd.gun.rounds > 0) else {
+        return;
+    };
+    if let Some(p) = layout.project_body(d.to_array()).filter(|p| glass.contains(*p)) {
+        dl.circle(p, vh * 0.012, 16, Ink::Hud);
+        dl.circle(p, vh * 0.002, 6, Ink::Hud);
     }
 }
 
