@@ -4,13 +4,14 @@
 //! die Startbedingungen exakt erhalten bleiben):
 //!
 //! ```text
-//! F29REPLAY 6
+//! F29REPLAY 7
 //! seed 3881
 //! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
 //! loadout fall,chute,lgb,agm
 //! time <day|night>
 //! awacs <on|off>
 //! stealth <on|off>
+//! damage <on|off>
 //! frames <anzahl Zeilen>
 //! <wiederholungen> <pitch> <roll> <yaw> <throttle> <flags> <waffen>
 //! ...
@@ -25,7 +26,7 @@ use crate::sim::{Sim, SimConfig, Spawn, SpawnKind};
 use crate::weapons::Loadout;
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 6";
+pub const MAGIC: &str = "F29REPLAY 7";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replay {
@@ -104,6 +105,7 @@ impl Replay {
         let _ = writeln!(s, "time {}", if sp.night { "night" } else { "day" });
         let _ = writeln!(s, "awacs {}", if sp.awacs { "on" } else { "off" });
         let _ = writeln!(s, "stealth {}", if sp.visible { "off" } else { "on" });
+        let _ = writeln!(s, "damage {}", if sp.invulnerable { "off" } else { "on" });
         let _ = writeln!(s, "frames {}", self.frames.len());
         for (n, f) in &self.frames {
             let _ =
@@ -173,6 +175,7 @@ impl Replay {
         let night = switch("time", "night", "day")?;
         let awacs = switch("awacs", "on", "off")?;
         let visible = switch("stealth", "off", "on")?;
+        let invulnerable = switch("damage", "off", "on")?;
 
         let (ln, frames_line) = next("frames")?;
         let count = frames_line
@@ -229,6 +232,7 @@ impl Replay {
                     night,
                     awacs,
                     visible,
+                    invulnerable,
                 },
             },
             frames,
@@ -259,6 +263,7 @@ mod tests {
         rw.config.spawn.night = true;
         rw.config.spawn.awacs = false;
         rw.config.spawn.visible = true;
+        rw.config.spawn.invulnerable = true;
         rw.push(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.5, 0).with_weapons(3));
         assert_eq!(Replay::from_text(&rw.to_text()).expect("parse"), rw);
     }

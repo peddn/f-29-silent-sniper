@@ -329,3 +329,28 @@ fn beaming_shakes_off_all_but_the_modern_sam() {
     assert!(!hit(WeaponKind::ShortRangeSam, Maneuver::Beam), "SA-13 querab nicht abgeschüttelt");
     assert!(hit(WeaponKind::ModernSam, Maneuver::Beam), "SA-11 querab abgeschüttelt");
 }
+
+/// `--no-damage`: Der Treffer wird gemeldet, die Systeme bleiben heil.
+#[test]
+fn no_damage_reports_hits_without_consequences() {
+    let (_, t) = first_of(SEED, TargetClass::AirDefense).expect("Stellung");
+    let mut sim = Sim::new(SimConfig {
+        seed: SEED,
+        spawn: Spawn {
+            north: t.north - 7_000.0,
+            east: t.east,
+            altitude: t.elevation + 800.0,
+            min_clearance: 300.0,
+            heading: 0.0,
+            speed: 200.0,
+            throttle: 0.7,
+            invulnerable: true,
+            ..Spawn::default()
+        },
+    });
+    step(&mut sim, 0, weapon_flags::NEXT_BAY | weapon_flags::BAY_DOORS);
+    let hit = |s: &Sim| s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. }));
+    assert!(fly_until(&mut sim, 60.0, hit), "kein Treffer");
+    assert!(System::ALL.iter().all(|s| sim.systems().get(*s).is_ok()), "Schaden trotz --no-damage");
+    assert_eq!(sim.systems().hits, 0);
+}

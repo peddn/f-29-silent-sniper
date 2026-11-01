@@ -34,6 +34,7 @@ fn on_final(seed: u64, rw: &Runway, dist: f64, offset: f64, fuel: f64) -> Sim {
         night: false,
         awacs: true,
         visible: false,
+        invulnerable: false,
     };
     Sim::new(SimConfig { seed, spawn })
 }

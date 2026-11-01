@@ -1172,7 +1172,9 @@ Format jedes Eintrags:
   (≈ 32 %) unter etwa 20 bzw. 41 km.
 - **Testoption** `--no-stealth` (Spielerwunsch v0.2.9): Stealth-Level immer 0,
   jeder Ping in Reichweite trifft – zum Testen von Alarmstufen, Raketen und
-  Schäden. Steht im Replay (`stealth on|off`, Format 6).
+  Schäden. Steht im Replay (`stealth on|off`). Ebenso `--no-damage`:
+  Raketentreffer werden gemeldet (Knall, „SA-6 HIT“), richten aber keinen
+  Schaden an; ein Absturz bleibt tödlich (`damage on|off`, Replay-Format 7).
 - **Status:** Entdeckung umgesetzt (v0.2.9); Raketen, Patrouillen und
   Störsender folgen.
 

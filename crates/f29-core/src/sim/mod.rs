@@ -102,6 +102,9 @@ pub struct Spawn {
     /// Testoption: Stealth-Level immer 0 – jeder Ping in Reichweite trifft
     /// (`--no-stealth`).
     pub visible: bool,
+    /// Testoption: Raketentreffer werden gemeldet, richten aber keinen
+    /// Schaden an (`--no-damage`); ein Absturz bleibt tödlich.
+    pub invulnerable: bool,
 }
 
 impl Default for Spawn {
@@ -120,6 +123,7 @@ impl Default for Spawn {
             night: false,
             awacs: true,
             visible: false,
+            invulnerable: false,
         }
     }
 }
@@ -567,7 +571,7 @@ impl Sim {
                 _ => None,
             })
             .collect();
-        if !hits.is_empty() {
+        if !hits.is_empty() && !self.config.spawn.invulnerable {
             for systems in hits {
                 self.systems.missile_hit(&systems);
             }

@@ -45,6 +45,9 @@ cargo run --release -p f29-app -- --no-awacs
 # Testoption: Stealth-Level immer 0, jeder Radarping in Reichweite trifft
 cargo run --release -p f29-app -- --no-stealth
 
+# Testoption: Raketentreffer ohne Schaden (gemeldet, aber folgenlos)
+cargo run --release -p f29-app -- --no-damage
+
 # Lautstärke in Prozent (Standard 80) bzw. ganz ohne Ton
 cargo run --release -p f29-app -- --volume 50
 cargo run --release -p f29-app -- --no-sound
