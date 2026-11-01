@@ -42,7 +42,6 @@ impl View<'_> {
                 Some((DVec3::new(c[0], c[1], c[2]), DVec3::ZERO))
             }
             Track::Aircraft => self.aircraft,
-            Track::Decoy(id) => self.decoys.iter().find(|d| d.id == id).map(|d| (d.position, DVec3::ZERO)),
         }
     }
 }
@@ -56,34 +55,34 @@ pub(super) fn bearing_off(velocity: DVec3, to: DVec3) -> f64 {
 }
 
 /// Suchkopf prüfen (gemeinsam für den echten Flug und die Vorausberechnung).
-/// Ein Täuschkörper der passenden Art im Suchkegel lenkt ab (wie im
-/// Original). Dann je Ziel:
+/// Ein Täuschkörper der passenden Art im Suchkegel blendet die Rakete (wie im
+/// Original): Sie fliegt geradeaus, hält aber ihr Ziel. Sonst je Ziel:
 /// - **Bodenziel:** Laserbombe – wird es noch beleuchtet? Rakete – liegt es
 ///   noch in Suchkegel und Reichweite (optisch und mit `los` auch in Sicht)?
 ///   Weit hinter ihr gibt sie auf.
-/// - **Flugzeug / Täuschkörper:** Peilung im Suchkegel; halbaktiv weiter als
+/// - **Flugzeug:** Peilung im Suchkegel, sonst verloren; halbaktiv weiter als
 ///   [`SEMI_ACTIVE_M`] nur mit Beleuchtung durch die Stellung, optisch
-///   (Infrarot) nur in Reichweite und mit freier Sicht. Weit hinter ihr gibt
-///   sie auf.
+///   (Infrarot) nur in Reichweite und mit freier Sicht.
 /// - **Keines:** sucht selbst das nächste passende Bodenziel vor dem Suchkopf
 ///   (auch zivile), wenn sie ohne Übergabe abgefeuert wurde.
 ///
-/// Liefert ein neues Ziel oder die Ablenkung als Ereignis.
+/// Liefert ein neues Ziel oder den Beginn einer Blendung als Ereignis.
 pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
     let s = w.kind.spec();
     // Erst fallen (eigene) bzw. im Boost steigen (feindliche).
     if w.age_s < s.boost_s.max(GUIDANCE_DELAY_S) {
         return None;
     }
-    if w.target.is_some_and(|t| !matches!(t, Track::Decoy(_)))
-        && let Some(d) = v.decoys.iter().find(|d| {
+    let blinded = w.target.is_some()
+        && v.decoys.iter().any(|d| {
             let to = d.position - w.position;
             d.lures(w) && to.length() <= s.max_range_m && bearing_off(w.velocity, to) <= s.seeker_cone_rad
-        })
-    {
-        w.target = Some(Track::Decoy(d.id));
-        w.tracking = true;
-        return Some(WeaponEvent::Decoyed { kind: w.kind, id: w.id });
+        });
+    let newly = blinded && !w.blinded;
+    w.blinded = blinded;
+    if blinded {
+        w.tracking = false;
+        return newly.then_some(WeaponEvent::Decoyed { kind: w.kind, id: w.id });
     }
     match w.target {
         Some(Track::Ground(i)) => {
@@ -114,16 +113,9 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
             // Vorhaltwinkel größer als der Kegel, verliert die Rakete es
             // (Querflug schüttelt ab, Spielerwunsch v0.2.9).
             let off = bearing_off(w.velocity, to);
-            if off > GIVE_UP_RAD {
-                w.target = None;
-                w.tracking = false;
-                return None;
-            }
-            let decoy = matches!(track, Track::Decoy(_));
             // Gestört: außerhalb kurzer Entfernung keine Lenkung auf das Flugzeug.
             let (ecm, ir) = v.jammed;
-            let jammed = !decoy
-                && to.length() > BURN_THROUGH_M
+            let jammed = to.length() > BURN_THROUGH_M
                 && match s.seeker {
                     Seeker::SemiActive => ecm,
                     Seeker::Optical => ir,
@@ -131,7 +123,7 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
                 };
             let sees = !jammed
                 && match s.seeker {
-                    Seeker::SemiActive => decoy || v.painted || to.length() <= SEMI_ACTIVE_M,
+                    Seeker::SemiActive => v.painted || to.length() <= SEMI_ACTIVE_M,
                     _ => {
                         to.length() <= s.max_range_m
                             && (!v.los
@@ -144,9 +136,9 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
                 };
             w.tracking = off <= s.seeker_cone_rad && sees;
             // Fällt das Flugzeug aus dem Suchkegel, ist es verloren: Querflug
-            // schüttelt ab (Spielerwunsch v0.2.9). Stören und fehlende
-            // Beleuchtung wirken dagegen nur vorübergehend.
-            if off > s.seeker_cone_rad && track == Track::Aircraft {
+            // schüttelt ab (Spielerwunsch v0.2.9). Stören, fehlende
+            // Beleuchtung und Täuschkörper wirken dagegen nur vorübergehend.
+            if off > s.seeker_cone_rad {
                 w.target = None;
             }
             None

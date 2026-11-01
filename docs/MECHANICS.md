@@ -1275,8 +1275,8 @@ Format jedes Eintrags:
     ab, die SA-6 meist, die SA-11 kaum – gegen sie helfen viele Düppel.
     Messwerkzeug: `cargo run --release -p f29-core --example sam_report`
     (Trefferquoten je Flugweise; vorn, hinten = Flucht, querab, ein bzw. drei
-    Täuschkörper). Ein Ausweichhaken im letzten Moment ist bewusst keine
-    Mechanik: Die F-29 baut im Ausbruch zu langsam Last auf, um sich in der
+    Täuschkörper; „T.+querab“ = werfen und abdrehen). Ein Ausweichhaken im
+    letzten Moment ist bewusst keine Mechanik: Die F-29 baut im Ausbruch zu langsam Last auf, um sich in der
     letzten Sekunde aus dem Wirkradius zu bewegen (Messungen v0.2.9).
 
     Die Kurzstrecke (bis v0.2.9 als SA-8, dann mit Infrarotsuchkopf als SA-13,
@@ -1366,15 +1366,18 @@ Format jedes Eintrags:
     Spielerwunsch: viele opfern, um eine Rakete doch noch abzuschütteln);
     leer meldet „CHAFF EMPTY“ bzw. „FLARES EMPTY“. Ein Täuschkörper bleibt am
     Abwurfort stehen und brennt 5 s. Liegt er im Suchkegel (Peilung) und in
-    Reichweite einer Rakete der passenden Lenkart, lenkt sie auf ihn statt
-    auf das Flugzeug und zündet dort wirkungslos („SA-6 DECOYED“) – außer sie
-    **widersteht** ihm: einmal je Paar aus Rakete und Täuschkörper gewürfelt
+    Reichweite einer Rakete der passenden Lenkart, **blendet** er sie wie im
+    Original („SA-6 DECOYED“): Sie fliegt geradeaus weiter, hält aber ihr
+    Ziel. Fliegt sie an ihm vorbei oder brennt er aus, sieht sie wieder –
+    liegt das Flugzeug dann in ihrem Kegel, hat sie es wieder, sonst ist es
+    verloren. Richtig werfen heißt also: früh genug werfen und abdrehen
+    (Spielerwunsch v0.2.9: ein früh abgelenkter Flugkörper war sonst für
+    immer aus dem Rennen). Die Rakete übergeht ihn, wenn sie ihm
+    **widersteht**: einmal je Paar aus Rakete und Täuschkörper gewürfelt
     mit der Resistenz ihres Typs (Tabelle). Täuschkörper gehören einer Seite
     und lenken nur Raketen gegen diese Seite ab – unsere Fackeln also keine
     eigene Maverick, später feindliche Fackeln unsere Luft-Luft-Raketen.
-    Brennt er vorher aus, fliegt sie ohne Ziel weiter. Richtig werfen heißt:
-    kurz vor dem Einschlag, dann abdrehen. Kein Einfluss auf das
-    Stealth-Level (Spielerentscheidung). Anzeige: HUD „CH 20 FL 20“,
+    Kein Einfluss auf das Stealth-Level (Spielerentscheidung). Anzeige: HUD „CH 20 FL 20“,
     WPN-Seite, Karte (Kreuz bzw. Kreis), 3D-Wolke bzw. glühender Punkt.
 - **Status:** Boden-Luft-Raketen, Täuschkörper und Störer umgesetzt (v0.2.9)
 

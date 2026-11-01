@@ -217,8 +217,10 @@ fn sam_guidance_is_semi_active() {
     assert!(!w.tracking, "verloren bleibt verloren");
 }
 
-/// Täuschkörper wie im Original: Ein Düppel im Suchkegel lenkt die
-/// Radarrakete ab, nicht die Infrarotrakete – bei der Fackel umgekehrt.
+/// Täuschkörper wie im Original: Ein Düppel im Suchkegel blendet die
+/// Radarrakete, nicht die Infrarotrakete – bei der Fackel umgekehrt. Die
+/// Rakete hält dabei ihr Ziel und sieht es wieder, sobald der Täuschkörper
+/// fort ist.
 #[test]
 fn decoys_lure_only_their_kind_of_seeker() {
     let terrain = Terrain::new(1);
@@ -244,16 +246,17 @@ fn decoys_lure_only_their_kind_of_seeker() {
         seek(&mut radar, &air_view(&terrain, at, true, &chaff)),
         Some(WeaponEvent::Decoyed { .. })
     ));
-    assert_eq!(radar.target, Some(Track::Decoy(7)));
+    assert!(radar.blinded && !radar.tracking && radar.target == Some(Track::Aircraft));
+    assert!(seek(&mut radar, &air_view(&terrain, at, true, &chaff)).is_none(), "nur einmal gemeldet");
     let mut ir = start(WeaponKind::ShortRangeSam);
     seek(&mut ir, &air_view(&terrain, DVec3::new(5_000.0, 0.0, -9_000.0), false, &chaff));
     assert_eq!(ir.target, Some(Track::Aircraft));
     assert!(ir.tracking, "Infrarot braucht keine Beleuchtung");
     seek(&mut ir, &air_view(&terrain, at, false, &flare));
-    assert_eq!(ir.target, Some(Track::Decoy(8)));
-    // Ausgebrannt: Die Rakete hat kein Ziel mehr.
+    assert!(ir.blinded && !ir.tracking);
+    // Ausgebrannt, Flugzeug noch im Kegel: Sie sieht es wieder.
     seek(&mut ir, &air_view(&terrain, at, false, &[]));
-    assert!(ir.target.is_none() && !ir.tracking);
+    assert!(!ir.blinded && ir.tracking && ir.target == Some(Track::Aircraft));
 }
 
 /// Vorhalt: stehendes Ziel → Zielmitte; bewegtes Ziel → Treffpunkt

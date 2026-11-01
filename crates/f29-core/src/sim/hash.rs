@@ -73,9 +73,8 @@ impl Sim {
                 None => u64::MAX,
                 Some(Track::Ground(i)) => i as u64,
                 Some(Track::Aircraft) => u64::MAX - 1,
-                Some(Track::Decoy(id)) => 1 << 40 | u64::from(id),
             });
-            h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1);
+            h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1 | u64::from(w.blinded) << 2);
             h.u64(w.owner.map_or(u64::MAX, |o| o as u64));
         }
         let cm = &st.countermeasures;

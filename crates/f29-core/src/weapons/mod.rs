@@ -245,8 +245,6 @@ pub enum Track {
     Ground(usize),
     /// Das eigene Flugzeug (feindliche Raketen).
     Aircraft,
-    /// Ein Täuschkörper (Nummer).
-    Decoy(u32),
 }
 
 /// Eine Waffe im Flug.
@@ -273,6 +271,8 @@ pub struct Weapon {
     /// Feindliche Rakete: gestartet von der Radarstellung mit diesem Index in
     /// `Sim::targets`; `None` = eigene Waffe.
     pub owner: Option<usize>,
+    /// Ein Täuschkörper im Suchkegel blendet sie gerade.
+    pub blinded: bool,
 }
 
 impl Weapon {
@@ -288,6 +288,7 @@ impl Weapon {
             searching: false,
             boresight: velocity.normalize_or_zero(),
             owner: None,
+            blinded: false,
         }
     }
 
@@ -426,7 +427,7 @@ pub enum WeaponEvent {
         id: u32,
         site: usize,
     },
-    /// Eine Rakete hat sich von einem Täuschkörper ablenken lassen.
+    /// Ein Täuschkörper blendet eine Rakete (sie fliegt geradeaus weiter).
     Decoyed {
         kind: WeaponKind,
         id: u32,
@@ -736,10 +737,8 @@ impl Stores {
                     self.events
                         .push(world.tick, WeaponEvent::AircraftHit { kind: w.kind, id: w.id, systems });
                 }
-                // Am Täuschkörper oder (feindlich) im Gelände: wirkungslos.
-                Fate::Fuze(p) | Fate::Ground(p)
-                    if w.owner.is_some() || matches!(w.target, Some(Track::Decoy(_))) =>
-                {
+                // Feindlich im Gelände: wirkungslos.
+                Fate::Fuze(p) | Fate::Ground(p) if w.owner.is_some() => {
                     self.in_flight.remove(i);
                     let result = ImpactResult::Ground;
                     self.events.push(

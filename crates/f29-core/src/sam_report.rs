@@ -32,13 +32,21 @@ pub enum Maneuver {
     /// Querab halten.
     Beam,
     /// Auf sie zu und bei 1,5 km so viele passende Täuschkörper auf einmal
-    /// werfen (ohne abzudrehen: misst nur die Täuschkörper).
+    /// werfen, dann geradeaus weiter.
     Decoys(u8),
+    /// Wie [`Maneuver::Decoys`], nach dem Wurf aber querab abdrehen.
+    DecoysBeam(u8),
 }
 
 impl Maneuver {
-    pub const ALL: [Maneuver; 5] =
-        [Maneuver::Toward, Maneuver::Away, Maneuver::Beam, Maneuver::Decoys(1), Maneuver::Decoys(3)];
+    pub const ALL: [Maneuver; 6] = [
+        Maneuver::Toward,
+        Maneuver::Away,
+        Maneuver::Beam,
+        Maneuver::Decoys(1),
+        Maneuver::Decoys(3),
+        Maneuver::DecoysBeam(1),
+    ];
 
     pub fn label(self) -> String {
         match self {
@@ -46,6 +54,7 @@ impl Maneuver {
             Maneuver::Away => "hinten".into(),
             Maneuver::Beam => "querab".into(),
             Maneuver::Decoys(n) => format!("{n} Täuschk."),
+            Maneuver::DecoysBeam(n) => format!("{n} T.+querab"),
         }
     }
 }
@@ -99,12 +108,15 @@ pub fn engagement(seed: u64, kind: WeaponKind, south: f64, west: f64, m: Maneuve
             launched = true;
             let to = w.position - fd.position;
             let b = to.y.atan2(to.x);
+            let beam = b - FRAC_PI_2 * wrap(b - fd.heading).signum();
             ap.target_heading = match m {
                 Maneuver::Toward | Maneuver::Decoys(_) => b,
+                Maneuver::DecoysBeam(_) if thrown > 0 => beam,
+                Maneuver::DecoysBeam(_) => b,
                 Maneuver::Away => b + PI,
-                Maneuver::Beam => b - FRAC_PI_2 * wrap(b - fd.heading).signum(),
+                Maneuver::Beam => beam,
             };
-            if let Maneuver::Decoys(n) = m
+            if let Maneuver::Decoys(n) | Maneuver::DecoysBeam(n) = m
                 && to.length() < 1_500.0
                 && thrown < n
             {

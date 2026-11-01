@@ -206,7 +206,12 @@ fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) 
             .any(|w| (w.position - sim.aircraft().position).length() < at_m);
         let w = if near && !thrown { decoy } else { 0 };
         thrown |= w != 0;
-        step(&mut sim, 0, w);
+        // Werfen, dann hart abdrehen (75° Querlage, ziehen): Die geblendete
+        // Rakete findet das Flugzeug danach nicht wieder.
+        let fd = sim.flight_data();
+        let (roll, pull) =
+            if thrown { (((75f64.to_radians() - fd.roll) * 2.0).clamp(-1.0, 1.0), 0.8) } else { (0.0, 0.0) };
+        sim.step(ControlFrame::from_analog(pull, roll, 0.0, 0.7, 0).with_weapons(w));
         if thrown && sim.weapons_in_flight().iter().all(|w| w.owner.is_none()) {
             break;
         }
@@ -215,7 +220,8 @@ fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) 
     events_since(&sim, t0)
 }
 
-/// Ein Düppel kurz vor dem Einschlag lenkt die Radarrakete (SA-6) ab.
+/// Ein Düppel kurz vor dem Einschlag blendet die Radarrakete (SA-6); wer
+/// dann abdreht, ist sie los.
 #[test]
 fn chaff_decoys_the_radar_missile() {
     let ev = decoy_run(TargetClass::AirDefense, 12_000.0, 1_500.0, weapon_flags::CHAFF, 2_000.0);
