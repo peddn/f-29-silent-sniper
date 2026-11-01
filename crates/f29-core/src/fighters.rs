@@ -26,7 +26,8 @@
 //! je Typ einige Treffer ([`FighterSpec::hits`]). Der getroffene Jäger stürzt
 //! ab und bleibt als Wrack aus dem Spiel. Gegen jede anfliegende Rakete wirft
 //! er einen passenden Täuschkörper ([`DECOYS`] Stück); ob sie ihm folgt,
-//! entscheidet ihre Resistenz.
+//! entscheidet ihre Resistenz. Verfolgt ihn eine Rakete und ist sie nah,
+//! weicht er aus – je Typ mit eigenen Manövern ([`Evasion`]).
 
 use crate::atmosphere::G0;
 use crate::detmath;
@@ -65,6 +66,20 @@ pub const DECOY_RANGE_M: f64 = 1_500.0;
 const ROTATE_MPS: f64 = 90.0;
 const TAKEOFF_ACCEL: f64 = 12.0;
 
+/// Näher als so (m) weicht ein Jäger einer Rakete aus, die ihn verfolgt.
+pub const EVADE_RANGE_M: f64 = 6_000.0;
+
+/// Ausweichmanöver vor einer Rakete (Spielerentscheidung v0.2.9: ein, zwei
+/// je Typ).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Evasion {
+    /// Harte Kurve querab zur Rakete: Ihr Vorhaltwinkel wächst.
+    Beam,
+    /// Querab und dabei in den Tiefflug (Abschwung): Gelände kann den
+    /// optischen Suchkopf abschatten.
+    Dive,
+}
+
 /// Jägertypen (reale Vorbilder, eigene Werte).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FighterKind {
@@ -95,6 +110,8 @@ pub struct FighterSpec {
     pub hits: u8,
     /// Luft-Luft-Rakete (Vorrat unbegrenzt, eine in der Luft).
     pub missile: WeaponKind,
+    /// Ausweichmanöver, je Rakete reihum.
+    pub evasions: &'static [Evasion],
 }
 
 const fn deg(d: f64) -> f64 {
@@ -113,6 +130,7 @@ const SPECS: [FighterSpec; 2] = [
         radar_cone_rad: deg(30.0),
         hits: 5,
         missile: WeaponKind::Aphid,
+        evasions: &[Evasion::Beam],
     },
     FighterSpec {
         label: "MIG-29",
@@ -125,6 +143,7 @@ const SPECS: [FighterSpec; 2] = [
         radar_cone_rad: deg(60.0),
         hits: 8,
         missile: WeaponKind::Alamo,
+        evasions: &[Evasion::Beam, Evasion::Dive],
     },
 ];
 
@@ -175,6 +194,9 @@ pub struct Fighter {
     /// Restliche Täuschkörper und die Rakete, gegen die er zuletzt einen warf.
     pub decoys: u8,
     pub decoyed: Option<u32>,
+    /// Nächste Rakete, die ihn verfolgt und nah ist (Ort, Nummer); vom Sim
+    /// vor jedem Schritt gesetzt.
+    pub threat: Option<(DVec3, u32)>,
 }
 
 impl Fighter {
@@ -199,6 +221,7 @@ impl Fighter {
             hits: 0,
             decoys: DECOYS,
             decoyed: None,
+            threat: None,
         }
     }
 
@@ -247,16 +270,28 @@ impl Fighter {
     fn fly(&mut self, terrain: &Terrain, dt: f64) {
         let s = *self.spec();
         let to = self.goal - self.position;
-        let err = detmath::wrap_pi(detmath::atan2(to.y, to.x) - self.heading);
-        let outbound = self.mode == Mode::Patrol
+        let mut err = detmath::wrap_pi(detmath::atan2(to.y, to.x) - self.heading);
+        let ground = terrain.elevation(self.position.x, self.position.y);
+        let mut want_alt = (-self.goal.z).max(ground + MIN_AGL_M);
+        let mut outbound = self.mode == Mode::Patrol
             && err.abs() > std::f64::consts::FRAC_PI_2
             && DVec3::new(to.x, to.y, 0.0).length() < PATROL_LEG_M;
+        // Ausweichen: auf den näheren der beiden Kurse querab zur Rakete.
+        if let Some((m, id)) = self.threat {
+            let away = self.position - m;
+            let b = detmath::atan2(away.y, away.x);
+            let side = |h: f64| detmath::wrap_pi(h - self.heading);
+            let (l, r) = (side(b + std::f64::consts::FRAC_PI_2), side(b - std::f64::consts::FRAC_PI_2));
+            err = if l.abs() < r.abs() { l } else { r };
+            outbound = false;
+            if s.evasions[id as usize % s.evasions.len()] == Evasion::Dive {
+                want_alt = ground + MIN_AGL_M;
+            }
+        }
         let want = if outbound { 0.0 } else { (err * 2.0).clamp(-s.max_bank_rad, s.max_bank_rad) };
         self.bank += (want - self.bank).clamp(-s.roll_rate * dt, s.roll_rate * dt);
         self.heading = detmath::wrap_pi(self.heading + G0 * detmath::tan(self.bank) / self.speed * dt);
-        let ground = terrain.elevation(self.position.x, self.position.y);
         let alt = -self.position.z;
-        let want_alt = (-self.goal.z).max(ground + MIN_AGL_M);
         let vs = ((want_alt - alt) * 0.2).clamp(-s.climb_mps, s.climb_mps);
         self.pitch = detmath::asin((vs / self.speed).clamp(-0.5, 0.5));
         self.speed += (s.cruise_mps - self.speed).clamp(-10.0 * dt, 10.0 * dt);

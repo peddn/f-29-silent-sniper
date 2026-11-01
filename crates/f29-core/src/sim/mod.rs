@@ -427,6 +427,7 @@ impl Sim {
         if self.status != Status::Flying {
             self.gun.trigger(self.tick, false, DVec3::ZERO, DVec3::ZERO, DQuat::IDENTITY, DT);
             self.radar.step(self.tick, &self.targets, None);
+            self.mark_threats();
             self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), None);
             return;
         }
@@ -444,6 +445,7 @@ impl Sim {
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
         let exposure = self.exposure();
         self.radar.step(self.tick, &self.targets, Some(&exposure));
+        self.mark_threats();
         self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), Some(&exposure));
         self.launch_sams();
         self.launch_air();
@@ -606,6 +608,24 @@ impl Sim {
             let launch = launch!(self);
             let dropped = if self.aircraft.on_ground { 0.0 } else { self.stores.release(&launch) };
             self.aircraft.stores_kg = (self.aircraft.stores_kg - dropped).max(0.0);
+        }
+    }
+
+    /// Jedem Jäger die nächste eigene Rakete, die ihn verfolgt und näher als
+    /// [`fighters::EVADE_RANGE_M`] ist: Er weicht ihr aus.
+    fn mark_threats(&mut self) {
+        for f in &mut self.fighters.list {
+            f.threat = None;
+        }
+        for w in self.stores.in_flight.iter().filter(|w| w.owner.is_none() && w.tracking) {
+            if let Some(Track::Fighter(i)) = w.target {
+                let f = &mut self.fighters.list[i];
+                let d = (f.position - w.position).length();
+                if d < fighters::EVADE_RANGE_M && f.threat.is_none_or(|(p, _)| d < (f.position - p).length())
+                {
+                    f.threat = Some((w.position, w.id));
+                }
+            }
         }
     }
 

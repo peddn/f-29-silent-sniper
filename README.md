@@ -307,8 +307,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       zerstört), Kanone gegen Luftziele mit Vorhaltemarke, AIM-9 Sidewinder
       (`aim9`, 4 je Schacht, optisch), AIM-120 AMRAAM (`aim120`, 3 je Schacht,
       eigenes Radar), Fackeln und Düppel der Jäger (v0.2.9)
-- [ ] Etappe 3: Waffen der Jäger (Kanone, Luft-Luft-Raketen), Ausweichen,
-      Radarwarner
+- [x] Etappe 3: Jäger feuern AA-8 (MiG-21) bzw. AA-10 (MiG-29, halbaktiv)
+      und schießen mit der Kanone (Treffer kosten Schub, mit 15 % ein
+      System); sie weichen Raketen querab bzw. mit Abschwung aus (v0.2.9)
 - [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
 - [ ] Luft-Luft-Raketen, Bordkanone gegen Luftziele
 - [ ] Feindliche Jäger und Abfangjäger mit KI (aufbauend auf dem Autopiloten)

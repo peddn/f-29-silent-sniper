@@ -1582,9 +1582,34 @@ Format jedes Eintrags:
     Richtung (bei Radaren mit Kegel um ihre Blickrichtung, bei einer
     verfolgenden Bedrohung um ihre Peilung) und einen Warnton, der lauter
     wird, sobald sie das Flugzeug erfasst; daneben der Name der Bedrohung.
+- **Unser Design Etappe 3 (Spielerentscheidungen v0.2.9):**
+  - **Raketen:** MiG-21 mit AA-8 Aphid (optisch/Infrarot, kurze
+    Reichweite, Fackeln helfen), MiG-29 mit AA-10 Alamo (Radar, mittlere
+    Reichweite, weit weg halbaktiv – lenkt nur, solange ihr Jäger das
+    Flugzeug mit seinem Radar hält –, Düppel helfen). Vorrat unbegrenzt,
+    eine Rakete je Jäger in der Luft, alle feindlichen Raketen zusammen
+    höchstens vier. Startregel wie im Original: im Takt seines Radars, wenn
+    es das Flugzeug gerade erfasst hat, es in ±30° vor der Nase, in
+    Reichweite und nicht näher als 1 km ist. Meldung „MISSILE LAUNCH AA-8 -
+    MIG-21“. Treffer wirken wie SAM-Treffer über die Bordsysteme (M-015).
+  - **Kanone:** feuert, solange er verfolgt und das Flugzeug näher als
+    1,2 km und innerhalb 3° vor seiner Nase liegt. Jeder Treffer kostet 2 %
+    Höchstschub und verschlechtert mit 15 % ein zufälliges System um eine
+    Stufe. Meldung „MIG-21 GUN HIT“; Leuchtspur sichtbar.
+  - **Ausweichen:** Verfolgt ihn eine eigene Rakete und ist sie näher als
+    6 km, dreht er auf den näheren Kurs querab zu ihr. Die MiG-21 kennt nur
+    diese Kurve, die MiG-29 wechselt je Rakete zwischen ihr und dem
+    Abschwung (querab und in den Tiefflug, wo Gelände den optischen
+    Suchkopf abschatten kann). Die Manövertabelle des Originals entfällt.
+  - **Gemessen:** Gegen AIM-9 und AIM-120 bringt das Ausweichen bei
+    Anflügen von vorn kaum etwas – die Raketen sind schnell genug, dass ihr
+    Vorhaltwinkel im Suchkegel bleibt, und die Jäger drehen langsam. Härtere
+    Kurven und engere Suchkegel wurden ausprobiert, machten die Täuschkörper
+    aber weniger wirksam; offen für Abstimmung.
+  - **Kein Radarwarner** (Spielerentscheidung).
 - **Status:** Etappe 1 umgesetzt (v0.2.9); Etappe 2 umgesetzt (v0.2.9):
   Abschuss, Kanone mit Vorhaltemarke, AIM-9, AIM-120, Täuschkörper der Jäger;
-  Etappe 3 gelesen
+  Etappe 3 umgesetzt (v0.2.9): Raketen, Kanone und Ausweichen der Jäger
 
 ### M-031 Einsatzgebiete und Missionsgenerator
 

@@ -165,3 +165,20 @@ fn fighter_gun_costs_thrust() {
     assert!(s.capability(System::Engine) < 1.0 - 0.019 * f64::from(s.gun_hits).min(10.0));
     assert!(sim.flight_data().weapon_messages.iter().any(|m| m.text == "MIG-21 GUN HIT"));
 }
+
+/// Kommt eine Rakete nah, dreht der Jäger querab zu ihr.
+#[test]
+fn fighters_turn_away_from_missiles() {
+    let course = |jet: usize, kind: WeaponKind| {
+        let mut sim = duel_with(kind, jet, 7_000.0, false);
+        sim.fighters_mut().list[jet].decoys = 0;
+        let h0 = sim.fighters().list[jet].heading;
+        step(&mut sim, 0, weapon_flags::RELEASE);
+        fly(&mut sim, 3.5, 0, 0);
+        (sim.fighters().list[jet].heading - h0).abs()
+    };
+    for jet in [0, 3] {
+        let turn = course(jet, WeaponKind::Sidewinder);
+        assert!(turn > 0.05, "Jäger {jet} dreht nicht: {turn:.3} rad");
+    }
+}
