@@ -133,6 +133,7 @@ fn update(
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
     mut view: ResMut<MfdView>,
+    settings: Res<crate::view::ViewSettings>,
     mut last_cam: Local<Option<u32>>,
     origin: Res<WorldOrigin>,
     image: Res<TgtImage>,
@@ -158,16 +159,26 @@ fn update(
     // Augpunkt, Zielpunkt, halbes Sichtfeld und Rauschen je Seite.
     // Dunkle oder flackernde Anzeigen (Schadensmodell) zeigen kein Kamerabild.
     let on = f29_hud::displays_on(&fd);
+    let eye = || rotation(state.render_pose().attitude) * MOUNT;
+    let optical = state.sim.sensors().optical_range().max(1.0);
     let shot = match view.0.right_page {
+        // Luft-Luft: der gewählte Jäger, solange das Auge ihn sieht.
+        RightPage::Target if settings.hud_mode == f29_hud::HudMode::AirToAir => {
+            fd.air_target.filter(|t| t.optical && on).and_then(|t| {
+                let f = state.sim.fighters().list.get(t.id as usize)?;
+                let (aim, eye) = (place(f.position, origin.0), eye());
+                let range = (aim - eye).length();
+                let half = (crate::fighters::shown_length(range) * 0.5 / TARGET_FILL as f32).atan2(range.max(1.0));
+                Some((eye, aim, half, NEAR_M, 0.6 + 0.8 * (t.range / optical) as f32))
+            })
+        }
+        RightPage::Target if settings.hud_mode == f29_hud::HudMode::Nav => None,
         RightPage::Target => fd.target.filter(|t| t.optical && on).map(|t| {
-            let pose = state.render_pose();
-            let rot = rotation(pose.attitude);
             let tgt = &state.sim.targets()[t.index];
             let [n, e, d] = tgt.center_ned();
             let aim = place(f29_core::DVec3::new(n, e, d), origin.0);
-            let eye = rot * MOUNT;
+            let eye = eye();
             let half = (tgt.class.radius() / TARGET_FILL).atan2((aim - eye).length().max(1.0) as f64) as f32;
-            let optical = state.sim.sensors().optical_range().max(1.0);
             (eye, aim, half, NEAR_M, 0.6 + 0.8 * (t.range / optical) as f32)
         }),
         RightPage::WeaponCam => fd.weapon_cam.filter(|_| on).map(|c| {

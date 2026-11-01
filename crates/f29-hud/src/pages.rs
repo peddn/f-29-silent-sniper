@@ -7,6 +7,7 @@
 
 use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::heading_deg;
+use crate::hud::HudMode;
 use crate::map::MapData;
 use crate::mfd::{RightPage, WEAPON_STATIONS, fuel_bar};
 use f29_core::systems::{Condition, System};
@@ -514,21 +515,12 @@ pub fn target_image_rect(screen: Rect) -> Rect {
     Rect { min: [f.x0, screen.max[1] - f.h * 0.53], max: [f.x1, screen.max[1] - f.h * 0.11] }
 }
 
-/// TGT-Seite. Mit `camera_feed` liegt ein gerendertes Kamerabild unter dem
+/// TGT-Seite: das gewählte Ziel der Art des HUD-Modus (Bodenziel, Jäger,
+/// Landebahn). Mit `camera_feed` liegt ein gerendertes Kamerabild unter dem
 /// Bildfeld; gezeichnet werden dann nur Rahmen und Fadenkreuz.
-pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, camera_feed: bool) {
+pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, mode: HudMode, camera_feed: bool) {
     let f = frame(screen);
     title(dl, screen, &f, "TARGET");
-    let status = match &fd.target {
-        Some(t) if t.destroyed => "DESTROYED",
-        Some(t) if t.optical && t.radar => "OPT RDR",
-        Some(t) if t.optical => "OPT",
-        Some(_) => "RDR",
-        None => "NO LOCK",
-    };
-    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, status, Ink::Mfd);
-
-    // Bildfeld
     let img = target_image_rect(screen);
     dl.rect(img, Ink::MfdDim);
     let c = img.center();
@@ -538,45 +530,72 @@ pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, camera
         let a = [c[0] + dx * half * 0.85, c[1] + dy * half * 0.85];
         dl.line(a, [a[0] - dx * tick, a[1] - dy * tick], Ink::MfdDim);
     }
-    match &fd.target {
-        // Bild kommt aus dem Frontend (gerenderte Zielkamera).
-        Some(t) if t.optical && camera_feed => {}
-        Some(t) if t.optical => {
-            dl.set_clip(Some(img));
-            target_image(dl, t, c, half);
-            dl.set_clip(Some(screen));
-        }
-        Some(_) => {
-            dl.rect(Rect::from_center(c, [half * 0.05, half * 0.05]), Ink::Mfd);
-            dl.text_mid([c[0], c[1] - half * 0.3], f.txt * 0.85, Align::Center, "NO VISUAL", Ink::MfdDim);
-        }
-        None => {
-            dl.text_mid(c, f.txt, Align::Center, "NO TARGET", Ink::MfdDim);
+    // Zustand, Bild (`Some(true)`: optisch, `Some(false)`: nur Radarmarke)
+    // und Angaben: Name, rechts daneben, dann drei Zeilen.
+    let (status, image, rows) = match mode {
+        HudMode::AirToGround => ground_target(dl, fd, c, half, img, screen, camera_feed),
+        HudMode::AirToAir => match &fd.air_target {
+            Some(t) => (
+                sensor_status(t.optical, t.radar),
+                Some(t.optical),
+                Some((
+                    t.label,
+                    "HOSTILE",
+                    [
+                        ("RANGE", format!("{:.1} KM", units::m_to_km(t.range))),
+                        ("BEARING", format!("{:03}", heading_deg(t.bearing))),
+                        ("CLOSURE", format!("{:+.0} M/S", t.closure_mps)),
+                    ],
+                )),
+            ),
+            None => ("NO LOCK", None, None),
+        },
+        HudMode::Nav => match &fd.runway_target {
+            Some(r) => (
+                "NAV",
+                Some(false),
+                Some((
+                    r.name,
+                    r.side.label(),
+                    [
+                        ("RANGE", format!("{:.1} KM", units::m_to_km(r.range))),
+                        ("BEARING", format!("{:03}", heading_deg(r.bearing))),
+                        ("", String::new()),
+                    ],
+                )),
+            ),
+            None => ("NO LOCK", None, None),
+        },
+    };
+    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, status, Ink::Mfd);
+    if mode != HudMode::AirToGround {
+        match image {
+            // Optisch: Bild aus dem Frontend; ohne Kamera ein Kreuz.
+            Some(true) if camera_feed => {}
+            Some(true) => {
+                dl.line([c[0] - half * 0.2, c[1]], [c[0] + half * 0.2, c[1]], Ink::Mfd);
+                dl.line([c[0], c[1] - half * 0.05], [c[0], c[1] + half * 0.1], Ink::Mfd);
+            }
+            Some(false) => {
+                dl.rect(Rect::from_center(c, [half * 0.05, half * 0.05]), Ink::Mfd);
+                dl.text_mid([c[0], c[1] - half * 0.3], f.txt * 0.85, Align::Center, "NO VISUAL", Ink::MfdDim);
+            }
+            None => dl.text_mid(c, f.txt, Align::Center, "NO TARGET", Ink::MfdDim),
         }
     }
 
     // Angaben
     let step = f.txt * 1.35;
     let mut y = img.min[1] - step * 0.9;
-    if let Some(t) = &fd.target {
-        let name_ink = if t.civilian { Ink::Warning } else { Ink::Mfd };
-        dl.text_mid([f.x0, y], f.txt, Align::Left, t.name, name_ink);
-        let role = match t.role {
-            TargetRole::Primary => "PRIMARY",
-            TargetRole::Secondary => "SECONDARY",
-            TargetRole::None => "",
-        };
-        dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, role, Ink::Warning);
-        y -= step;
-        if t.civilian {
-            dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, "CIVILIAN - DO NOT ATTACK", Ink::Warning);
-        } else {
-            row(dl, &f, y, "CLASS", t.class.label(), Ink::Mfd);
+    if let Some((name, right, lines)) = rows {
+        dl.text_mid([f.x0, y], f.txt, Align::Left, name, Ink::Mfd);
+        dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, right, Ink::Warning);
+        for (label, value) in lines {
+            y -= step;
+            if !label.is_empty() {
+                row(dl, &f, y, label, &value, Ink::Mfd);
+            }
         }
-        y -= step;
-        row(dl, &f, y, "RANGE", &format!("{:.1} KM", units::m_to_km(t.range)), Ink::Mfd);
-        y -= step;
-        row(dl, &f, y, "BEARING", &format!("{:03}", heading_deg(t.bearing)), Ink::Mfd);
         y -= step;
     } else {
         y -= step * 4.0;
@@ -584,6 +603,55 @@ pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, camera
     let radar = if fd.radar_on { "ON" } else { "OFF" };
     let ink = if fd.radar_on { Ink::Warning } else { Ink::MfdDim };
     row(dl, &f, y, &format!("LOOK {}", fd.look.label()), &format!("RADAR {radar}"), ink);
+}
+
+fn sensor_status(optical: bool, radar: bool) -> &'static str {
+    match (optical, radar) {
+        (true, true) => "OPT RDR",
+        (true, false) => "OPT",
+        _ => "RDR",
+    }
+}
+
+type TargetRows = (&'static str, &'static str, [(&'static str, String); 3]);
+
+/// Bodenziel der TGT-Seite: Drahtgitterbild (ohne Kamera) bzw. Radarmarke
+/// und Angaben; liefert Zustand und Zeilen, das Bild zeichnet es selbst.
+fn ground_target(
+    dl: &mut DisplayList,
+    fd: &FlightData,
+    c: [f32; 2],
+    half: f32,
+    img: Rect,
+    screen: Rect,
+    camera_feed: bool,
+) -> (&'static str, Option<bool>, Option<TargetRows>) {
+    let txt = frame(screen).txt;
+    let Some(t) = &fd.target else {
+        dl.text_mid(c, txt, Align::Center, "NO TARGET", Ink::MfdDim);
+        return ("NO LOCK", None, None);
+    };
+    if t.optical && !camera_feed {
+        dl.set_clip(Some(img));
+        target_image(dl, t, c, half);
+        dl.set_clip(Some(screen));
+    } else if !t.optical {
+        dl.rect(Rect::from_center(c, [half * 0.05, half * 0.05]), Ink::Mfd);
+        dl.text_mid([c[0], c[1] - half * 0.3], txt * 0.85, Align::Center, "NO VISUAL", Ink::MfdDim);
+    }
+    let status = if t.destroyed { "DESTROYED" } else { sensor_status(t.optical, t.radar) };
+    let role = match t.role {
+        TargetRole::Primary => "PRIMARY",
+        TargetRole::Secondary => "SECONDARY",
+        TargetRole::None => "",
+    };
+    let class = if t.civilian { ("CIVILIAN", "DO NOT ATTACK".into()) } else { ("CLASS", t.class.label().into()) };
+    let rows = [
+        class,
+        ("RANGE", format!("{:.1} KM", units::m_to_km(t.range))),
+        ("BEARING", format!("{:03}", heading_deg(t.bearing))),
+    ];
+    (status, Some(t.optical), Some((t.name, role, rows)))
 }
 
 /// WPN-CAM-Seite: Bild der jüngsten Waffe mit Fernsehsuchkopf (Maverick) im

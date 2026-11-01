@@ -1096,6 +1096,10 @@ Format jedes Eintrags:
     Glas bekommt ein schlichtes, gedämpftes Viereck, auch weit außerhalb der
     Mitte. Das gewählte trägt einen Rahmen mit Ecken, Typ und Entfernung;
     außerhalb des Glases zeigt ein Randpfeil zu ihm.
+    Alle Vierecke sind gleich groß, unabhängig von der Entfernung. Die
+    TGT-Seite zeigt das gewählte Ziel des Modus (im AA-Modus den Jäger mit
+    Kamerabild, solange das Auge ihn sieht; in NAV die Landebahn), die Karte
+    rahmt es mit Ecken.
   - **Ein Erfassungskreis je Modus, eine Regel:** Liegt das gewählte Ziel im
     Kreis, ist es erfasst und wird an eine Rakete übergeben – AG ±6°, AA
     ±10°.

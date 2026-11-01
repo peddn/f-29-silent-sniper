@@ -88,6 +88,11 @@ fn position_models(
         *vis = Visibility::Visible;
         t.translation = at;
         t.rotation = rotation(DQuat::from_euler(f.heading, f.pitch, f.bank));
-        t.scale = Vec3::splat((t.translation.length() * MIN_ANGULAR / LENGTH_M).max(1.0));
+        t.scale = Vec3::splat(shown_length(t.translation.length()) / LENGTH_M);
     }
+}
+
+/// Dargestellte Länge (m) eines Jägers in `range` Metern Entfernung.
+pub fn shown_length(range: f32) -> f32 {
+    (range * MIN_ANGULAR).max(LENGTH_M)
 }

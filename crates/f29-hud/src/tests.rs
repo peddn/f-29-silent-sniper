@@ -304,6 +304,55 @@ fn fighters_show_on_the_map() {
     assert_eq!(red(vec![FighterInfo { pursuing: true, ..f }]), none + 12, "mit Kreis");
 }
 
+/// Der gewählte Jäger: Ecken auf der Karte, Angaben auf der TGT-Seite im
+/// AA-Modus (dort nicht im AG-Modus).
+#[test]
+fn picked_fighter_shows_on_map_and_target_page() {
+    use crate::HudMode;
+    let sim = Sim::new(SimConfig::new(0x0F29));
+    let mut fd = sim.flight_data();
+    fd.target = None;
+    let map = MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let m = layout.mfd_layout().unwrap();
+    let ahead = fd.position + f29_core::DVec3::new(fd.heading.cos(), fd.heading.sin(), 0.0) * 3_000.0;
+    fd.fighters = vec![f29_core::FighterInfo {
+        id: 3,
+        label: "MIG-29",
+        position: ahead,
+        velocity: f29_core::DVec3::ZERO,
+        heading: 0.0,
+        bank: 0.0,
+        pursuing: false,
+    }];
+    let count = |fd: &f29_core::FlightData, mode: HudMode| {
+        let mfd = MfdState { right_page: RightPage::Target, ..MfdState::default() };
+        let opts = HudOptions { show_hud: false, hud_mode: mode, mfd, ..HudOptions::default() };
+        let dl = build(fd, &layout, &opts, Some(&map));
+        let n = |r: Rect, ink: Option<Ink>| {
+            dl.lines.iter().filter(|l| r.contains(l.a) && ink.is_none_or(|i| l.ink == i)).count()
+        };
+        (n(m.left, Some(Ink::Hud)), n(m.right_screen, None))
+    };
+    let mut picked = fd.clone();
+    picked.air_target = Some(f29_core::AirTargetInfo {
+        id: 3,
+        label: "MIG-29",
+        range: 3_000.0,
+        closure_mps: 100.0,
+        direction_body: f29_core::DVec3::X,
+        in_circle: true,
+        optical: true,
+        radar: false,
+        bearing: fd.heading,
+    });
+    let (map0, page0) = count(&fd, HudMode::AirToAir);
+    let (map1, page1) = count(&picked, HudMode::AirToAir);
+    assert_eq!(map1, map0 + 8, "vier Ecken auf der Karte");
+    assert!(page1 > page0 + 40, "Name und Angaben auf der TGT-Seite");
+    assert_eq!(count(&picked, HudMode::AirToGround).1, count(&fd, HudMode::AirToGround).1);
+}
+
 #[test]
 fn fuel_bar_shrinks_with_fuel() {
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
@@ -687,6 +736,9 @@ fn hud_modes_show_their_symbology() {
         closure_mps: 150.0,
         direction_body: f29_core::DVec3::new(1.0, 0.05, -0.02).normalize_or_zero(),
         in_circle: true,
+        optical: true,
+        radar: false,
+        bearing: 0.0,
     });
     let blue = |fd: &f29_core::FlightData, mode: HudMode| {
         draw(fd, mode).iter().filter(|l| l.ink == Ink::HudWarning).count() as i64

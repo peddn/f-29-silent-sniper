@@ -255,12 +255,18 @@ impl Sensors {
     /// Sieht ein eigenes System einen Jäger bei `at`? Radar (falls an) in
     /// Reichweite, oder optisch bis zur Sichtweite mit freier Sicht.
     pub fn sees_aircraft(&self, terrain: &Terrain, pos: DVec3, at: DVec3) -> bool {
-        let range = (at - pos).length();
+        self.radar_sees_aircraft(pos, at) || self.eye_sees_aircraft(terrain, pos, at)
+    }
+
+    pub fn radar_sees_aircraft(&self, pos: DVec3, at: DVec3) -> bool {
+        self.radar_on && (at - pos).length() <= self.radar_range()
+    }
+
+    pub fn eye_sees_aircraft(&self, terrain: &Terrain, pos: DVec3, at: DVec3) -> bool {
         let sight =
             if self.night { AIR_SIGHT_NIGHT_M } else { AIR_SIGHT_M } * self.optics_capability.clamp(0.0, 1.0);
-        (self.radar_on && range <= self.radar_range())
-            || (range <= sight
-                && line_of_sight(|n, e| terrain.elevation(n, e), [pos.x, pos.y, -pos.z], [at.x, at.y, -at.z]))
+        (at - pos).length() <= sight
+            && line_of_sight(|n, e| terrain.elevation(n, e), [pos.x, pos.y, -pos.z], [at.x, at.y, -at.z])
     }
 
     /// Erfasst ein Kandidat eines der Systeme? Liefert die Aufschaltung.

@@ -332,7 +332,7 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
     let Some(t) = &fd.target else {
         return;
     };
-    let s = vh * 0.02;
+    let s = vh * MARK_SIZE;
     let zone = t.zone;
     let ink = if t.civilian { Ink::HudDim } else { Ink::Hud };
     match layout.project_body(t.direction_body.to_array()) {
@@ -384,6 +384,10 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
 }
 
 /// Kräftige Ecken außen um einen Zielrahmen der halben Größe `s`.
+/// Seitenlänge aller Zielvierecke (Anteil der Bildhöhe), unabhängig von
+/// der Entfernung; das gewählte unterscheidet nur sein Rahmen.
+const MARK_SIZE: f32 = 0.02;
+
 fn corners(dl: &mut DisplayList, p: [f32; 2], s: f32, ink: Ink) {
     let o = Rect::from_center(p, [s * 1.45, s * 1.45]);
     let k = s * 0.55;
@@ -407,7 +411,7 @@ fn marks(
     vh: f32,
     kind: MarkKind,
 ) {
-    let s = vh * 0.012;
+    let s = vh * MARK_SIZE;
     for m in fd.marks.iter().filter(|m| m.kind == kind && !m.selected) {
         if let Some(p) = layout.project_body(m.direction_body.to_array()).filter(|p| glass.contains(*p)) {
             dl.rect(Rect::from_center(p, [s, s]), Ink::HudDim);
@@ -428,7 +432,7 @@ fn picked_marker(
     bottom: &str,
     ink: Ink,
 ) {
-    let s = vh * 0.02;
+    let s = vh * MARK_SIZE;
     match layout.project_body(direction_body.to_array()) {
         Some(p) if glass.contains(p) => {
             dl.rect(Rect::from_center(p, [s, s]), ink);

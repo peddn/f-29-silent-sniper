@@ -122,7 +122,7 @@ pub fn build(
     }
     if opts.show_panel && layout.panel_fraction > 0.0 {
         dl.set_clip(None);
-        mfd::draw(&mut dl, fd, layout, &opts.mfd, map, opts.camera_feed, on);
+        mfd::draw(&mut dl, fd, layout, opts, map, on);
     }
     dl.set_clip(None);
     dl

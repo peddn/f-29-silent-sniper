@@ -199,11 +199,11 @@ pub(crate) fn draw(
     dl: &mut DisplayList,
     fd: &FlightData,
     layout: &ScreenLayout,
-    state: &MfdState,
+    opts: &crate::HudOptions,
     map: Option<&MapData>,
-    camera_feed: bool,
     screens_on: bool,
 ) {
+    let (state, camera_feed) = (&opts.mfd, opts.camera_feed);
     let Some(m) = layout.mfd_layout() else {
         return;
     };
@@ -226,7 +226,7 @@ pub(crate) fn draw(
     let rs = m.right_screen;
     match state.right_page {
         RightPage::Mission => crate::pages::mission(dl, fd, rs, map),
-        RightPage::Target => crate::pages::target(dl, fd, rs, camera_feed),
+        RightPage::Target => crate::pages::target(dl, fd, rs, opts.hud_mode, camera_feed),
         RightPage::WeaponCam => crate::pages::weapon_cam(dl, fd, rs, camera_feed),
         RightPage::Weapons => crate::pages::weapons(dl, fd, rs),
         RightPage::Engine => crate::pages::engine(dl, fd, rs),
@@ -236,6 +236,16 @@ pub(crate) fn draw(
     crate::pages::page_bar(dl, rs, state.right_page);
     dl.set_clip(None);
     signature(dl, fd, m.center);
+}
+
+/// Ecken um das gewählte Ziel auf der Karte (halbe Breite `b`).
+fn selection(dl: &mut DisplayList, p: [f32; 2], b: f32) {
+    let c = b * 0.45;
+    for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+        let corner = [p[0] + sx * b, p[1] + sy * b];
+        dl.line(corner, [corner[0] - sx * c, corner[1]], Ink::Hud);
+        dl.line(corner, [corner[0], corner[1] - sy * c], Ink::Hud);
+    }
 }
 
 /// Gehäuse mit Bildschirmrahmen und je fünf Tasten oben und unten.
@@ -353,13 +363,7 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                     dl.text_mid([p[0] + s * 1.9, p[1] + s * 1.2], txt * 0.8, Align::Left, tag, Ink::Warning);
                 }
                 if Some(k) == locked {
-                    let b = s * 1.35;
-                    let c = b * 0.45;
-                    for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
-                        let corner = [p[0] + sx * b, p[1] + sy * b];
-                        dl.line(corner, [corner[0] - sx * c, corner[1]], Ink::Hud);
-                        dl.line(corner, [corner[0], corner[1] - sy * c], Ink::Hud);
-                    }
+                    selection(dl, p, s * 1.35);
                 }
             }
             // Radarstellungen, die das Flugzeug entdeckt haben (M-020):
@@ -477,6 +481,15 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
         }
         if f.pursuing {
             dl.circle(p, k * 2.0, 10, Ink::Warning);
+        }
+        if fd.air_target.is_some_and(|t| t.id == f.id) {
+            selection(dl, p, txt * SYMBOL * 1.35);
+        }
+    }
+    if let Some(r) = &fd.runway_target {
+        let pos = [r.position.x, r.position.y];
+        if near(pos) {
+            selection(dl, proj.to_screen(pos), txt * SYMBOL * 1.35);
         }
     }
 

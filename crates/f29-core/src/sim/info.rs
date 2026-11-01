@@ -359,6 +359,11 @@ pub struct AirTargetInfo {
     pub direction_body: DVec3,
     /// Im Erfassungskreis ([`crate::sensors::AIR_CIRCLE_RAD`]): erfasst.
     pub in_circle: bool,
+    /// Gesehen von Auge (Zielkamera) bzw. Radar.
+    pub optical: bool,
+    pub radar: bool,
+    /// Peilung (rad, rechtweisend).
+    pub bearing: f64,
 }
 
 /// Seite eines Flugplatzes (Anzeige im NAV-Modus).
@@ -386,6 +391,9 @@ pub struct RunwayTargetInfo {
     pub side: Side,
     pub range: f64,
     pub direction_body: DVec3,
+    /// Peilung (rad, rechtweisend) und Lage (NED, für die Karte).
+    pub bearing: f64,
+    pub position: DVec3,
 }
 
 /// Zielart einer HUD-Markierung.
@@ -756,12 +764,16 @@ impl Sim {
                         direction_body,
                         in_circle: detmath::acos(direction_body.x.clamp(-1.0, 1.0))
                             <= sensors::AIR_CIRCLE_RAD,
+                        optical: self.sensors.eye_sees_aircraft(&self.terrain, a.position, f.position),
+                        radar: self.sensors.radar_sees_aircraft(a.position, f.position),
+                        bearing: detmath::wrap_two_pi(detmath::atan2(to.y, to.x)),
                     }
                 },
             ),
             runway_target: self.runway.index.map(|i| {
                 let r = &self.terrain.runways()[i];
-                let to = runway_point(r) - a.position;
+                let position = runway_point(r);
+                let to = position - a.position;
                 RunwayTargetInfo {
                     name: r.name,
                     side: match r.kind {
@@ -770,6 +782,8 @@ impl Sim {
                     },
                     range: to.length(),
                     direction_body: a.attitude.inverse_rotate(to.normalize_or_zero()),
+                    bearing: detmath::wrap_two_pi(detmath::atan2(to.y, to.x)),
+                    position,
                 }
             }),
             marks: self.marks(),
