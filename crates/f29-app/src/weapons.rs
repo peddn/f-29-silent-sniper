@@ -1,7 +1,8 @@
 //! Waffen in der 3D-Ansicht (M-014): Bomben und Flugkörper im Flug, der
 //! Bremsschirm der Fallschirmbombe und ein kurzer Blitz beim Einschlag;
 //! dazu die Leuchtspur der Bordkanone und kleine Einschlagwölkchen (M-016)
-//! sowie die Rauchspur feindlicher Raketen und die Täuschkörper (M-021).
+//! sowie die Rauchspur aller Raketen und abstürzender Jäger und die
+//! Täuschkörper (M-021, M-022).
 
 use crate::sim::{SimState, SimSystems};
 use crate::view::{WorldOrigin, place, rotation};
@@ -38,7 +39,7 @@ const MIN_ANGULAR: f32 = 0.004;
 const PUFF_S: f32 = 0.6;
 const PUFF_GROUND_M: f32 = 6.0;
 const PUFF_HIT_M: f32 = 8.0;
-/// Rauchspur feindlicher Raketen: alle so viele Meter ein Wölkchen, das so
+/// Rauchspur der Raketen: alle so viele Meter ein Wölkchen, das so
 /// lange (s) stehen bleibt, mit diesem Radius (m).
 const SMOKE_STEP_M: f64 = 40.0;
 const SMOKE_S: f32 = 4.0;
@@ -73,8 +74,9 @@ struct WeaponVisuals {
     /// Zuletzt ausgewerteter Kanoneneinschlag (Tick).
     last_gun_tick: u64,
     smoke: Handle<StandardMaterial>,
-    /// Feindliche Rakete → Ort des letzten Rauchwölkchens.
-    smoke_at: BTreeMap<u32, DVec3>,
+    /// Rakete bzw. abstürzender Jäger (Schlüssel [`smoke_key`]) → Ort des
+    /// letzten Rauchwölkchens.
+    smoke_at: BTreeMap<u64, DVec3>,
     flare: Handle<StandardMaterial>,
     /// Täuschkörper, die schon eine Wolke haben.
     decoys_seen: Vec<u32>,
@@ -182,8 +184,13 @@ fn sync_tracers(
     }
 }
 
-/// Für jeden neuen Kanoneneinschlag ein kleines Wölkchen, für feindliche
-/// Raketen eine Rauchspur aus Wölkchen.
+/// Schlüssel einer Rauchquelle: Raketen nach Nummer, Jäger dahinter.
+fn smoke_key(fighter: bool, id: u32) -> u64 {
+    u64::from(fighter) << 32 | u64::from(id)
+}
+
+/// Für jeden neuen Kanoneneinschlag ein kleines Wölkchen, für Raketen und
+/// abstürzende Jäger eine Rauchspur aus Wölkchen.
 fn spawn_puffs(mut commands: Commands, state: Res<SimState>, mut visuals: ResMut<WeaponVisuals>) {
     let impacts = &state.sim.gun().impacts;
     let newest = impacts.last().map_or(0, |i| i.tick);
@@ -205,20 +212,25 @@ fn spawn_puffs(mut commands: Commands, state: Res<SimState>, mut visuals: ResMut
         ));
     }
     visuals.last_gun_tick = visuals.last_gun_tick.max(newest);
-    // Rauchspur der feindlichen Raketen
-    let flying = state.sim.weapons_in_flight();
-    visuals.smoke_at.retain(|id, _| flying.iter().any(|w| w.id == *id));
-    for w in flying.iter().filter(|w| w.owner.is_some()) {
-        let last = visuals.smoke_at.get(&w.id).copied();
-        if last.is_some_and(|p| (w.position - p).length() < SMOKE_STEP_M) {
+    // Rauchspur: alle Raketen (nicht die Bomben) und abstürzende Jäger, diese
+    // dicker und länger stehend.
+    let missiles = state.sim.weapons_in_flight().iter().filter(|w| w.kind.spec().cruise_mps > 0.0);
+    let falling = state.sim.fighters().list.iter().filter(|f| f.mode == f29_core::fighters::Mode::Falling);
+    let sources: Vec<(u64, DVec3, f32, f32)> = missiles
+        .map(|w| (smoke_key(false, w.id), w.position, SMOKE_M, SMOKE_S))
+        .chain(falling.map(|f| (smoke_key(true, f.id), f.position, SMOKE_M * 2.0, SMOKE_S * 2.5)))
+        .collect();
+    visuals.smoke_at.retain(|k, _| sources.iter().any(|s| s.0 == *k));
+    for (key, at, radius, life) in sources {
+        if visuals.smoke_at.get(&key).is_some_and(|p| (at - *p).length() < SMOKE_STEP_M) {
             continue;
         }
-        visuals.smoke_at.insert(w.id, w.position);
+        visuals.smoke_at.insert(key, at);
         commands.spawn((
             Mesh3d(visuals.sphere.clone()),
             MeshMaterial3d(visuals.smoke.clone()),
             Transform::from_scale(Vec3::splat(0.1)),
-            Puff { at: w.position, age: 0.0, radius: SMOKE_M, life: SMOKE_S },
+            Puff { at, age: 0.0, radius, life },
         ));
     }
     // Täuschkörper: Düppel als helle Wolke, Fackel als glühender Punkt
