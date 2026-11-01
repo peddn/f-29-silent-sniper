@@ -1386,6 +1386,57 @@ Format jedes Eintrags:
     WPN-Seite, Karte (Kreuz bzw. Kreis), 3D-Wolke bzw. glühender Punkt.
 - **Status:** Boden-Luft-Raketen, Täuschkörper und Störer umgesetzt (v0.2.9)
 
+### M-022 Feindliche Flugzeuge
+
+- **Verhalten (Original):** Feindliche Jäger stehen auf feindlichen
+  Flugplätzen (und Trägern) bereit und starten erst, wenn die Gegenseite
+  Alarm hat. Alarm entsteht, wenn ein Radar – am Boden oder im Flugzeug – das
+  eigene Flugzeug erfasst; gemerkt wird dabei der Ort des Kontakts. Ein
+  bereitstehender Jäger startet, wenn dieser Ort von seinem Platz aus in
+  seiner Reichweite liegt. Gestartet wird von der Bahn (bzw. vom Deck) mit
+  Beschleunigung und Steigflug, mit Meldung „<Platz> – <Typ> startet“.
+- **Referenzstelle:** f19re `src/egcombat.c` (`updateObjects`,
+  `spawnEnemyAircraft`, `fireAirThreat`, `updateThreatAlert`), Tabellen
+  der Flugzeug- und Raketentypen in `src/stubs.c`.
+- **Lesephase (eigene Worte, keine Werte):**
+  - **Flug:** kein Flugmodell, sondern ein einfaches Bewegungsmodell –
+    Querlage folgt einem Sollwert, die Kursänderung folgt der Querlage, die
+    Nicklage einem Sollwert, dazu eine Fahrt je Typ. Die Typen unterscheiden
+    sich in Höchstfahrt, Reichweite (zugleich Flugdauer), Wendigkeit
+    (begrenzt Querlage und Rollrate), eigenem Radar und Bewaffnung. In
+    steilen Kurven sinkt die Fahrt etwas; ein Jäger, der zu tief sinkt, zieht
+    hoch.
+  - **Zustände:**
+    1. *Abfangen:* Solange der Alarm frisch ist, fliegt der Jäger den
+       gemerkten Kontaktort in der Höhe des Flugzeugs an.
+    2. *Luftkampf:* Ist er nah genug, wählt er sein Manöver aus einer
+       Tabelle nach Aggressivität (Konfliktstufe und Zufall je Flugzeug),
+       Lage des Ziels vor ihm und eigenem Kurs relativ zum Flugzeug –
+       u. a. Kurve auf das Ziel, Hochziehen, Abschwung. Liegt das Ziel genau
+       vor ihm und nah, schießt er mit der Kanone.
+    3. *Patrouille:* Ohne frischen Alarm fliegt er zu einem eigenen Objekt
+       ungefähr in Richtung des Flugzeugs, etwas höher als dieses; Rotten
+       fliegen in Formation am Führer. Zu weit weg gibt er auf.
+    4. *Rückflug und Landung:* Ist seine Flugdauer um, fliegt er zum
+       nächsten eigenen Platz und landet („landet“-Meldung), danach steht er
+       wieder bereit.
+  - **Eigenes Radar:** Jeder Jäger pingt wie eine Radarstellung, aber nur
+    nach vorn (Kegel um seine Nase; einige Typen rundum). Treffer häufen
+    sich an; über einer Schwelle gibt es Alarm und, nah genug (nachts
+    kürzer), die Meldung „Sichtkontakt <Typ>“. Störsender schwächen das
+    Anhäufen. Dann startet er eine Luft-Luft-Rakete, wenn das Flugzeug
+    ungefähr vor ihm, in Reichweite und nicht zu nah ist, sein Startplatz
+    frei ist und nicht schon zu viele Bedrohungen gleichzeitig laufen
+    (abhängig von der Konfliktstufe).
+  - **Luft-Luft-Raketen** sind Einträge derselben Raketentabelle wie die
+    SAMs, mit Lenkart Infrarot oder Radar (auch eine Generation „modern“),
+    und fliegen in derselben Liste wie die Boden-Luft-Raketen.
+  - **Getroffen:** Ein abgeschossenes Flugzeug zieht eine Rauchspur, stürzt
+    ab und zählt als Abschuss; die Konfliktstufe macht die Jäger
+    aggressiver, zahlreicher und schneller.
+- **Unser Design:** offen (Entwurf v0.4, Etappe 1: Jäger ohne Waffen).
+- **Status:** Lesephase abgeschlossen (v0.2.9)
+
 ### M-031 Einsatzgebiete und Missionsgenerator
 
 - **Verhalten:** Das Original hat vier feste Einsatzgebiete (Libyen, Persischer
