@@ -1460,8 +1460,10 @@ Format jedes Eintrags:
   - **Eigenes Radar:** pingt wie eine Radarstellung gegen dasselbe
     Stealth-Level (M-020), nur im Kegel um die Nase.
   - **Anzeige:** Karte (roter Pfeil in Flugrichtung, Kreis, solange sein
-    Radar das Flugzeug sieht); 3D-Modell (eigener Low-Poly-Deltajäger, in
-    der Ferne mit Mindestgröße).
+    Radar das Flugzeug sieht); 3D-Modell (eigener Low-Poly-Deltajäger),
+    sichtbar bis 15 km (nachts 5 km), in der Ferne mindestens gut einen
+    Retro-Bildpunkt groß – ein Punkt am Himmel – und ohne Dunst
+    (Spielerwunsch v0.2.9: vorher erst im letzten Moment zu sehen).
   - **Aufschaltung auf Luftziele:** Das eigene Radar (eingeschaltet) schaltet
     automatisch den nächsten fliegenden Jäger im Kegel voraus auf und hält
     ihn, solange er in Radarreichweite fliegt. Im AA-Modus zeigt das HUD ihn
