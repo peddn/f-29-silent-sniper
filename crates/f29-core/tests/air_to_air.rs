@@ -83,5 +83,23 @@ fn kill_rate(kind: WeaponKind, decoys: bool, from: f64, step_m: f64) -> usize {
 fn fighter_flares_save_about_every_second_jet() {
     assert_eq!(kill_rate(WeaponKind::Sidewinder, false, 4_000.0, 120.0), 30);
     let kills = kill_rate(WeaponKind::Sidewinder, true, 4_000.0, 120.0);
+    println!("AIM-9 gegen Fackeln: {kills}/30");
     assert!((9..=21).contains(&kills), "{kills}/30 Abschüsse");
+}
+
+#[test]
+fn amraam_shoots_down_a_fighter_far_away() {
+    let mut sim = duel(WeaponKind::Amraam, 20_000.0);
+    sim.fighters_mut().list[0].decoys = 0;
+    let t = sim.flight_data().air_target.expect("Jäger gewählt");
+    assert!(t.locked, "nicht erfasst: {:.0} m", t.range);
+    assert!(shoot(&mut sim), "kein Treffer");
+    assert!(!duel(WeaponKind::Amraam, 38_000.0).flight_data().air_target.is_some_and(|t| t.locked));
+}
+
+#[test]
+fn fighter_chaff_saves_some_jets_from_the_amraam() {
+    let kills = kill_rate(WeaponKind::Amraam, true, 5_000.0, 150.0);
+    println!("AIM-120 gegen Düppel: {kills}/30");
+    assert!((12..=27).contains(&kills), "{kills}/30 Abschüsse");
 }

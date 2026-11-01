@@ -30,6 +30,8 @@ pub enum WeaponKind {
     /// Luft-Luft-Rakete kurzer Reichweite mit Infrarotsuchkopf (spiel-
     /// mechanisch das optische System).
     Sidewinder,
+    /// Luft-Luft-Rakete großer Reichweite mit eigenem Radar.
+    Amraam,
 }
 
 /// Suchkopf einer gelenkten Waffe.
@@ -47,12 +49,17 @@ pub enum Seeker {
     Naval,
     /// Halbaktives Radar gegen das Flugzeug (Boden-Luft-Raketen).
     SemiActive,
+    /// Eigenes Radar gegen Jäger (AIM-120), ohne Sichtlinie.
+    Active,
 }
 
 impl Seeker {
     /// Lässt sich dieser Suchkopf von dieser Art Täuschkörper ablenken?
     pub fn lured_by(self, decoy: DecoyKind) -> bool {
-        matches!((self, decoy), (Seeker::SemiActive, DecoyKind::Chaff) | (Seeker::Optical, DecoyKind::Flare))
+        matches!(
+            (self, decoy),
+            (Seeker::SemiActive | Seeker::Active, DecoyKind::Chaff) | (Seeker::Optical, DecoyKind::Flare)
+        )
     }
 
     /// Kann dieser Suchkopf ein Ziel der Klasse überhaupt erfassen?
@@ -62,7 +69,7 @@ impl Seeker {
             Seeker::Optical | Seeker::Laser => true,
             Seeker::Radiation => class.is_radar(),
             Seeker::Naval => class.is_naval(),
-            Seeker::SemiActive => false,
+            Seeker::SemiActive | Seeker::Active => false,
         }
     }
 }
@@ -202,7 +209,7 @@ const SAM: WeaponSpec = WeaponSpec {
     ..MISSILE
 };
 
-const SPECS: [WeaponSpec; 11] = [
+const SPECS: [WeaponSpec; 12] = [
     BOMB,
     WeaponSpec {
         kind: WeaponKind::Retarded,
@@ -344,11 +351,32 @@ const SPECS: [WeaponSpec; 11] = [
         anti_air: true,
         ..MISSILE
     },
+    // AIM-120 AMRAAM: Fire and Forget mit eigenem Radar (Spielerentscheidung
+    // v0.2.9), große Reichweite, weniger wendig; Düppel lenken sie ab.
+    WeaponSpec {
+        kind: WeaponKind::Amraam,
+        label: "AIM-120",
+        name: "AIM-120 AMRAAM",
+        mass_kg: 152.0,
+        per_bay: 3,
+        seeker: Seeker::Active,
+        cruise_mps: 1_000.0,
+        accel_mps2: 300.0,
+        turn_rate_rad: deg(30.0),
+        max_range_m: 30_000.0,
+        seeker_cone_rad: deg(30.0),
+        lethal_radius_m: 12.0,
+        frag_radius_m: 0.0,
+        life_s: 60.0,
+        decoy_resistance: 0.7,
+        anti_air: true,
+        ..MISSILE
+    },
 ];
 
 impl WeaponKind {
     /// Die Waffen für die Schächte (ohne die feindlichen Raketen).
-    pub const ALL: [WeaponKind; 7] = [
+    pub const ALL: [WeaponKind; 8] = [
         WeaponKind::FreeFall,
         WeaponKind::Retarded,
         WeaponKind::GuidedBomb,
@@ -356,6 +384,7 @@ impl WeaponKind {
         WeaponKind::AntiRadar,
         WeaponKind::AntiShip,
         WeaponKind::Sidewinder,
+        WeaponKind::Amraam,
     ];
 
     pub fn spec(self) -> &'static WeaponSpec {
@@ -396,6 +425,7 @@ impl WeaponKind {
             WeaponKind::ShortRangeSam => "sa13",
             WeaponKind::ModernSam => "sa11",
             WeaponKind::Sidewinder => "aim9",
+            WeaponKind::Amraam => "aim120",
         }
     }
 
@@ -411,7 +441,7 @@ impl WeaponKind {
         use WeaponKind as W;
         let steep = impact_rad >= HARDENED_MIN_IMPACT_RAD;
         match (self, class) {
-            (W::MediumRangeSam | W::LongRangeSam | W::ShortRangeSam | W::Sidewinder, _) => 0.0,
+            (W::MediumRangeSam | W::LongRangeSam | W::ShortRangeSam | W::Sidewinder | W::Amraam, _) => 0.0,
             (W::AntiRadar, C::AirDefense | C::EarlyWarning | C::ShortRangeSam) => 1.0,
             (W::AntiRadar, _) => 0.0,
             (W::AntiShip, C::ShipSmall) => 1.0,

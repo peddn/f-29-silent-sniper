@@ -128,6 +128,8 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
             let sees = !jammed
                 && match s.seeker {
                     Seeker::SemiActive => v.painted || to.length() <= SEMI_ACTIVE_M,
+                    // Eigenes Radar: sieht ohne Sichtlinie.
+                    Seeker::Active => to.length() <= s.max_range_m,
                     _ => {
                         to.length() <= s.max_range_m
                             && (!v.los
