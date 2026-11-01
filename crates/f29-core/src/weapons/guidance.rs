@@ -105,13 +105,16 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
             None
         }
         Some(track) => {
-            let Some((p, _)) = v.locate(track) else {
+            let Some((p, vel)) = v.locate(track) else {
                 w.target = None;
                 w.tracking = false;
                 return None;
             };
             let to = p - w.position;
-            let off = bearing_off(w.velocity, to);
+            // Suchkegel um den Treffpunkt, auf den die Rakete zufliegt: Mit
+            // Vorhalt liegt das Ziel neben der Nase (im Original ohne Vorhalt
+            // immer auf ihr).
+            let off = bearing_off(w.velocity, intercept(w, p, vel) - w.position);
             if off > GIVE_UP_RAD {
                 w.target = None;
                 w.tracking = false;

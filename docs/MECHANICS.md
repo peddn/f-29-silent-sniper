@@ -960,14 +960,9 @@ Format jedes Eintrags:
     und „TOO LOW“ blinkt. Die Vorhersage nutzt dieselbe Flugbahnrechnung wie
     die echte Bombe (20-mal pro Sekunde, grobe Schritte mit gemittelter
     Geschwindigkeit).
-  - **Für später vorgemerkt: Auslöseklammer** (Spielerwunsch, im Original
-    vorhanden). Eine erste Fassung (v0.2.6: Klammerbreite = Längsablage bis 2 km,
-    „RELEASE“-Fenster ±15 m) war im Spiel nicht nutzbar – im groben Maßstab
-    wirkte sie geschlossen, lange bevor die Bombe getroffen hätte, und das
-    Auslösefenster war kürzer als eine Rechenperiode. Neu entwerfen mit
-    zeitbasierter Anzeige (Sekunden bis zum Auslösen) und nichtlinearem
-    Maßstab; die Längs- und Querablage liefert der Kern schon
-    (`BombAim::target_offset`).
+  - **Auslöseklammer gestrichen** (Spielerentscheidung v0.2.9; im Original
+    vorhanden): Eine erste Fassung (v0.2.6) war im Spiel nicht nutzbar, und
+    Aufschlagpunkt mit Fall-Linie genügen zum Zielen.
   - **Feuersignal** der Lenkwaffen unten mittig im HUD-Glas: „LOCKED“, wenn
     die Waffe das Ziel übernähme (bis v0.2.9 „IN RANGE“, umbenannt, weil es
     nicht mehr die Entfernung meint – Spielerwunsch), darüber zusätzlich „SHOOT“ (umrahmt), wenn
@@ -990,12 +985,12 @@ Format jedes Eintrags:
     Treffer, „SHOOT“) sind blau statt rot; die MFDs bleiben bei Rot.
   - **Karte:** Waffen in der Luft erscheinen auf der Karte, Raketen als kurzer
     Strich in Flugrichtung, Bomben als Punkt; eigene in der Farbe des
-    Flugzeugsymbols, feindliche rot (`FlightData::munitions`; feindliche
-    Raketen kommen mit Etappe 3, Spielerwunsch v0.2.7).
+    Flugzeugsymbols, feindliche nach Lenkart rot (Radar) bzw. orange
+    (optisch/Infrarot) (`FlightData::munitions`, Spielerwunsch v0.2.7/v0.2.9).
   - **HUD unten links:** gewählte Waffe mit Anzahl (z. B. „MK-82 X2“) und
     Schacht mit Klappenzustand („BAY 1 SAFE/DOORS/OPEN“, offen rot).
   - Splitter: Schlägt eine Waffe im Splitterbereich des eigenen Flugzeugs ein,
-    gibt es vorerst nur die Warnung „FRAG WARNING“ (Schaden kommt mit Etappe 4).
+    gibt es bisher nur die Warnung „FRAG WARNING“; Splitterschaden ist offen.
     Die Fallschirmbombe ist genau dafür da: Sie bleibt im Tiefflug weit genug
     zurück.
   - Meldungen unter dem HUD-Glas (z. B. „MK-82 AWAY“, „BAY CLOSED“, „AGM-65 LOCK …“,
@@ -1018,10 +1013,10 @@ Format jedes Eintrags:
 - **Status:** Abwurf, Ballistik und Wirkung umgesetzt (v0.2.4); Lenkwaffen,
   gewürfelter Endanflug und Zielrahmen nach Reichweite (v0.2.5); HUD-Zielhilfe für
   Bomben (v0.2.6); vereinfachte Lenkwaffen mit Abschusskreis, Laserbombe,
-  Auslöseklammer vorgemerkt (v0.2.7); physische Lenkwaffen mit gewürfelter
+  Auslöseklammer vorgemerkt (v0.2.7), gestrichen (v0.2.9); physische Lenkwaffen mit gewürfelter
   Wirkung und vorausberechnetem „SHOOT“ (v0.2.9)
 
-### M-015 Bordsysteme und Schadensmodell (Gerüst)
+### M-015 Bordsysteme und Schadensmodell
 
 - **Verhalten:** Treffer und Splitter beschädigen einzelne Bordsysteme, die danach
   eingeschränkt oder gar nicht mehr arbeiten.
@@ -1038,11 +1033,11 @@ Format jedes Eintrags:
   Störsender fallen aus. Viele Treffer verstärken außerdem das Durchsacken
   beim Strömungsabriss. Einen festen „Lebensbalken“ gibt es nicht – das
   Flugzeug geht über die Folgen verloren (Absturz, kein Treibstoff).
-- **Unser Design (Gerüst, Spielerentscheidung):** `f29_core::systems`. Acht Systeme
+- **Unser Design (Spielerentscheidung):** `f29_core::systems`. Acht Systeme
   (Triebwerk, Treibstoff, Hydraulik, Flugsteuerung, Radar, Optik, Waffenschacht,
   Anzeigen), jedes intakt, eingeschränkt (Restleistung 0..1) oder ausgefallen.
-  Vorerst ist alles intakt; das Schadensmodell (Etappe 4) setzt Zustände über
-  `Sim::set_condition` mit eigenem Zufallsstrom. Die Wirkung hängt schon jetzt an
+  Raketentreffer verschlechtern zufällig gewählte Systeme (siehe M-021); Tests
+  setzen Zustände direkt über `Sim::set_condition`. Die Wirkung hängt an
   genau einer Stelle je System: Höchstschub, Treibstoffleck, Stellgeschwindigkeit
   von Klappen, Fahrwerk und Schachtklappen (ausgefallen = blockiert), Drehraten
   (ausgefallen = Notsteuerung), Radar- und Optikreichweite (ausgefallenes Radar
@@ -1052,12 +1047,11 @@ Format jedes Eintrags:
   eingeschränkt gelb mit Restleistung, ausgefallen rot umrahmt. Der Zustand geht in
   den Zustandshash ein.
 - **Unsere Werte:** Leck bis 3 kg/s (volle Tanks in knapp 30 min leer),
-  Notsteuerung 30 % Drehrate. Welche Treffer welche Systeme wie stark beschädigen,
-  folgt mit Etappe 4.
-- **Status:** Gerüst umgesetzt (v0.2.4); erste Schadensquelle: Treffer
+  Notsteuerung 30 % Drehrate.
+- **Status:** Systeme umgesetzt (v0.2.4); erste Schadensquelle: Treffer
   feindlicher Raketen beschädigen zwei zufällige Systeme, intakt → halbe
   Leistung → ausgefallen, beschädigtes Triebwerk 4 % Höchstschub je Treffer
-  wie im Original (v0.2.9, M-021); Splitter eigener Bomben folgen
+  wie im Original (v0.2.9, M-021); Splitterschaden eigener Bomben offen
 
 ### M-016 Bordkanone
 
@@ -1245,10 +1239,10 @@ Format jedes Eintrags:
     | Radar | Doppler 12 km, Umlauf 2,5 s | Doppler 30 km, 5 s | Impuls 60 km, 10 s |
     | Reichweite | 10 km | 25 km | 60 km |
     | Geschwindigkeit | 900 m/s | 650 m/s | 450 m/s |
-    | Drehrate | 60°/s | 45°/s | 20°/s |
+    | Drehrate | 60°/s | 45°/s | 30°/s |
     | Start | direkt aufs Ziel | 45°, 1,5 s Boost | 85° (fast senkrecht wie im Original), 4 s Boost |
     | Bogen | 0 | 0,1 | 0,25 |
-    | Wirkradius / Flugzeit | 12 m / 20 s | 20 m / 50 s | 30 m / 150 s |
+    | Wirkradius / Flugzeit | 18 m / 20 s | 30 m / 50 s | 45 m / 150 s |
 
     Die Kurzstrecke (bis v0.2.9 als SA-8, dann mit Infrarotsuchkopf als SA-13,
     Spielerentscheidung) ist kaum auszukurven; sie sucht nach dem Start selbst
@@ -1256,7 +1250,11 @@ Format jedes Eintrags:
     aber freie Sicht – Gelände und Fackeln schützen. Sie nutzt denselben
     optischen Suchkopf wie die Maverick (Kegel, Reichweite, Sichtlinie), die Mittelstrecke der Allrounder, die Langstrecke kommt über
     jeden Berg und aus großer Entfernung, ist aber lange unterwegs – Zeit für
-    Täuschkörper (Spielerwunsch). Suchkegel aller ±22° wie im Original.
+    Täuschkörper (Spielerwunsch). Suchkegel aller ±22° wie im Original –
+    gemessen um den Treffpunkt mit Vorhalt, auf den die Rakete zufliegt, nicht
+    um das Flugzeug: Ohne Vorhalt (Original) liegt beides auf der Nase; mit
+    Vorhalt fiel ein querab fliegendes Flugzeug sonst aus dem Kegel, und
+    die Rakete ließ sich abschütteln (Spieltest v0.2.9).
   - **Startprofil:** Die Rakete startet im Startwinkel ihres Typs (mindestens
     10° über der Linie zum Flugzeug) und steigt im **Boost** ungelenkt. Danach
     lenkt sie mit **Bogen** wie im Original: Sie zielt um Bogenfaktor ×
@@ -1328,7 +1326,7 @@ Format jedes Eintrags:
     „ECM“ bzw. „IRJ 25“.
   - **Stärkere Raketen** (v0.2.9, damit sich Störer und Täuschkörper lohnen):
     Wirkradius ×1,5 (SA-13 18 m, SA-6 30 m, SA-5 45 m), Drehrate SA-13
-    60°/s, SA-6 45°/s, SA-5 20°/s (zweite Anhebung, Spielerwunsch); Start
+    60°/s, SA-6 45°/s, SA-5 30°/s (dritte Anhebung nach Spieltest); Start
     schon mit „RADAR ID“ statt beim nächsten Treffer. Reichweiten unverändert.
   - **Täuschkörper** (wie im Original, v0.2.9): **Düppel** (Taste C) gegen
     Radarlenkung (SA-6, SA-5), **Fackeln** (Taste T) gegen Infrarotlenkung
@@ -1341,7 +1339,7 @@ Format jedes Eintrags:
     kurz vor dem Einschlag, dann abdrehen. Kein Einfluss auf das
     Stealth-Level (Spielerentscheidung). Anzeige: HUD „CH 20 FL 20“,
     WPN-Seite, Karte (Kreuz bzw. Kreis), 3D-Wolke bzw. glühender Punkt.
-- **Status:** Boden-Luft-Raketen umgesetzt (v0.2.9), Täuschkörper geplant
+- **Status:** Boden-Luft-Raketen, Täuschkörper und Störer umgesetzt (v0.2.9)
 
 ### M-031 Einsatzgebiete und Missionsgenerator
 

@@ -258,7 +258,7 @@ const SPECS: [WeaponSpec; 9] = [
         mass_kg: 7_000.0,
         cruise_mps: 450.0,
         accel_mps2: 100.0,
-        turn_rate_rad: deg(20.0),
+        turn_rate_rad: deg(30.0),
         launch_rad: deg(85.0),
         boost_s: 4.0,
         loft: 0.25,

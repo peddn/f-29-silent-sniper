@@ -289,3 +289,52 @@ fn jammers_switch_and_cost_stealth() {
     step(&mut sim, 0, weapon_flags::IR_JAMMER);
     assert!(sim.flight_data().ir_jammer_s > 29.0, "wieder bereit");
 }
+
+/// Querab halten (die Rakete seitlich lassen), auf Wunsch kurz vor ihr hart
+/// auf sie zu drehen, schüttelt weder SA-6 noch SA-5 ab: Der Suchkegel liegt
+/// um den Treffpunkt mit Vorhalt, nicht um das Flugzeug (Spieltest v0.2.9).
+#[test]
+fn beaming_does_not_shake_the_missiles() {
+    use f29_core::autopilot::Autopilot;
+    use f29_core::{DT, Status};
+    use std::f64::consts::{FRAC_PI_2, PI, TAU};
+    let run = |class: TargetClass, south: f64, west: f64, break_m: f64| {
+        let (_, t) = first_of(SEED, class).expect("Stellung");
+        let alt = t.elevation + 2_000.0;
+        let mut sim = Sim::new(SimConfig {
+            seed: SEED,
+            spawn: Spawn {
+                north: t.north - south,
+                east: t.east - west,
+                altitude: alt,
+                min_clearance: 300.0,
+                heading: FRAC_PI_2,
+                speed: 230.0,
+                throttle: 1.0,
+                visible: true,
+                ..Spawn::default()
+            },
+        });
+        let mut ap = Autopilot::new(alt, FRAC_PI_2, 300.0);
+        ap.max_bank = 1.25;
+        for _ in 0..ticks(160.0) {
+            let fd = sim.flight_data();
+            if let Some(m) = sim.weapons_in_flight().iter().find(|w| w.owner.is_some()) {
+                let to = m.position - fd.position;
+                let b = to.y.atan2(to.x);
+                let rel = (b - fd.heading + PI).rem_euclid(TAU) - PI;
+                ap.target_heading =
+                    if break_m > 0.0 && to.length() < break_m { b } else { b - FRAC_PI_2 * rel.signum() };
+            }
+            let c = ap.control(sim.spec(), &fd, DT);
+            sim.step(c);
+            if sim.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. })) {
+                return true;
+            }
+            assert_eq!(sim.status(), Status::Flying, "abgestürzt statt getroffen");
+        }
+        false
+    };
+    assert!(run(TargetClass::AirDefense, 10_000.0, 15_000.0, 0.0), "SA-6 querab abgeschüttelt");
+    assert!(run(TargetClass::EarlyWarning, 5_000.0, 15_000.0, 3_000.0), "SA-5 mit Ausbruch abgeschüttelt");
+}

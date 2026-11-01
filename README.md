@@ -12,8 +12,9 @@ jeder Auflösung scharf bleibt.
 
 **Status:** v0.1 abgeschlossen: Freiflug über prozeduralem Gelände mit HUD und zwei
 MFDs, Start und Landung auf der Heimatbasis und geheimen Pisten, Treibstoff, Klang.
-v0.2 (Angriff und Tarnung) in Arbeit: Bodenziele und Zielerfassung sind da, Waffen
-folgen.
+v0.2 (Angriff und Tarnung) abgeschlossen bis auf den Joystick-Test: Bodenziele,
+Zielerfassung, Bomben, Lenkwaffen und Kanone, feindliche Radare und Boden-Luft-Raketen,
+Schadensmodell, Täuschkörper und Störer. Als Nächstes: v0.3 (Missionen).
 
 [![CI](https://github.com/peddn/f-29-silent-sniper/actions/workflows/ci.yml/badge.svg)](https://github.com/peddn/f-29-silent-sniper/actions/workflows/ci.yml)
 
@@ -196,7 +197,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Schächte, Platzhalter), Triebwerk mit Treibstoff, Reserve-Horizont,
       Systeme (v0.1.19)
 
-### v0.2: Angriff und Tarnung *(in Arbeit)*
+### v0.2: Angriff und Tarnung *(abgeschlossen bis auf den Joystick-Test)*
 - [x] Bodenziele in neun eigenen Klassen, alle auf der Karte, Primär- und
       Sekundärziel; Zielerfassung optisch (mit Sichtlinie) und per Radar
       (abschaltbar, durch Berge), automatisch auf das nächste Ziel der
@@ -233,7 +234,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Textdatei, `--joystick-debug` (v0.2.8)
 - [ ] Joystick am echten Extreme 3D Pro testen (`--joystick-debug`): Achsen,
       Richtungen und Tastennummern prüfen (vorgemerkt)
-- [ ] Auslöseklammer für Bomben, neu entworfen (vorgemerkt)
+- ~~Auslöseklammer für Bomben~~ (gestrichen, Spielerentscheidung v0.2.9: Aufschlagpunkt
+      und Fall-Linie genügen)
 - [x] Bordkanone als eigenes Waffensystem: 600 Schuss (50/s), Rücktaste, 2 %
       Schaden pro Treffer bei jedem Ziel, Kanonenkreuz am Aufschlagpunkt,
       Leuchtspur (v0.2.8)
@@ -263,6 +265,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Bodenziel/Flugzeug/Täuschkörper (v0.2.9)
 - [x] Störer: ECM (M, ein/aus, sichtbarer) und Infrarotstörer (U, 30 s);
       stärkere SAMs, Start schon mit „RADAR ID“ (v0.2.9)
+- [x] SAMs nach Spieltest: Suchkegel um den Treffpunkt mit Vorhalt, damit
+      Querabfliegen sie nicht mehr abschüttelt; SA-5 dreht schneller; Karte
+      färbt feindliche Raketen nach Lenkart (v0.2.9)
 - ~~Flak~~ (gestrichen, Spielerentscheidung v0.2.9)
 
 ### v0.3: Missionen
