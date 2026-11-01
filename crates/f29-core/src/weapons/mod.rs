@@ -155,6 +155,7 @@ pub fn launch_zone(kind: WeaponKind, l: &Launch<'_>, i: usize) -> LaunchZone {
         terrain: l.terrain,
         designated: Some(i),
         aircraft: None,
+        fighters: &[],
         decoys: &[],
         painted: false,
         jammed: (false, false),
@@ -241,6 +242,8 @@ pub enum Track {
     Ground(usize),
     /// Das eigene Flugzeug (feindliche Raketen).
     Aircraft,
+    /// Feindlicher Jäger (Index in `Fighters::list`, Luft-Luft-Raketen).
+    Fighter(usize),
 }
 
 /// Eine Waffe im Flug.
@@ -297,14 +300,28 @@ impl Weapon {
         let mut w =
             Weapon::new(id, kind, l.position + down * EJECT_OFFSET_M, l.velocity + down * EJECT_SPEED_MPS);
         let lock = l.lock.and_then(|i| l.targets.get(i).map(|t| (i, t)));
+        let nose = l.attitude.rotate(DVec3::new(1.0, 0.0, 0.0));
         match kind.spec().seeker {
             Seeker::None => {}
+            // Luft-Luft: der gewählte Jäger, wenn er im Erfassungskreis liegt
+            // und der Suchkopf ihn übernimmt.
+            _ if kind.spec().anti_air => {
+                w.boresight = nose;
+                w.target = l
+                    .air
+                    .filter(|&(_, p, optical)| {
+                        let to = p - l.position;
+                        angle_between(nose, to) <= crate::sensors::AIR_CIRCLE_RAD
+                            && kind.takes_aircraft(to.length(), optical)
+                    })
+                    .map(|(i, _, _)| Track::Fighter(i));
+                w.searching = w.target.is_none();
+            }
             Seeker::Laser => {
                 w.target =
                     lock.filter(|(_, t)| l.lock_optical && t.is_intact()).map(|(i, _)| Track::Ground(i));
             }
             seeker => {
-                let nose = l.attitude.rotate(DVec3::new(1.0, 0.0, 0.0));
                 w.boresight = nose;
                 let optical_ok = seeker != Seeker::Optical || l.lock_optical;
                 w.target = lock.filter(|_| optical_ok).and_then(|(i, t)| {
@@ -430,6 +447,13 @@ pub enum WeaponEvent {
     },
     /// Täuschkörper dieser Art sind aufgebraucht.
     DecoyEmpty(DecoyKind),
+    /// Eine eigene Luft-Luft-Rakete hat einen Jäger (Index in
+    /// `Fighters::list`) getroffen.
+    FighterHit {
+        kind: WeaponKind,
+        id: u32,
+        fighter: usize,
+    },
     /// Eine feindliche Rakete hat das Flugzeug getroffen und diese Systeme
     /// beschädigt.
     AircraftHit {
@@ -477,6 +501,8 @@ pub struct World<'a> {
     /// Radarstellungen (Index in `Sim::targets`), die das Flugzeug beim letzten
     /// Umlauf erfasst haben: Sie beleuchten es für ihre Raketen.
     pub painting: &'a [usize],
+    /// Jäger nach Index: Ort und Geschwindigkeit, solange sie kämpfen.
+    pub fighters: &'a [Option<(DVec3, DVec3)>],
 }
 
 /// Was der Abschuss über Flugzeug und Ziel wissen muss.
@@ -493,6 +519,8 @@ pub struct Launch<'a> {
     /// Das gewählte Ziel ist optisch entdeckt (optische Suchköpfe
     /// übernehmen nur optisch entdeckte Ziele).
     pub lock_optical: bool,
+    /// Gewählter Jäger: Index, Ort, optisch entdeckt (Luft-Luft-Raketen).
+    pub air: Option<(usize, DVec3, bool)>,
     /// Waffenschacht funktioniert (Schadensmodell).
     pub bay_ok: bool,
     /// Zeitschritt der Simulation (s), für die Vorausberechnung.
@@ -707,6 +735,7 @@ impl Stores {
                 terrain: world.terrain,
                 designated: world.designated,
                 aircraft: world.flying.then_some((world.aircraft, world.aircraft_velocity)),
+                fighters: world.fighters,
                 decoys: &decoys,
                 painted: w.owner.is_some_and(|o| world.painting.contains(&o)),
                 jammed,
@@ -726,6 +755,11 @@ impl Stores {
                 Fate::Flying => {
                     self.in_flight[i] = w;
                     i += 1;
+                }
+                Fate::Fuze(_) if matches!(w.target, Some(Track::Fighter(_))) => {
+                    self.in_flight.remove(i);
+                    let Some(Track::Fighter(fighter)) = w.target else { unreachable!() };
+                    self.events.push(world.tick, WeaponEvent::FighterHit { kind: w.kind, id: w.id, fighter });
                 }
                 Fate::Fuze(_) if w.target == Some(Track::Aircraft) => {
                     self.in_flight.remove(i);

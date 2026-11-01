@@ -1,0 +1,65 @@
+//! Luftkampf (M-022, Etappe 2): Luft-Luft-Raketen gegen Jäger.
+
+mod common;
+use common::*;
+
+use f29_core::controls::weapon_flags;
+use f29_core::fighters::Mode;
+use f29_core::sim::Spawn;
+use f29_core::weapons::{Loadout, WeaponEvent, WeaponKind};
+use f29_core::{DVec3, Sim, SimConfig};
+
+/// Hoch über der Karte, Schacht 1 mit `kind`, ohne Flugabwehr; ein Jäger
+/// `ahead` m voraus kommt entgegen. Schacht gewählt und offen.
+fn duel(kind: WeaponKind, ahead: f64) -> Sim {
+    let probe = Sim::new(SimConfig::new(SEED));
+    let alt = probe.terrain().max_elevation() + 4_000.0;
+    let spawn = Spawn {
+        altitude: alt,
+        heading: 0.0,
+        speed: 250.0,
+        throttle: 0.8,
+        loadout: Loadout([Some(kind), None, None, None]),
+        ..Spawn::default()
+    };
+    let mut sim = Sim::new(SimConfig { seed: SEED, spawn });
+    no_air_defense(&mut sim);
+    let a = sim.aircraft().position;
+    sim.fighters_mut().put_in_air(0, a + DVec3::new(ahead, 0.0, 0.0), std::f64::consts::PI);
+    step(&mut sim, 0, weapon_flags::NEXT_BAY | weapon_flags::BAY_DOORS);
+    fly(&mut sim, 1.5, 0, 0);
+    sim
+}
+
+/// Abschuss auf den erfassten Jäger: Die Rakete holt ihn herunter.
+fn shoot(sim: &mut Sim) -> bool {
+    let t0 = sim.tick();
+    step(sim, 0, weapon_flags::RELEASE);
+    for _ in 0..ticks(25.0) {
+        step(sim, 0, 0);
+        if events_since(sim, t0).iter().any(|e| matches!(e, WeaponEvent::FighterHit { fighter: 0, .. })) {
+            return true;
+        }
+    }
+    false
+}
+
+#[test]
+fn sidewinder_shoots_down_an_oncoming_fighter() {
+    let mut sim = duel(WeaponKind::Sidewinder, 7_000.0);
+    let t = sim.flight_data().air_target.expect("Jäger gewählt");
+    assert!(t.locked, "nicht erfasst: {:.0} m", t.range);
+    assert!(shoot(&mut sim), "kein Treffer");
+    fly(&mut sim, 0.5, 0, 0);
+    assert_eq!(sim.fighters().list[0].mode, Mode::Falling);
+    assert!(sim.flight_data().weapon_messages.iter().any(|m| m.text == "MIG-21 DESTROYED"));
+    assert!(sim.flight_data().air_target.is_none_or(|t| t.index != 0), "Abgeschossener bleibt gewählt");
+}
+
+/// Außer Reichweite des Suchkopfs gilt der Jäger nicht als erfasst.
+#[test]
+fn sidewinder_does_not_lock_beyond_its_range() {
+    let sim = duel(WeaponKind::Sidewinder, 14_000.0);
+    let t = sim.flight_data().air_target.expect("Jäger gewählt");
+    assert!(!t.locked, "auf {:.0} m erfasst", t.range);
+}

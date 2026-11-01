@@ -224,6 +224,13 @@ macro_rules! launch {
             attitude: $sim.aircraft.attitude,
             lock: $sim.picks.ground.index,
             lock_optical: $sim.picks.ground.seen.optical,
+            air: $sim
+                .picks
+                .air
+                .index
+                .and_then(|i| $sim.fighters.list.get(i))
+                .filter(|f| f.airborne())
+                .map(|f| (f.id as usize, f.position, $sim.picks.air.seen.optical)),
             targets: &$sim.targets,
             terrain: &$sim.terrain,
             bay_ok: !$sim.systems.get(System::WeaponBay).is_failed(),
@@ -498,6 +505,11 @@ impl Sim {
         &self.fighters
     }
 
+    /// Feindliche Jäger zum Verändern – Zugang für Tests.
+    pub fn fighters_mut(&mut self) -> &mut Fighters {
+        &mut self.fighters
+    }
+
     /// Aufschlag der gewählten ungelenkten Bombe bzw. Abschusslage der
     /// gewählten Lenkwaffe vorausberechnen (M-014).
     fn update_bomb_prediction(&mut self) {
@@ -568,6 +580,8 @@ impl Sim {
             return;
         }
         let painting: Vec<usize> = self.radar.sites.iter().filter(|s| s.painted).map(|s| s.target).collect();
+        let fighters: Vec<_> =
+            self.fighters.list.iter().map(|f| f.airborne().then(|| (f.position, f.velocity()))).collect();
         let mut world = weapons::World {
             terrain: &self.terrain,
             targets: &mut self.targets,
@@ -578,6 +592,7 @@ impl Sim {
             designated: self.picks.ground.index.filter(|_| self.picks.ground.seen.optical),
             flying: self.status == Status::Flying,
             painting: &painting,
+            fighters: &fighters,
         };
         // Die Wahl bleibt auch auf einem zerstörten Ziel, bis der
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
@@ -593,6 +608,19 @@ impl Sim {
                 _ => None,
             })
             .collect();
+        let downed: Vec<usize> = self
+            .stores
+            .events
+            .iter()
+            .filter(|(t, _)| *t == self.tick)
+            .filter_map(|(_, e)| match e {
+                WeaponEvent::FighterHit { fighter, .. } => Some(*fighter),
+                _ => None,
+            })
+            .collect();
+        for i in downed {
+            self.fighters.hit(self.tick, i, true);
+        }
         if !hits.is_empty() && !self.config.spawn.invulnerable {
             for systems in hits {
                 self.systems.missile_hit(&systems);

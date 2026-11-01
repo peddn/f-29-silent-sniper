@@ -73,6 +73,7 @@ impl Sim {
                 None => u64::MAX,
                 Some(Track::Ground(i)) => i as u64,
                 Some(Track::Aircraft) => u64::MAX - 1,
+                Some(Track::Fighter(i)) => u64::MAX - 2 - i as u64,
             });
             h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1 | u64::from(w.blinded) << 2);
             h.u64(w.owner.map_or(u64::MAX, |o| o as u64));

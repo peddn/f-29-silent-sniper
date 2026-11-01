@@ -27,6 +27,9 @@ pub enum WeaponKind {
     /// Moderne Boden-Luft-Rakete mittlerer Reichweite (jede dritte
     /// SAM-Stellung): wendig und schwer zu täuschen.
     ModernSam,
+    /// Luft-Luft-Rakete kurzer Reichweite mit Infrarotsuchkopf (spiel-
+    /// mechanisch das optische System).
+    Sidewinder,
 }
 
 /// Suchkopf einer gelenkten Waffe.
@@ -199,7 +202,7 @@ const SAM: WeaponSpec = WeaponSpec {
     ..MISSILE
 };
 
-const SPECS: [WeaponSpec; 10] = [
+const SPECS: [WeaponSpec; 11] = [
     BOMB,
     WeaponSpec {
         kind: WeaponKind::Retarded,
@@ -318,17 +321,39 @@ const SPECS: [WeaponSpec; 10] = [
         decoy_resistance: 0.5,
         ..SAM
     },
+    // AIM-9 Sidewinder: schnell und wendig, kurze Reichweite; sieht nur, was
+    // das optische System sieht (freie Sicht), Fackeln lenken sie ab.
+    WeaponSpec {
+        kind: WeaponKind::Sidewinder,
+        label: "AIM-9",
+        name: "AIM-9 SIDEWINDER",
+        mass_kg: 86.0,
+        per_bay: 4,
+        seeker: Seeker::Optical,
+        cruise_mps: 850.0,
+        accel_mps2: 500.0,
+        turn_rate_rad: deg(40.0),
+        max_range_m: 8_000.0,
+        seeker_cone_rad: deg(25.0),
+        lethal_radius_m: 9.0,
+        frag_radius_m: 0.0,
+        life_s: 25.0,
+        decoy_resistance: 0.3,
+        anti_air: true,
+        ..MISSILE
+    },
 ];
 
 impl WeaponKind {
     /// Die Waffen für die Schächte (ohne die feindlichen Raketen).
-    pub const ALL: [WeaponKind; 6] = [
+    pub const ALL: [WeaponKind; 7] = [
         WeaponKind::FreeFall,
         WeaponKind::Retarded,
         WeaponKind::GuidedBomb,
         WeaponKind::AirToGround,
         WeaponKind::AntiRadar,
         WeaponKind::AntiShip,
+        WeaponKind::Sidewinder,
     ];
 
     pub fn spec(self) -> &'static WeaponSpec {
@@ -352,7 +377,7 @@ impl WeaponKind {
 
     /// Fernsehsuchkopf: Die Waffe sendet ihr Bild (WPN-CAM-Seite).
     pub fn has_camera(self) -> bool {
-        self.spec().seeker == Seeker::Optical
+        self.spec().seeker == Seeker::Optical && !self.spec().anti_air
     }
 
     /// Kennwort für `--loadout` und Replays.
@@ -368,6 +393,7 @@ impl WeaponKind {
             WeaponKind::LongRangeSam => "sa5",
             WeaponKind::ShortRangeSam => "sa13",
             WeaponKind::ModernSam => "sa11",
+            WeaponKind::Sidewinder => "aim9",
         }
     }
 
@@ -383,7 +409,7 @@ impl WeaponKind {
         use WeaponKind as W;
         let steep = impact_rad >= HARDENED_MIN_IMPACT_RAD;
         match (self, class) {
-            (W::MediumRangeSam | W::LongRangeSam | W::ShortRangeSam, _) => 0.0,
+            (W::MediumRangeSam | W::LongRangeSam | W::ShortRangeSam | W::Sidewinder, _) => 0.0,
             (W::AntiRadar, C::AirDefense | C::EarlyWarning | C::ShortRangeSam) => 1.0,
             (W::AntiRadar, _) => 0.0,
             (W::AntiShip, C::ShipSmall) => 1.0,

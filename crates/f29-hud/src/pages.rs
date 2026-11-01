@@ -168,6 +168,7 @@ pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
             let guidance = match s.seeker {
                 Seeker::None if k == WeaponKind::Retarded => "RETARDED",
                 Seeker::None => "NONE",
+                Seeker::Optical if s.anti_air => "IR",
                 Seeker::Optical => "TV",
                 Seeker::Laser => "LASER",
                 Seeker::Radiation => "ANTI-RADAR",

@@ -911,6 +911,9 @@ impl Sim {
                     (id, if hit { BlastKind::TargetHit } else { BlastKind::Miss }, position)
                 }
                 WeaponEvent::AircraftHit { id, .. } => (id, BlastKind::AircraftHit, self.aircraft.position),
+                WeaponEvent::FighterHit { id, fighter, .. } => {
+                    (id, BlastKind::TargetHit, self.fighters.list[fighter].position)
+                }
                 _ => return None,
             };
             let distance_m = (at - self.aircraft.position).length();
@@ -969,6 +972,7 @@ impl Sim {
                         (format!("MISSILE LAUNCH {} - {}", kind.label(), name(site)), true)
                     }
                     WeaponEvent::AircraftHit { kind, .. } => (format!("{} HIT", kind.label()), true),
+                    WeaponEvent::FighterHit { kind, .. } => (format!("{} HIT", kind.label()), false),
                     WeaponEvent::Decoyed { kind, .. } => (format!("{} DECOYED", kind.label()), false),
                     WeaponEvent::DecoyEmpty(kind) => (format!("{} EMPTY", kind.label()), true),
                     WeaponEvent::Acquired { kind, target, .. } => {

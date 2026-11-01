@@ -370,6 +370,18 @@ impl Fighters {
         }
     }
 
+    /// Setzt Jäger `i` bei `position` mit Kurs `heading` in die Luft, im
+    /// Abfangen geradeaus – Zugang für Tests.
+    pub fn put_in_air(&mut self, i: usize, position: DVec3, heading: f64) {
+        let f = &mut self.list[i];
+        let (s, c) = detmath::sin_cos(heading);
+        f.mode = Mode::Intercept;
+        f.position = position;
+        f.heading = heading;
+        f.speed = f.spec().cruise_mps;
+        f.goal = position + DVec3::new(c, s, 0.0) * 100_000.0;
+    }
+
     /// Treffer am Jäger `i`: eine Rakete (`missile`) zerstört, die Kanone
     /// zählt Treffer bis [`FighterSpec::hits`].
     pub fn hit(&mut self, tick: u64, i: usize, missile: bool) {

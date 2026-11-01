@@ -22,6 +22,8 @@ pub(super) struct View<'a> {
     pub(super) designated: Option<usize>,
     /// Ort und Geschwindigkeit des eigenen Flugzeugs, solange es fliegt.
     pub(super) aircraft: Option<(DVec3, DVec3)>,
+    /// Jäger nach Index (Ort, Geschwindigkeit), solange sie kämpfen.
+    pub(super) fighters: &'a [Option<(DVec3, DVec3)>],
     pub(super) decoys: &'a [Decoy],
     /// Die Stellung dieser (feindlichen) Rakete hat das Flugzeug beim letzten
     /// Umlauf erfasst (halbaktive Beleuchtung).
@@ -42,6 +44,7 @@ impl View<'_> {
                 Some((DVec3::new(c[0], c[1], c[2]), DVec3::ZERO))
             }
             Track::Aircraft => self.aircraft,
+            Track::Fighter(i) => self.fighters.get(i).copied().flatten(),
         }
     }
 }
@@ -115,7 +118,8 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
             let off = bearing_off(w.velocity, to);
             // Gestört: außerhalb kurzer Entfernung keine Lenkung auf das Flugzeug.
             let (ecm, ir) = v.jammed;
-            let jammed = to.length() > BURN_THROUGH_M
+            let jammed = w.owner.is_some()
+                && to.length() > BURN_THROUGH_M
                 && match s.seeker {
                     Seeker::SemiActive => ecm,
                     Seeker::Optical => ir,
@@ -141,6 +145,24 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
             if off > s.seeker_cone_rad {
                 w.target = None;
             }
+            None
+        }
+        // Luft-Luft ohne Übergabe: der nächste Jäger im Suchkegel.
+        None if w.searching && s.anti_air => {
+            let (_, i) = v
+                .fighters
+                .iter()
+                .enumerate()
+                .filter_map(|(i, f)| {
+                    let to = f.as_ref()?.0 - w.position;
+                    let ok =
+                        to.length() <= s.max_range_m && angle_between(w.velocity, to) <= s.seeker_cone_rad;
+                    ok.then_some((to.length(), i))
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))?;
+            w.target = Some(Track::Fighter(i));
+            w.tracking = true;
+            w.searching = false;
             None
         }
         None if w.searching => {
