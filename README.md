@@ -52,7 +52,7 @@ cargo run --release -p f29-app -- --no-damage
 cargo run --release -p f29-app -- --volume 50
 cargo run --release -p f29-app -- --no-sound
 
-# andere Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship oder -
+# andere Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship, aim9, aim120 oder -
 cargo run --release -p f29-app -- --loadout fall,fall,agm,arm
 
 # nach 10 s automatisch einen Screenshot speichern und beenden
@@ -303,8 +303,12 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       entdeckt (Radar oder optisch, rundum, für alle Zielarten gleich; R/O) /
       gewählt (doppelt) / erfasst (Ecken), in HUD und Karte aus einer Liste;
       eine Auswahl je Zielart (v0.2.9)
-- [ ] Etappe 2: Kanone gegen Luftziele mit Vorhaltemarke, AIM-9 Sidewinder,
-      AIM-120 AMRAAM, feindliche Fackeln und Düppel, Schaden an Jägern
+- [x] Etappe 2: Jäger abschießbar (Kanone 5 bzw. 8 Treffer, Rakete
+      zerstört), Kanone gegen Luftziele mit Vorhaltemarke, AIM-9 Sidewinder
+      (`aim9`, 4 je Schacht, optisch), AIM-120 AMRAAM (`aim120`, 3 je Schacht,
+      eigenes Radar), Fackeln und Düppel der Jäger (v0.2.9)
+- [ ] Etappe 3: Waffen der Jäger (Kanone, Luft-Luft-Raketen), Ausweichen,
+      Radarwarner
 - [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
 - [ ] Luft-Luft-Raketen, Bordkanone gegen Luftziele
 - [ ] Feindliche Jäger und Abfangjäger mit KI (aufbauend auf dem Autopiloten)

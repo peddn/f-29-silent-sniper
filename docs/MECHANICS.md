@@ -1093,8 +1093,16 @@ Format jedes Eintrags:
 - **Unsere Werte:** 600 Schuss, 50 Schuss/s (12 s Dauerfeuer), 1000 m/s
   Mündungsgeschwindigkeit, 3 s Flugzeit (≈ 3 km), Streuung 3 mrad, 2 % Schaden
   je Treffer (50 Treffer zerstören jedes Ziel).
+- **Gegen Jäger (v0.2.9, Etappe 2):** Patronen treffen einen Jäger, wenn
+  ihre Flugstrecke eines Ticks näher als 7 m an seiner Mitte vorbeiführt;
+  je Typ braucht es einige Treffer (M-022). Im AA-Modus zeigt die
+  **Vorhaltemarke** (kleiner Kreis mit Punkt) gegen den gewählten Jäger, wohin
+  die Nase zeigen muss – aus Flugzeit und Fall der Patrone und der Bewegung
+  des Jägers, bis 3 km. Bis 2 km im Erfassungskreis gilt er als von der
+  Kanone erfasst (Ecken).
 - **Status:** umgesetzt (v0.2.8); Kanone als erste Waffe in der Wahl und
-  Feuern mit der Auslösetaste (v0.2.8, siehe M-017)
+  Feuern mit der Auslösetaste (v0.2.8, siehe M-017); gegen Jäger mit
+  Vorhaltemarke (v0.2.9)
 
 ### M-017 HUD-Modi und Waffenwahl
 
@@ -1503,9 +1511,41 @@ Format jedes Eintrags:
     (Spielerwunsch v0.2.9: vorher erst im letzten Moment zu sehen).
   - **Auswahl von Luftzielen** (M-017): Im AA-Modus wählen I/J/K/L Jäger;
     ohne Wahl automatisch der nächste entdeckte in der Blickrichtung, die Wahl
-    bleibt, solange ein eigenes System ihn entdeckt (M-013). Waffen folgen mit
-    Etappe 2 (Kanone mit Vorhaltemarke, AIM-9, AIM-120).
-- **Status:** Etappe 1 umgesetzt (v0.2.9)
+    bleibt, solange ein eigenes System ihn entdeckt (M-013).
+- **Lesephase Etappe 2 (eigene Worte, keine Werte):** Im Original trägt die
+  Luft-Luft-Bewaffnung dieselben Schächte wie alles andere: die Sidewinder
+  (vier je Schacht) und die AMRAAM (drei je Schacht). Beide stehen in
+  derselben Raketentabelle wie die SAMs; die AMRAAM erfasst etwa doppelt so
+  weit, die Sidewinder ist deutlich wendiger. Ein getroffener Jäger zieht
+  eine Rauchspur, stürzt ab und zählt als Abschuss.
+- **Unser Design Etappe 2 (Spielerentscheidungen v0.2.9):**
+  - **Abschuss:** Eine Rakete zerstört einen Jäger, die Kanone braucht bei
+    der MiG-21 5, bei der MiG-29 8 Treffer. Der Jäger stürzt ab (rollt ab,
+    senkt die Nase), bleibt als Wrack am Boden und startet nie wieder;
+    Meldung „MIG-21 DESTROYED“. Eine Rauchspur fehlt noch.
+  - **Kein Ausweichen:** Die Jäger fliegen weiter stur auf das Flugzeug zu
+    (Ausweichen kommt mit ihren eigenen Waffen in Etappe 3).
+  - **Täuschkörper:** Je Jäger vier. Gegen jede eigene Rakete, die ihn
+    verfolgt und näher als 1,5 km ist, wirft er einen passenden – Fackel
+    gegen optische, Düppel gegen Radarsuchköpfe. Ob sie ihm folgt,
+    entscheidet ihre Resistenz wie bei den SAMs (M-021).
+  - **AIM-9 Sidewinder:** vier je Schacht; Suchkopf ist das optische System
+    (im Spiel Infrarot) – nur ein optisch entdeckter Jäger wird übergeben,
+    das Ziel braucht freie Sicht. Fire and Forget.
+  - **AIM-120 AMRAAM:** drei je Schacht; eigenes Radar nach dem Abschuss,
+    Fire and Forget, ohne Sichtlinie, große Reichweite.
+  - **Übergabe** beim Abschuss wie bei allen Lenkwaffen: der gewählte Jäger,
+    wenn er im 10°-Kreis liegt und der Suchkopf ihn in Reichweite hat
+    (dann „erfasst“, Ecken); sonst sucht die Rakete den nächsten Jäger in
+    ihrem Suchkegel. Danach derselbe Flug wie alle Lenkwaffen: Vorhalt,
+    Suchkegel – verliert sie den Jäger aus dem Kegel, ist er verloren.
+  - **Unsere Werte:** AIM-9 850 m/s, 40°/s, Suchkopf 8 km und ±25°,
+    Wirkradius 9 m, Resistenz 0,6; AIM-120 1000 m/s, 30°/s, 30 km und ±30°,
+    12 m, Resistenz 0,7. Gemessen über 30 Anflüge von vorn: ohne
+    Täuschkörper trifft jede, mit ihnen die AIM-9 knapp jede zweite, die
+    AIM-120 etwa zwei von drei.
+- **Status:** Etappe 1 umgesetzt (v0.2.9); Etappe 2 umgesetzt (v0.2.9):
+  Abschuss, Kanone mit Vorhaltemarke, AIM-9, AIM-120, Täuschkörper der Jäger
 
 ### M-031 Einsatzgebiete und Missionsgenerator
 
