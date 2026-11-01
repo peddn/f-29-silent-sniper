@@ -88,6 +88,13 @@ fn missile_hit_damages_two_systems() {
         assert_eq!(damaged, systems.contains(&s), "{s:?}");
     }
     assert_eq!(sim.status(), f29_core::Status::Flying);
+    // Das beschädigte Flugzeug rüttelt (hier über der Turbulenzgrenze).
+    let mut shake: f64 = 0.0;
+    for _ in 0..ticks(1.0) {
+        step(&mut sim, 0, 0);
+        shake = shake.max(sim.turbulence().length());
+    }
+    assert!(shake > 0.02, "rüttelt nicht: {shake}");
 }
 
 /// Das Frühwarnradar startet die Langstreckenrakete.

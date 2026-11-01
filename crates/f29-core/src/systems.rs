@@ -8,7 +8,7 @@
 //!
 //! | System | Wirkung |
 //! |---|---|
-//! | Triebwerk | Triebwerksstellung höchstens Leistung (auch bei Vollgas), ausgefallen = kein Schub; nach Raketentreffern 4 % je Treffer weniger |
+//! | Triebwerk | Triebwerksstellung höchstens Leistung (auch bei Vollgas), ausgefallen = kein Schub; nach Raketentreffern 8 % je Treffer weniger |
 //! | Treibstoff | Leck: bis [`FUEL_LEAK_MAX_KGPS`] zusätzlich |
 //! | Hydraulik | Klappen, Fahrwerk, Schachtklappen langsamer; ausgefallen = blockiert |
 //! | Flugsteuerung | Drehraten × Leistung, ausgefallen = Notsteuerung ([`CONTROL_BACKUP`]) |
@@ -25,8 +25,9 @@ pub const CONTROL_BACKUP: f64 = 0.3;
 /// Restleistung eines Systems nach dem ersten Treffer.
 pub const HIT_CAPABILITY: f64 = 0.5;
 /// Ist das Triebwerk beschädigt, kostet jeder Raketentreffer so viel
-/// Höchstschub (wie im Original: 4 % je Treffer, ausfallen kann es nicht).
-pub const THRUST_LOSS_PER_HIT: f64 = 0.04;
+/// Höchstschub je Treffer bei beschädigtem Triebwerk (Original 4 %, hier
+/// doppelt so viel, Spielerwunsch v0.2.9; ausfallen kann es nicht).
+pub const THRUST_LOSS_PER_HIT: f64 = 0.08;
 
 /// Ein Bordsystem.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -223,7 +224,7 @@ mod tests {
     }
 
     /// Wie im Original: Erst ein Treffer am Triebwerk kostet Schub, dann
-    /// jeder Treffer 4 % – auch frühere zählen mit; ausfallen kann es nicht.
+    /// jeder Treffer 8 % – auch frühere zählen mit; ausfallen kann es nicht.
     #[test]
     fn missile_hits_cost_thrust_once_the_engine_is_damaged() {
         let mut s = Systems::default();
@@ -231,11 +232,11 @@ mod tests {
         assert_eq!(s.health().thrust, 1.0);
         assert_eq!(s.get(System::Radar), Condition::Degraded(HIT_CAPABILITY));
         s.missile_hit(&[System::Engine, System::Radar]);
-        assert!((s.health().thrust - 0.92).abs() < 1e-12);
+        assert!((s.health().thrust - 0.84).abs() < 1e-12);
         assert!(s.get(System::Radar).is_failed());
         s.missile_hit(&[System::Engine, System::Fuel]);
         s.missile_hit(&[System::Hydraulics, System::Displays]);
-        assert!((s.health().thrust - 0.84).abs() < 1e-12);
+        assert!((s.health().thrust - 0.68).abs() < 1e-12);
         assert_eq!(s.hits, 4);
     }
 }

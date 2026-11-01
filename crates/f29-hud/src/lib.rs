@@ -128,14 +128,22 @@ pub fn build(
     dl
 }
 
-/// Leuchten HUD und MFDs gerade? Beschädigte Anzeigen flackern (je weniger
-/// Leistung, desto länger dunkel), ausgefallene bleiben dunkel. Frontends
-/// blenden damit auch ihre eigenen Bildflächen (Satellitenbild, Zielkamera) aus.
+/// Leuchten HUD und MFDs gerade? Beschädigte Anzeigen flackern unregelmäßig
+/// (je weniger Leistung, desto öfter dunkel), ausgefallene bleiben dunkel.
+/// Frontends blenden damit auch ihre eigenen Bildflächen (Satellitenbild,
+/// Zielkamera) aus.
 pub fn displays_on(fd: &FlightData) -> bool {
     match fd.systems.get(System::Displays) {
         Condition::Ok => true,
         Condition::Failed => false,
-        Condition::Degraded(c) => (fd.time_s * 7.3).fract() < 0.35 + 0.65 * c.clamp(0.0, 1.0),
+        Condition::Degraded(c) => {
+            // Je Zwanzigstelsekunde ein fester Zufallswert (SplitMix64).
+            let mut x = ((fd.time_s * 20.0) as u64).wrapping_add(0x9E37_79B9_7F4A_7C15);
+            x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            let u = ((x ^ (x >> 31)) >> 11) as f64 / (1_u64 << 53) as f64;
+            u < 0.35 + 0.65 * c.clamp(0.0, 1.0)
+        }
     }
 }
 

@@ -1050,8 +1050,9 @@ Format jedes Eintrags:
   Notsteuerung 30 % Drehrate.
 - **Status:** Systeme umgesetzt (v0.2.4); erste Schadensquelle: Treffer
   feindlicher Raketen beschädigen zwei zufällige Systeme, intakt → halbe
-  Leistung → ausgefallen, beschädigtes Triebwerk 4 % Höchstschub je Treffer
-  wie im Original (v0.2.9, M-021); Splitterschaden eigener Bomben offen
+  Leistung → ausgefallen, beschädigtes Triebwerk 8 % Höchstschub je Treffer
+  (Original 4 %), Rütteln je Treffer, unregelmäßiges Flackern beschädigter
+  Anzeigen (v0.2.9, M-021); Splitterschaden eigener Bomben offen
 
 ### M-016 Bordkanone
 
@@ -1318,12 +1319,16 @@ Format jedes Eintrags:
     Systeme; ein intaktes fällt auf halbe Leistung, ein eingeschränktes fällt
     aus. Ausnahme Triebwerk, genau wie im Original: Es wird nur als
     „beschädigt“ markiert und fällt nie aus; ab dann kostet jeder
-    Raketentreffer 4 % Höchstschub (Gesamtzahl der Treffer, frühere zählen
-    mit – nach fünf Treffern also 80 %). Wiederholte Treffer verschärfen so
-    die Folgen wie im Original mit der Trefferzahl. Kein Lebensbalken – das Flugzeug geht über die Folgen
-    verloren. Meldung „SA-6 HIT“.
+    Raketentreffer 8 % Höchstschub (im Original 4 %, verdoppelt nach
+    Spieltest; Gesamtzahl der Treffer, frühere zählen mit – nach fünf
+    Treffern also 60 %). Wiederholte Treffer verschärfen so die Folgen wie im
+    Original mit der Trefferzahl. Dazu **rüttelt** das Flugzeug mit jedem
+    Treffer stärker (bis sechs Treffer; dieselbe Störung wie Turbulenz und
+    Fahrwerk), und beschädigte Anzeigen flackern **unregelmäßig**
+    (Spielerwünsche v0.2.9). Kein Lebensbalken – das Flugzeug geht über die
+    Folgen verloren. Meldung „SA-6 HIT“.
   - **Schubhebel:** Ist das Triebwerk beschädigt, sperrt eine rote Marke den
-    nicht mehr verfügbaren Bereich der Kulisse, daneben „MAX 92“ in Rot
+    nicht mehr verfügbaren Bereich der Kulisse, daneben „MAX 84“ in Rot
     (Spielerwunsch v0.2.9). Im Moment des Schadens fällt der Hebel auf die
     Sperre zurück und lässt sich nicht darüber schieben; das Triebwerk läuft
     wie im Original höchstens bis zur Sperre hoch.

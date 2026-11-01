@@ -41,6 +41,10 @@ const GEAR_BUFFET: f64 = 0.5;
 /// Gleichbleibendes leichtes Rütteln (rad/s) mit ausgefahrenem Fahrwerk in
 /// der Luft, unabhängig von Höhe und Fahrt.
 const GEAR_SHAKE: f64 = 0.22;
+/// Rütteln (rad/s) je Raketentreffer, höchstens für so viele Treffer: Ein
+/// beschädigtes Flugzeug schüttelt (Spielerwunsch v0.2.9).
+const DAMAGE_SHAKE: f64 = 0.07;
+const DAMAGE_SHAKE_HITS: u32 = 6;
 /// Schneller als das darf man die befestigte Bahn nicht verlassen (m/s).
 const OFF_RUNWAY_MAX_SPEED: f64 = 12.0;
 /// Startpunkt auf der Bahn: Abstand vom Bahnanfang (m).
@@ -712,7 +716,8 @@ impl Sim {
         let v = a.velocity.length();
         let speed = v / 200.0;
         let buffet = GEAR_SHAKE * a.gear
-            + GEAR_BUFFET * a.gear * ((v - self.spec.gear_max_speed_mps) / 25.0).clamp(0.0, 1.0);
+            + GEAR_BUFFET * a.gear * ((v - self.spec.gear_max_speed_mps) / 25.0).clamp(0.0, 1.0)
+            + DAMAGE_SHAKE * f64::from(self.systems.hits.min(DAMAGE_SHAKE_HITS));
         let amplitude =
             if a.on_ground { 0.0 } else { TURBULENCE_ROLL * depth * speed * (1.0 - 0.5 * a.flaps) + buffet };
         // Zufallszahlen immer ziehen, damit der Strom nicht von der Höhe abhängt.
