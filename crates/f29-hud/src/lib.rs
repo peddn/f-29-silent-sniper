@@ -44,6 +44,14 @@ impl ScreenLayout {
         Self { aspect, panel_fraction: Self::DEFAULT_PANEL, vertical_fov: Self::DEFAULT_FOV }
     }
 
+    /// Weitwinkelsicht für den Luftkampf (M-050): ohne Brett, die 3D-Ansicht
+    /// füllt das Fenster im selben Maßstab – man sieht nach unten weiter,
+    /// HUD-Symbole behalten ihre Größe.
+    pub fn wide(aspect: f32) -> Self {
+        let tan = (Self::DEFAULT_FOV * 0.5).tan() / (1.0 - Self::DEFAULT_PANEL);
+        Self { aspect, panel_fraction: 0.0, vertical_fov: 2.0 * tan.atan() }
+    }
+
     /// 3D-Ansicht in Bildschirmeinheiten.
     pub fn view_rect(&self) -> Rect {
         Rect { min: [-self.aspect * 0.5, -0.5 + self.panel_fraction], max: [self.aspect * 0.5, 0.5] }

@@ -868,3 +868,15 @@ fn signature_gauge_and_radar_circles() {
     }];
     assert!(red_in(&on_map, m.left_screen) > red_in(&hidden, m.left_screen) + 10, "kein Reichweitenkreis");
 }
+
+/// Weitwinkelsicht: kein Brett, keine MFDs, gleicher Maßstab der Ansicht.
+#[test]
+fn wide_view_drops_the_panel_at_the_same_scale() {
+    let (cockpit, wide) = (ScreenLayout::cockpit(16.0 / 9.0), ScreenLayout::wide(16.0 / 9.0));
+    assert!((wide.focal() - cockpit.focal()).abs() < 1e-5, "Maßstab");
+    assert!(wide.vertical_fov > cockpit.vertical_fov);
+    assert!(wide.mfd_layout().is_none());
+    let fd = sample();
+    let lines = |l: &ScreenLayout| build(&fd, l, &HudOptions::default(), None).lines.len();
+    assert!(lines(&wide) < lines(&cockpit), "Brett gezeichnet");
+}

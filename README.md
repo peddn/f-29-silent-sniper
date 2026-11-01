@@ -95,6 +95,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | Shift+F1 / Shift+F2 | | Cockpit / Verfolger |
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
 | Shift+F4 | | HUD ein/aus |
+| Shift+F5 | | Weitwinkelsicht: ohne Instrumentenbrett, Ansicht übers ganze Fenster (Luftkampf) |
 | F3 | | Karte (linkes MFD): Gitter ↔ Satellitenbild |
 | F4 | 11 | Rechtes MFD: nächste Seite (Mission → Ziel → Waffenkamera → Waffen → Triebwerk → Horizont → Systeme) |
 | Y / X | 10 (reihum) | Karte näher / weiter (5, 10, 20, 40, 80 km) |
@@ -310,7 +311,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Etappe 3: Jäger feuern AA-8 (MiG-21) bzw. AA-10 (MiG-29, halbaktiv)
       und schießen mit der Kanone (Treffer kosten Schub, mit 15 % ein
       System); sie weichen Raketen querab bzw. mit Abschwung aus (v0.2.9)
-- [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
+- [x] Weitwinkelsicht ohne Instrumentenbrett für den Luftkampf (Shift+F5,
+      v0.2.9)
 - ~~Radarwarnempfänger~~ (gestrichen, Spielerentscheidung v0.2.9)
 
 ### v0.5: Karriere

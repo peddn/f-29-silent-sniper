@@ -237,6 +237,9 @@ fn hotkeys(
     if shift && keys.just_pressed(KeyCode::F4) {
         view.hud = !view.hud;
     }
+    if shift && keys.just_pressed(KeyCode::F5) {
+        view.wide = !view.wide;
+    }
     // HUD-Modus: NAV → AG → AA
     if keys.just_pressed(KeyCode::KeyH) {
         view.hud_mode = view.hud_mode.next();

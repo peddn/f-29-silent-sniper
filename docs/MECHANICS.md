@@ -591,7 +591,11 @@ Format jedes Eintrags:
     g-Last. SYS: Fahrwerk, Klappen, Luftbremse, Gesamtgewicht, Abrissfahrt,
     Mach und ein Warnfeld mit allen Warnungen. Die HSI-Funktion übernimmt die
     Karte. Die Weitwinkelsicht (Taste C) ist auf v0.4 (Luftkampf) verschoben.
-- **Status:** umgesetzt (v0.1.10, Seiten v0.1.19)
+  - *v0.2.9:* **Weitwinkelsicht** (Shift+F5, im Cockpit; C ist bei uns
+    Düppel): Das Brett verschwindet, die 3D-Ansicht füllt das ganze Fenster
+    im selben Maßstab – der Sichtwinkel wächst nach unten, HUD-Symbole und
+    Erfassungskreise behalten ihre Größe. Ohne MFDs auch keine Zielkamera.
+- **Status:** umgesetzt (v0.1.10, Seiten v0.1.19, Weitwinkelsicht v0.2.9)
 
 ### M-060 Klang
 

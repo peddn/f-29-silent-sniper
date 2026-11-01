@@ -136,12 +136,13 @@ fn place_screens(
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
     view: Res<MfdView>,
+    settings: Res<crate::view::ViewSettings>,
     assets: Res<MapAssets>,
     mut images: ResMut<Assets<Image>>,
     mut screens: Query<(&Screen, &mut Transform, &mut Sprite, &mut Visibility)>,
 ) {
     let h = window.height();
-    let layout = layout_for(&window);
+    let layout = layout_for(&window, &settings);
     let mfd = layout.mfd_layout();
     let fd = state.sim.flight_data();
     let raster = match view.0.map_mode {

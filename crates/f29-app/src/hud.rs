@@ -82,7 +82,7 @@ fn draw_hud(
     if w <= 0.0 || h <= 0.0 {
         return;
     }
-    let layout = layout_for(&window);
+    let layout = layout_for(&window, &view);
 
     // Hintergrund des Instrumentenbretts
     let panel_h = layout.panel_fraction * h;
