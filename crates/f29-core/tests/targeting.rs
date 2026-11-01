@@ -55,7 +55,7 @@ fn radar_locks_the_nearest_target_ahead_and_can_be_switched_off() {
     assert!(!sim.sensors().radar_on, "Radar startet ausgeschaltet");
     step(&mut sim, flags::RADAR_TOGGLE, 0);
     assert!(sim.sensors().radar_on);
-    // Eine bestehende Aufschaltung bleibt; Richtung neu wählen setzt auf das nächste Ziel.
+    // Eine bestehende Wahl bleibt; Richtung neu wählen setzt auf das nächste Ziel.
     step(&mut sim, ControlFrame::look_flags(LookDir::Right.code()), 0);
     step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()), 0);
     let lock = sim.picks().ground;
@@ -102,11 +102,11 @@ fn optical_lock_needs_line_of_sight_and_is_shorter_ranged() {
     step(&mut sim, flags::RADAR_TOGGLE, 0);
     let (mut optical, mut radar_only) = (0, 0);
     for i in 0..(120 * 120) {
-        // Die Aufschaltung hält ein Ziel; ab und zu weiterschalten, damit auch
+        // Die Wahl hält ein Ziel; ab und zu weiterschalten, damit auch
         // fernere (reine Radar-)Ziele drankommen.
         let cycle = i % (sensors::UPDATE_TICKS as usize * 4) == 1;
         step(&mut sim, if cycle { ControlFrame::look_flags(LookDir::Forward.code()) } else { 0 }, 0);
-        // Genau im Erfassungstakt prüfen (dazwischen ist die Aufschaltung alt).
+        // Genau im Erfassungstakt prüfen (dazwischen ist die Wahl alt).
         if !sim.flight_data().tick.is_multiple_of(sensors::UPDATE_TICKS) {
             continue;
         }
@@ -131,14 +131,14 @@ fn optical_lock_needs_line_of_sight_and_is_shorter_ranged() {
 }
 
 /// Dieselbe Richtung noch einmal wählen: zum nächstweiteren Ziel, nach dem
-/// weitesten wieder zum nächsten; die Aufschaltung bleibt zwischen den Tasten.
+/// weitesten wieder zum nächsten; die Wahl bleibt zwischen den Tasten.
 #[test]
 fn same_direction_cycles_through_targets_by_range() {
     let mut sim = near_primary();
     step(&mut sim, flags::RADAR_TOGGLE, 0);
     step(&mut sim, ControlFrame::look_flags(LookDir::Right.code()), 0);
     step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()), 0);
-    let first = sim.picks().ground.index.expect("Aufschaltung");
+    let first = sim.picks().ground.index.expect("Wahl");
     let range = |sim: &Sim, i: usize| {
         let c = sim.targets()[i].center_ned();
         let p = sim.aircraft().position;
@@ -148,7 +148,7 @@ fn same_direction_cycles_through_targets_by_range() {
     for _ in 0..40 {
         let before = sim.picks().ground.index.unwrap();
         step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()), 0);
-        let after = sim.picks().ground.index.expect("bleibt aufgeschaltet");
+        let after = sim.picks().ground.index.expect("bleibt gewählt");
         if after == first {
             break;
         }
@@ -169,7 +169,7 @@ fn same_direction_cycles_through_targets_by_range() {
         for _ in 0..(f29_core::sensors::UPDATE_TICKS * 2) {
             step(&mut sim, 0, 0);
         }
-        assert_eq!(sim.picks().ground.index.unwrap(), after, "Aufschaltung springt zurück");
+        assert_eq!(sim.picks().ground.index.unwrap(), after, "Wahl springt zurück");
     }
     assert!(seen.len() >= 2, "nur {} Ziel(e) im Kegel", seen.len());
     let mut unique = seen.clone();
@@ -178,7 +178,7 @@ fn same_direction_cycles_through_targets_by_range() {
     assert_eq!(unique.len(), seen.len(), "ein Ziel doppelt vor dem Umlauf");
 }
 
-/// Überflug: Ein voraus aufgeschaltetes Ziel bleibt aufgeschaltet, die
+/// Überflug: Ein voraus gewähltes Ziel bleibt gewählt, die
 /// Blickrichtung folgt ihm nach hinten.
 #[test]
 fn lock_is_kept_when_overflying_and_look_follows() {

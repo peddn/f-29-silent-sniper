@@ -39,7 +39,7 @@ fn alert_scrambles_fighters_with_a_message() {
 
 /// Mit eingeschaltetem Radar wählt die Erfassung automatisch den nächsten
 /// Jäger voraus; eine Richtungstaste mit Zielart Jäger wählt neu, ohne die
-/// Bodenaufschaltung anzutasten.
+/// Bodenzielwahl anzutasten.
 #[test]
 fn fighters_are_picked_separately_from_ground_targets() {
     use f29_core::controls::{flags, weapon_flags};
@@ -78,7 +78,7 @@ fn fighters_are_picked_separately_from_ground_targets() {
     step(&mut sim, look, weapon_flags::PICK_AIR);
     let fd = sim.flight_data();
     assert!(fd.air_target.is_some_and(|t| t.label.starts_with("MIG")));
-    assert_eq!(fd.target.map(|t| t.index), ground, "Bodenaufschaltung verändert");
+    assert_eq!(fd.target.map(|t| t.index), ground, "Bodenzielwahl verändert");
     assert!(fd.marks.iter().any(|m| m.kind == f29_core::MarkKind::Air), "kein Viereck um Jäger");
 }
 
@@ -102,7 +102,7 @@ fn runways_are_picked_with_their_side() {
                 ControlFrame::from_analog(0.0, 0.0, 0.0, 0.55, ControlFrame::look_flags(look.code()))
                     .with_weapons(weapon_flags::PICK_RUNWAY),
             );
-            if let Some(t) = sim.flight_data().runway_target.filter(|t| t.name == rw.name) {
+            if let Some(t) = sim.flight_data().runway_target.filter(|t| t.label == rw.name) {
                 return t.side;
             }
         }

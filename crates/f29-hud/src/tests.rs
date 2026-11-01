@@ -345,16 +345,17 @@ fn picked_fighter_shows_on_map_and_target_page() {
         (n(m.left, Some(Ink::Hud)), n(m.right_screen, None))
     };
     let mut picked = fd.clone();
-    picked.air_target = Some(f29_core::AirTargetInfo {
-        id: 3,
+    picked.air_target = Some(f29_core::PickedInfo {
+        kind: f29_core::MarkKind::Air,
+        index: 3,
         label: "MIG-29",
+        side: f29_core::Side::Hostile,
         range: 3_000.0,
         closure_mps: 100.0,
-        direction_body: f29_core::DVec3::X,
-        in_circle: true,
-        optical: true,
-        radar: false,
         bearing: fd.heading,
+        direction_body: f29_core::DVec3::X,
+        seen: f29_core::sensors::Seen { radar: false, optical: true },
+        locked: true,
     });
     *picked.marks.last_mut().unwrap() = mark(true, true);
     let (map0, page0) = count(&fd, HudMode::AirToAir);
@@ -362,7 +363,7 @@ fn picked_fighter_shows_on_map_and_target_page() {
     assert_eq!(map1, map0 + 16, "doppelter Rahmen und Ecken auf der Karte");
     let mut chosen = picked.clone();
     *chosen.marks.last_mut().unwrap() = mark(true, false);
-    assert_eq!(count(&chosen, HudMode::AirToAir).0, map0 + 8, "gewählt, nicht aufgeschaltet: ohne Ecken");
+    assert_eq!(count(&chosen, HudMode::AirToAir).0, map0 + 8, "gewählt, nicht erfasst: ohne Ecken");
     assert_eq!(
         count(&picked, HudMode::AirToGround).0,
         count(&fd, HudMode::AirToGround).0,
@@ -528,7 +529,7 @@ fn target_box_shows_the_launch_zone() {
     let mut sim = Sim::new(SimConfig::new(0x0F29));
     sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.55, f29_core::controls::flags::RADAR_TOGGLE));
     let base = sim.flight_data();
-    let Some(mut t) = base.target else { panic!("kein Ziel aufgeschaltet") };
+    let Some(mut t) = base.target else { panic!("kein Ziel gewählt") };
     // Ziel genau voraus, damit der Rahmen im Glas liegt.
     t.direction_body = f29_core::DVec3::new(1.0, 0.0, 0.05).normalize_or_zero();
     t.civilian = false;
@@ -756,18 +757,19 @@ fn hud_modes_show_their_symbology() {
     land.on_ground = false;
     let gained = |mode: HudMode| draw(&land, mode).len() as i64 - draw(&fd, mode).len() as i64;
     assert!(gained(HudMode::Nav) > gained(HudMode::AirToGround) + 5);
-    // Aufgeschalteter Jäger: Raute nur im AA-Modus.
+    // Erfasster Jäger: Rahmen nur im AA-Modus.
     let mut air = fd.clone();
-    air.air_target = Some(f29_core::AirTargetInfo {
-        id: 0,
+    air.air_target = Some(f29_core::PickedInfo {
+        kind: f29_core::MarkKind::Air,
+        index: 0,
         label: "MIG-21",
+        side: f29_core::Side::Hostile,
         range: 4_000.0,
         closure_mps: 150.0,
-        direction_body: f29_core::DVec3::new(1.0, 0.05, -0.02).normalize_or_zero(),
-        in_circle: true,
-        optical: true,
-        radar: false,
         bearing: 0.0,
+        direction_body: f29_core::DVec3::new(1.0, 0.05, -0.02).normalize_or_zero(),
+        seen: f29_core::sensors::Seen { radar: false, optical: true },
+        locked: true,
     });
     let blue = |fd: &f29_core::FlightData, mode: HudMode| {
         draw(fd, mode).iter().filter(|l| l.ink == Ink::HudWarning).count() as i64

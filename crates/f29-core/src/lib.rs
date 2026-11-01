@@ -36,10 +36,9 @@ pub mod weapons;
 pub use controls::ControlFrame;
 pub use math::{DQuat, DVec3};
 pub use sim::{
-    AirTargetInfo, BlastInfo, BlastKind, BombAim, CrashCause, DT, DecoyInfo, FighterInfo, FlightData, GunAim,
-    GunInfo, Mark, MarkKind, MunitionInfo, PingInfo, RadarSiteInfo, RunwayTargetInfo, Side, Sim, SimConfig,
-    SpawnKind, Stage, Status, StoresInfo, TICK_HZ, TargetInfo, ThreatInfo, ThreatSite, Touchdown, WeaponCam,
-    WeaponMessage,
+    BlastInfo, BlastKind, BombAim, CrashCause, DT, DecoyInfo, FighterInfo, FlightData, GunAim, GunInfo, Mark,
+    MarkKind, MunitionInfo, PickedInfo, PingInfo, RadarSiteInfo, Side, Sim, SimConfig, SpawnKind, Stage,
+    Status, StoresInfo, TICK_HZ, TargetInfo, ThreatInfo, ThreatSite, Touchdown, WeaponCam, WeaponMessage,
 };
 
 pub use f29_data as data;

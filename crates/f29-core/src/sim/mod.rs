@@ -437,7 +437,7 @@ impl Sim {
         self.radar.step(self.tick, &self.targets, Some(&exposure));
         self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), Some(&exposure));
         self.launch_sams();
-        // Neu aufgeschaltet: Abschusslage sofort, sonst im Takt der Bombenanzeige.
+        // Neu gewählt: Abschusslage sofort, sonst im Takt der Bombenanzeige.
         let guided = self.stores.selected_weapon().is_some_and(|k| k.is_guided());
         let lock = self.ground_pick();
         let new_lock = guided && lock.is_some() && lock != self.launch_zone.map(|(l, _)| l);
@@ -567,7 +567,7 @@ impl Sim {
             flying: self.status == Status::Flying,
             painting: &painting,
         };
-        // Die Aufschaltung bleibt auch auf einem zerstörten Ziel, bis der
+        // Die Wahl bleibt auch auf einem zerstörten Ziel, bis der
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
         self.stores.step(&mut world);
         // Raketentreffer: Folgen nur über die Bordsysteme (M-015).

@@ -5,7 +5,7 @@ use crate::{ScreenLayout, heading_deg};
 use f29_core::sensors;
 use f29_core::units;
 use f29_core::weapons::LaunchZone;
-use f29_core::{FlightData, MarkKind, Side, Stage};
+use f29_core::{FlightData, MarkKind, PickedInfo, Side, Stage};
 
 /// Zeichenhöhe der HUD-Schrift (Bildschirmeinheiten).
 const TXT: f32 = 0.020;
@@ -26,7 +26,7 @@ pub enum HudMode {
     #[default]
     Nav,
     /// Luft-Boden: Zielrahmen und Zielhilfe je nach gewählter Waffe
-    /// (Kanonenkreuz, Bombenkreis, Abschusskreis, Feuersignal).
+    /// (Kanonenkreuz, Bombenkreis, Erfassungskreis, Feuersignal).
     AirToGround,
     /// Luft-Luft: großer Boresight-Kreis für alle Luft-Luft-Waffen, immer
     /// sichtbar.
@@ -90,7 +90,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
     match mode {
         HudMode::Nav => {
             marks(dl, fd, layout, &glass, vh, MarkKind::Runway);
-            runway_marker(dl, fd, layout, &glass, vh);
+            picked_target(dl, fd.runway_target.as_ref(), layout, &glass, vh);
         }
         HudMode::AirToGround => {
             dl.circle(c, circle_radius(layout, sensors::GROUND_CIRCLE_RAD), 40, Ink::Hud);
@@ -103,7 +103,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
         HudMode::AirToAir => {
             dl.circle(c, circle_radius(layout, sensors::AIR_CIRCLE_RAD), 48, Ink::Hud);
             marks(dl, fd, layout, &glass, vh, MarkKind::Air);
-            air_target_marker(dl, fd, layout, &glass, vh);
+            picked_target(dl, fd.air_target.as_ref(), layout, &glass, vh);
         }
     }
     heading_tape(dl, fd, &glass);
@@ -334,63 +334,44 @@ fn edge_arrow(dl: &mut DisplayList, d: f29_core::DVec3, glass: &Rect, s: f32, in
     Some(tip)
 }
 
-/// Zielrahmen um das aufgeschaltete Ziel (M-013) bzw. Pfeil am Glasrand.
+/// Zielrahmen um das gewählte Ziel (M-013) bzw. Pfeil am Glasrand.
 /// Zivile Ziele sind durchgekreuzt.
 fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
     let Some(t) = &fd.target else {
         return;
     };
-    let s = vh * MARK_SIZE;
+    // Form nach Reichweitenzone der gewählten Lenkwaffe (wie im Original: in
+    // Reichweite erfasst, näher dran Farbwechsel). Blau, wenn die
+    // vorausberechnete Flugbahn trifft.
     let zone = t.zone;
-    let ink = if t.civilian { Ink::HudDim } else { Ink::Hud };
-    match layout.project_body(t.direction_body.to_array()) {
-        Some(p) if glass.contains(p) => {
-            // Form nach Reichweitenzone der gewählten Lenkwaffe (wie im
-            // Original: in Reichweite erfasst, näher dran Farbwechsel). Blau,
-            // wenn die vorausberechnete Flugbahn trifft.
-            let r = Rect::from_center(p, [s, s]);
-            let ink = match zone {
-                Some(LaunchZone::Good) => Ink::HudWarning,
-                Some(LaunchZone::NoEffect) => Ink::HudDim,
-                _ if t.destroyed => Ink::HudDim,
-                _ => ink,
-            };
-            let inner = Rect::from_center(p, [s * INNER, s * INNER]);
-            if zone == Some(LaunchZone::NoEffect) {
-                dl.dashed_rect(r, ink);
-                dl.dashed_rect(inner, ink);
-            } else {
-                dl.rect(r, ink);
-                dl.rect(inner, ink);
-            }
-            if matches!(zone, Some(LaunchZone::Locked | LaunchZone::Good)) {
-                corners(dl, p, s, ink);
-            }
-            if t.civilian {
-                dl.line(r.min, r.max, ink);
-                dl.line([r.min[0], r.max[1]], [r.max[0], r.min[1]], ink);
-            }
-            let sys = match zone {
-                _ if t.destroyed => "DESTROYED",
-                Some(LaunchZone::NoEffect) => "NO EFF",
-                _ if t.optical => "OPT",
-                _ => "RDR",
-            };
-            dl.text_mid([p[0], p[1] - s * 2.2], TXT_SMALL * 0.8, Align::Center, sys, ink);
-            if t.damage > 0.0 && !t.destroyed {
-                dl.text_mid([p[0], p[1] + s * 2.2], TXT_SMALL * 0.8, Align::Center, "DMG", ink);
-            }
-        }
-        _ => {
-            if let Some(tip) = edge_arrow(dl, t.direction_body, glass, s * 0.8, ink) {
-                let c = glass.center();
-                let back = [
-                    tip[0] + (c[0] - tip[0]).signum() * s * 2.4,
-                    tip[1] + (c[1] - tip[1]).signum() * s * 1.6,
-                ];
-                dl.text_mid(back, TXT_SMALL * 0.8, Align::Center, "TGT", ink);
-            }
-        }
+    let ink = match zone {
+        Some(LaunchZone::Good) => Ink::HudWarning,
+        Some(LaunchZone::NoEffect) => Ink::HudDim,
+        _ if t.destroyed || t.civilian => Ink::HudDim,
+        _ => Ink::Hud,
+    };
+    let sys = match zone {
+        _ if t.destroyed => "DESTROYED",
+        Some(LaunchZone::NoEffect) => "NO EFF",
+        _ if t.optical => "OPT",
+        _ => "RDR",
+    };
+    let bottom = if t.damage > 0.0 && !t.destroyed { format!("{sys} DMG") } else { sys.to_string() };
+    let frame = Frame {
+        direction_body: t.direction_body,
+        top: t.name,
+        bottom: &bottom,
+        ink,
+        locked: matches!(zone, Some(LaunchZone::Locked | LaunchZone::Good)),
+        dashed: zone == Some(LaunchZone::NoEffect),
+    };
+    // Zivile Ziele sind durchgekreuzt.
+    if let Some(p) = picked_marker(dl, layout, glass, vh, &frame)
+        && t.civilian
+    {
+        let r = Rect::from_center(p, [vh * MARK_SIZE; 2]);
+        dl.line(r.min, r.max, ink);
+        dl.line([r.min[0], r.max[1]], [r.max[0], r.min[1]], ink);
     }
 }
 
@@ -448,60 +429,79 @@ fn marks(
     }
 }
 
-/// Gewähltes Ziel als doppelter Rahmen, aufgeschaltet (`locked`) mit Ecken;
-/// darüber `top`, darunter `bottom`; außerhalb des Glases ein Pfeil zum Rand.
-#[allow(clippy::too_many_arguments)]
+/// Rahmen eines gewählten Ziels: Richtung, Text darüber und darunter;
+/// erfasst (`locked`) mit Ecken, gestrichelt ohne Wirkung.
+struct Frame<'a> {
+    direction_body: f29_core::DVec3,
+    top: &'a str,
+    bottom: &'a str,
+    ink: Ink,
+    locked: bool,
+    dashed: bool,
+}
+
+/// Gewähltes Ziel als doppelter Rahmen; außerhalb des Glases ein Pfeil zum
+/// Rand mit `top`. Liefert die Bildposition, wenn es im Glas liegt.
 fn picked_marker(
     dl: &mut DisplayList,
     layout: &ScreenLayout,
     glass: &Rect,
     vh: f32,
-    direction_body: f29_core::DVec3,
-    top: &str,
-    bottom: &str,
-    ink: Ink,
-    locked: bool,
-) {
+    f: &Frame,
+) -> Option<[f32; 2]> {
     let s = vh * MARK_SIZE;
-    match layout.project_body(direction_body.to_array()) {
+    let ink = f.ink;
+    match layout.project_body(f.direction_body.to_array()) {
         Some(p) if glass.contains(p) => {
-            dl.rect(Rect::from_center(p, [s, s]), ink);
-            dl.rect(Rect::from_center(p, [s * INNER, s * INNER]), ink);
-            if locked {
+            for k in [1.0, INNER] {
+                let r = Rect::from_center(p, [s * k, s * k]);
+                if f.dashed { dl.dashed_rect(r, ink) } else { dl.rect(r, ink) }
+            }
+            if f.locked {
                 corners(dl, p, s, ink);
             }
-            dl.text_mid([p[0], p[1] + s * 2.4], TXT_SMALL * 0.8, Align::Center, top, ink);
-            dl.text_mid([p[0], p[1] - s * 2.4], TXT_SMALL * 0.8, Align::Center, bottom, ink);
+            dl.text_mid([p[0], p[1] + s * 2.4], TXT_SMALL * 0.8, Align::Center, f.top, ink);
+            dl.text_mid([p[0], p[1] - s * 2.4], TXT_SMALL * 0.8, Align::Center, f.bottom, ink);
+            Some(p)
         }
         _ => {
-            edge_arrow(dl, direction_body, glass, s * 0.8, ink);
+            if let Some(tip) = edge_arrow(dl, f.direction_body, glass, s * 0.8, ink) {
+                let c = glass.center();
+                let back = [
+                    tip[0] + (c[0] - tip[0]).signum() * s * 2.4,
+                    tip[1] + (c[1] - tip[1]).signum() * s * 1.6,
+                ];
+                dl.text_mid(back, TXT_SMALL * 0.8, Align::Center, f.top, ink);
+            }
+            None
         }
     }
 }
 
-/// Gewählter Jäger (AA-Modus): Typ, Entfernung (km) und Annäherung (m/s);
-/// blau, sobald er im Erfassungskreis liegt (erfasst).
-fn air_target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
-    let Some(t) = &fd.air_target else {
+/// Gewählter Jäger bzw. gewählte Landebahn: Typ bzw. Name, darunter
+/// Entfernung (km) und Annäherung (m/s) bzw. Seite; blau, sobald erfasst.
+fn picked_target(dl: &mut DisplayList, t: Option<&PickedInfo>, layout: &ScreenLayout, glass: &Rect, vh: f32) {
+    let Some(t) = t else {
         return;
     };
-    let ink = if t.in_circle { Ink::HudWarning } else { Ink::Hud };
-    let info = format!("{:.1} {:+.0}", t.range / 1_000.0, t.closure_mps);
-    picked_marker(dl, layout, glass, vh, t.direction_body, t.label, &info, ink, t.in_circle);
-}
-
-/// Gewählte Landebahn (NAV-Modus): Name, Seite und Entfernung (km).
-fn runway_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
-    let Some(r) = &fd.runway_target else {
-        return;
-    };
-    let ink = match r.side {
-        Side::Friendly => Ink::Hud,
+    let ink = match t.side {
+        _ if t.locked => Ink::HudWarning,
         Side::Neutral => Ink::HudDim,
-        Side::Hostile => Ink::HudWarning,
+        _ => Ink::Hud,
     };
-    let info = format!("{} {:.1}", r.side.label(), r.range / 1_000.0);
-    picked_marker(dl, layout, glass, vh, r.direction_body, r.name, &info, ink, false);
+    let info = match t.kind {
+        MarkKind::Air => format!("{:.1} {:+.0}", t.range / 1_000.0, t.closure_mps),
+        _ => format!("{} {:.1}", t.side.label(), t.range / 1_000.0),
+    };
+    let frame = Frame {
+        direction_body: t.direction_body,
+        top: t.label,
+        bottom: &info,
+        ink,
+        locked: t.locked,
+        dashed: false,
+    };
+    picked_marker(dl, layout, glass, vh, &frame);
 }
 
 /// Kursband oben im HUD.
@@ -684,7 +684,7 @@ fn right_data(dl: &mut DisplayList, fd: &FlightData, glass: &Rect, mode: HudMode
     if mode == HudMode::Nav {
         return;
     }
-    // Zielerfassung: Radar an, Blickrichtung, aufgeschaltetes Ziel
+    // Zielerfassung: Radar an, Blickrichtung, gewähltes Ziel
     let mut sensor = String::new();
     if fd.radar_on {
         sensor.push_str("RDR ");

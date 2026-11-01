@@ -115,7 +115,7 @@ fn optical_seeker_takes_only_an_optical_lock() {
     assert_eq!(w.target, Some(Track::Ground(0)));
     assert!(!w.searching && w.tracking);
     let (w, _, _) = launch_at_target(false);
-    assert_eq!(w.target, None, "reine Radaraufschaltung wird nicht übernommen");
+    assert_eq!(w.target, None, "nur vom Radar entdecktes Ziel wird nicht übernommen");
     assert!(w.searching);
 }
 

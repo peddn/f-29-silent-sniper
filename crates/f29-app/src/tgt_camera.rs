@@ -1,5 +1,5 @@
 //! Zielkamera der TGT-Seite (M-013): eine zweite 3D-Kamera mit schmalem
-//! Sichtfeld rendert das optisch aufgeschaltete Ziel in eine Textur; ein
+//! Sichtfeld rendert das gewählte, optisch entdeckte Ziel in eine Textur; ein
 //! Nachbearbeitungseffekt macht daraus ein körniges Schwarzweiß-Kamerabild
 //! (`assets/shaders/tgt_camera.wesl`). Das Bild liegt als Sprite im Bildfeld
 //! der Seite, die Linien des MFDs (Rahmen, Fadenkreuz) darüber.
@@ -164,8 +164,8 @@ fn update(
     let shot = match view.0.right_page {
         // Luft-Luft: der gewählte Jäger, solange das Auge ihn sieht.
         RightPage::Target if settings.hud_mode == f29_hud::HudMode::AirToAir => {
-            fd.air_target.filter(|t| t.optical && on).and_then(|t| {
-                let f = state.sim.fighters().list.get(t.id as usize)?;
+            fd.air_target.filter(|t| t.seen.optical && on).and_then(|t| {
+                let f = state.sim.fighters().list.get(t.index)?;
                 let (aim, eye) = (place(f.position, origin.0), eye());
                 let range = (aim - eye).length();
                 let half =

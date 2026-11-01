@@ -18,7 +18,7 @@ pub(super) enum Fate {
 pub(super) struct View<'a> {
     pub(super) targets: &'a [Target],
     pub(super) terrain: &'a Terrain,
-    /// Optisch aufgeschaltetes Ziel des Flugzeugs (Laserbeleuchtung).
+    /// Gewähltes, optisch entdecktes Ziel des Flugzeugs (Laserbeleuchtung).
     pub(super) designated: Option<usize>,
     /// Ort und Geschwindigkeit des eigenen Flugzeugs, solange es fliegt.
     pub(super) aircraft: Option<(DVec3, DVec3)>,

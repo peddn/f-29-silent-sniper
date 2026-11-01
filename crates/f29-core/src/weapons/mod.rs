@@ -7,8 +7,8 @@
 //! Flug, nicht ein Würfel beim Abschuss (Umbau v0.2.9):
 //! - **Bomben**: Massenpunkt mit Schwerkraft und Luftwiderstand; Schaden nach
 //!   dem Abstand des Einschlags vom Ziel.
-//! - **Raketen**: übernehmen das aufgeschaltete Ziel, wenn es im
-//!   **Abschusskreis** um die Nase liegt und ihr Suchkopf es sieht, sonst
+//! - **Raketen**: übernehmen das gewählte Ziel, wenn es im
+//!   **Erfassungskreis** um die Nase liegt und ihr Suchkopf es sieht, sonst
 //!   fliegen sie geradeaus und schalten auf, was ihnen vor den Suchkopf kommt.
 //!   Sie verfolgen das Ziel (reine Verfolgung, begrenzte Drehrate), solange es
 //!   im Suchkegel bleibt; liegt es weit hinter ihnen, geben sie auf. Ein
@@ -17,7 +17,7 @@
 //!   Wirkungsmatrix ist die Chance, das Ziel zu zerstören, sonst
 //!   „wirkungslos“.
 //! - **Laserbombe** (GBU-12): fällt wie eine Bombe und lenkt auf das Ziel,
-//!   solange das Flugzeug es optisch aufgeschaltet hält (Laser).
+//!   solange das Flugzeug es gewählt und optisch entdeckt hält (Laser).
 //! - Ob ein Schuss treffen würde, rechnet [`launch_zone`] mit genau diesem Flug
 //!   voraus („SHOOT“).
 //! - **Feindliche Boden-Luft-Raketen** (M-021) fliegen in derselben Liste und
@@ -123,14 +123,14 @@ pub const DECOY_LIFE_S: f64 = 5.0;
 /// stufe plus eins; Schwierigkeitsgrade folgen).
 pub const HIT_SYSTEMS: usize = 2;
 
-/// Zone einer Lenkwaffe gegen das aufgeschaltete Ziel (Zielrahmen und
+/// Zone einer Lenkwaffe gegen das gewählte Ziel (Zielrahmen und
 /// Feuersignal im HUD).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LaunchZone {
     /// Waffe wirkt nicht gegen dieses Ziel oder ihr Suchkopf sieht es nicht.
     NoEffect,
-    /// Die Waffe würde das Ziel nicht übernehmen (Reichweite, Abschusskreis,
-    /// keine optische Aufschaltung).
+    /// Die Waffe würde das Ziel nicht übernehmen (Reichweite, Erfassungskreis,
+    /// keine optische Entdeckung).
     NoLock,
     /// Sie würde es übernehmen, aber laut Vorausberechnung verfehlen.
     Locked,
@@ -259,7 +259,7 @@ pub struct Weapon {
     /// Der Suchkopf (bzw. der Laser) hatte das Ziel bei der letzten Prüfung;
     /// sonst fliegt die Waffe ungelenkt weiter.
     pub tracking: bool,
-    /// Ohne Aufschaltung abgefeuert: sucht selbst.
+    /// Ohne gewähltes Ziel abgefeuert: sucht selbst.
     pub searching: bool,
     /// Richtung, in der die Rakete ohne Ziel weiterfliegt: die Abschusslage
     /// (Flugzeugnase).
@@ -288,10 +288,10 @@ impl Weapon {
         }
     }
 
-    /// Frisch ausgelöst unter `l`, mit Übergabe des aufgeschalteten Ziels:
-    /// Laserbombe bei optischer Aufschaltung; Rakete, wenn das Ziel im
-    /// Abschusskreis liegt und ihr Suchkopf es sieht (optisch nur bei optischer
-    /// Aufschaltung) – sonst sucht sie selbst.
+    /// Frisch ausgelöst unter `l`, mit Übergabe des gewählten Ziels:
+    /// Laserbombe bei optischer Entdeckung; Rakete, wenn das Ziel im
+    /// Erfassungskreis liegt und ihr Suchkopf es sieht (optisch nur, wenn es
+    /// optisch entdeckt ist) – sonst sucht sie selbst.
     fn launched(id: u32, kind: WeaponKind, l: &Launch<'_>) -> Self {
         let down = l.attitude.rotate(DVec3::new(0.0, 0.0, 1.0));
         let mut w =
@@ -399,7 +399,7 @@ pub enum WeaponEvent {
         target: usize,
     },
     /// Laserbombe: Das Flugzeug beleuchtet das Ziel nicht mehr (keine
-    /// optische Aufschaltung mehr) – sie fällt ungelenkt weiter.
+    /// optische Entdeckung mehr) – sie fällt ungelenkt weiter.
     LaserLost {
         kind: WeaponKind,
         id: u32,
@@ -470,7 +470,7 @@ pub struct World<'a> {
     /// Position und Geschwindigkeit des eigenen Flugzeugs (NED).
     pub aircraft: DVec3,
     pub aircraft_velocity: DVec3,
-    /// Optisch aufgeschaltetes Ziel des Flugzeugs (Laserbeleuchtung).
+    /// Gewähltes, optisch entdecktes Ziel des Flugzeugs (Laserbeleuchtung).
     pub designated: Option<usize>,
     /// Das Flugzeug fliegt (Ziel der feindlichen Raketen).
     pub flying: bool,
@@ -486,12 +486,12 @@ pub struct Launch<'a> {
     pub position: DVec3,
     pub velocity: DVec3,
     pub attitude: DQuat,
-    /// Aufgeschaltetes Ziel des Flugzeugs.
+    /// Gewähltes Ziel des Flugzeugs.
     pub lock: Option<usize>,
     pub targets: &'a [Target],
     pub terrain: &'a Terrain,
-    /// Die Aufschaltung des Flugzeugs ist optisch (optische Suchköpfe
-    /// übernehmen nur optische Aufschaltungen).
+    /// Das gewählte Ziel ist optisch entdeckt (optische Suchköpfe
+    /// übernehmen nur optisch entdeckte Ziele).
     pub lock_optical: bool,
     /// Waffenschacht funktioniert (Schadensmodell).
     pub bay_ok: bool,

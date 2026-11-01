@@ -1,4 +1,4 @@
-//! Lenkwaffen (M-013, M-014): Abschusskreis und Übergabe, physische
+//! Lenkwaffen (M-013, M-014): Erfassungskreis und Übergabe, physische
 //! Verfolgung mit gewürfelter Wirkung, Selbstsuche, vorausberechnete
 //! Abschusszonen, Laserbombe mit Dauerbeleuchtung.
 
@@ -93,7 +93,7 @@ fn tally(class: TargetClass) -> Tally {
             continue;
         };
         let events = shoot(&mut sim);
-        // Nur Schüsse mit Übergabe der Aufschaltung zählen (sonst sucht die
+        // Nur Schüsse mit Übergabe des gewählten Ziels zählen (sonst sucht die
         // Waffe selbst und fliegt womöglich ein anderes Ziel an).
         if !events.iter().any(|e| matches!(e, WeaponEvent::Acquired { target: x, .. } if *x == target)) {
             continue;
@@ -123,7 +123,7 @@ fn handed_over_missile_hits_and_rolls_the_effect() {
     assert!((0.15..0.55).contains(&rate), "{report}");
 }
 
-/// Liegt das Ziel außerhalb des Abschusskreises, übernimmt die Rakete es
+/// Liegt das Ziel außerhalb des Erfassungskreises, übernimmt die Rakete es
 /// nicht: Sie fliegt in Abschusslage geradeaus und sucht selbst.
 #[test]
 fn target_outside_the_launch_circle_is_not_handed_over() {
@@ -145,7 +145,7 @@ fn target_outside_the_launch_circle_is_not_handed_over() {
 #[test]
 fn launch_zones_follow_the_range() {
     // Zone der ersten flachen Anflüge (300 m über dem Ziel), in denen das Ziel
-    // im Abschusskreis liegt bzw. (`any`) überhaupt aufgeschaltet ist.
+    // im Erfassungskreis liegt bzw. (`any`) überhaupt gewählt ist.
     let zone = |dist: f64, loadout, any: bool| {
         (1..=30_u64)
             .filter_map(|seed| lined_up_at(seed, TargetClass::Soft, dist, 300.0, loadout))
@@ -162,7 +162,7 @@ fn launch_zones_follow_the_range() {
     assert_eq!(zone(5_000.0, bombs, false), None);
 }
 
-/// Ohne passende Aufschaltung abgefeuert, sucht der Radarjäger selbst – und
+/// Ohne passendes gewähltes Ziel abgefeuert, sucht der Radarjäger selbst – und
 /// schaltet nur Flugabwehrstellungen auf.
 #[test]
 fn unlocked_weapon_searches_for_its_own_kind() {
@@ -270,7 +270,7 @@ fn laser_bomb_needs_energy_to_reach_the_target() {
     assert!(!events.iter().any(|e| matches!(e, WeaponEvent::Acquired { .. })), "{events:?}");
 }
 
-/// Nach der Zerstörung bleibt die Aufschaltung auf dem Wrack; das Wrack
+/// Nach der Zerstörung bleibt die Wahl auf dem Wrack; das Wrack
 /// verschwindet von der Karte (Liste der zerstörten Ziele) und ist nach einem
 /// Zielwechsel nicht mehr anwählbar.
 #[test]
@@ -290,7 +290,7 @@ fn lock_stays_on_the_wreck_until_a_new_target_is_chosen() {
         step(&mut sim, 0, 0);
     }
     let fd = sim.flight_data();
-    let t = fd.target.expect("Aufschaltung bleibt");
+    let t = fd.target.expect("Wahl bleibt");
     assert_eq!(t.index, target);
     assert!(t.destroyed);
     assert_eq!(t.zone, None);

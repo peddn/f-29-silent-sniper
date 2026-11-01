@@ -23,7 +23,7 @@ pub struct Warnings {
     pub missile: bool,
 }
 
-/// Das aufgeschaltete Ziel (M-013).
+/// Das gewählte Ziel (M-013).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TargetInfo {
     /// Index in [`Sim::targets`].
@@ -52,7 +52,7 @@ pub struct TargetInfo {
     pub zone: Option<LaunchZone>,
     /// Angesammelter Schaden 0..1.
     pub damage: f64,
-    /// Zerstört: Die Aufschaltung bleibt auf dem Wrack, bis ein neues Ziel
+    /// Zerstört: Die Wahl bleibt auf dem Wrack, bis ein neues Ziel
     /// gewählt wird.
     pub destroyed: bool,
 }
@@ -87,7 +87,7 @@ pub struct BombAim {
     pub fall_time_s: f64,
     /// Der Einschlag läge im Splitterbereich des weiterfliegenden Flugzeugs.
     pub too_low: bool,
-    /// Ablage des aufgeschalteten (intakten) Ziels vom Aufschlagpunkt (m):
+    /// Ablage des gewählten (intakten) Ziels vom Aufschlagpunkt (m):
     /// längs der Flugrichtung (+ = Ziel liegt noch voraus, Bombe fiele zu kurz)
     /// und quer (+ = Ziel liegt rechts).
     pub target_offset: Option<(f64, f64)>,
@@ -193,7 +193,7 @@ pub struct FlightData {
     pub ir_cooldown_s: f64,
     /// Blickrichtung der Zielerfassung.
     pub look: LookDir,
-    /// Aufgeschaltetes Ziel.
+    /// Gewähltes Ziel.
     pub target: Option<TargetInfo>,
     /// Waffenbestand, Schacht, Waffen in der Luft.
     pub stores: StoresInfo,
@@ -219,8 +219,8 @@ pub struct FlightData {
     /// Feindliche Jäger in der Luft.
     pub fighters: Vec<FighterInfo>,
     /// Gewählter Jäger bzw. gewählte Landebahn.
-    pub air_target: Option<AirTargetInfo>,
-    pub runway_target: Option<RunwayTargetInfo>,
+    pub air_target: Option<PickedInfo>,
+    pub runway_target: Option<PickedInfo>,
     /// Bekannte Ziele aller Arten vor dem Flugzeug.
     pub marks: Vec<Mark>,
     /// Bild der jüngsten eigenen Waffe mit Fernsehsuchkopf in der Luft.
@@ -347,26 +347,26 @@ pub struct MunitionInfo {
     pub optical: bool,
 }
 
-/// Gewählter Jäger (HUD im AA-Modus).
+/// Gewählter Jäger bzw. gewählte Landebahn: was HUD und TGT-Seite zeigen.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct AirTargetInfo {
-    pub id: u32,
+pub struct PickedInfo {
+    pub kind: MarkKind,
+    /// Nummer des Jägers bzw. Index der Landebahn.
+    pub index: usize,
     pub label: &'static str,
+    pub side: Side,
     /// Schrägentfernung (m) und Annäherung (m/s, positiv = kommt näher).
     pub range: f64,
     pub closure_mps: f64,
-    /// Richtung zum Jäger in Körperachsen, normiert.
-    pub direction_body: DVec3,
-    /// Im Erfassungskreis ([`crate::sensors::AIR_CIRCLE_RAD`]): erfasst.
-    pub in_circle: bool,
-    /// Gesehen von Auge (Zielkamera) bzw. Radar.
-    pub optical: bool,
-    pub radar: bool,
-    /// Peilung (rad, rechtweisend).
+    /// Peilung (rad, rechtweisend) und Richtung in Körperachsen (normiert).
     pub bearing: f64,
+    pub direction_body: DVec3,
+    pub seen: Seen,
+    /// Erfasst: im Erfassungskreis der Zielart.
+    pub locked: bool,
 }
 
-/// Seite eines Flugplatzes (Anzeige im NAV-Modus).
+/// Seite eines Ziels (Freund, neutral, Feind).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     Friendly,
@@ -384,24 +384,28 @@ impl Side {
     }
 }
 
-/// Gewählte Landebahn (HUD im NAV-Modus, nur Anzeige).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RunwayTargetInfo {
-    pub name: &'static str,
-    pub side: Side,
-    pub range: f64,
-    pub direction_body: DVec3,
-    /// Peilung (rad, rechtweisend) und Lage (NED, für die Karte).
-    pub bearing: f64,
-    pub position: DVec3,
-}
-
 /// Zielart einer HUD-Markierung.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarkKind {
     Ground,
     Air,
     Runway,
+}
+
+impl MarkKind {
+    /// Halber Öffnungswinkel des Erfassungskreises (Landebahnen: keiner).
+    pub fn circle(self) -> Option<f64> {
+        match self {
+            MarkKind::Ground => Some(sensors::GROUND_CIRCLE_RAD),
+            MarkKind::Air => Some(sensors::AIR_CIRCLE_RAD),
+            MarkKind::Runway => None,
+        }
+    }
+
+    /// Liegt die Richtung `direction_body` im Erfassungskreis?
+    pub fn in_circle(self, direction_body: DVec3) -> bool {
+        self.circle().is_some_and(|c| detmath::acos(direction_body.x.clamp(-1.0, 1.0)) <= c)
+    }
 }
 
 /// Stufe eines bekannten Ziels; dazu kommen „gewählt“ und „erfasst“.
@@ -542,8 +546,8 @@ impl Sim {
         });
         let air = self.fighters.list.iter().filter(|f| f.airborne()).map(|f| {
             let selected = p.air.index == Some(f.id as usize);
-            let to = a.attitude.inverse_rotate((f.position - a.position).normalize_or_zero());
-            let in_circle = detmath::acos(to.x.clamp(-1.0, 1.0)) <= sensors::AIR_CIRCLE_RAD;
+            let in_circle = MarkKind::Air
+                .in_circle(a.attitude.inverse_rotate((f.position - a.position).normalize_or_zero()));
             (MarkKind::Air, f.position, self.fighter_seen[f.id as usize], selected, selected && in_circle)
         });
         let known = Seen { radar: false, optical: true };
@@ -564,6 +568,36 @@ impl Sim {
                 locked,
             })
             .collect()
+    }
+
+    /// Angaben zum gewählten Ziel `index` der Art `kind` bei `position`
+    /// (NED), das sich mit `velocity` bewegt.
+    fn picked_info(
+        &self,
+        kind: MarkKind,
+        index: usize,
+        label: &'static str,
+        side: Side,
+        position: DVec3,
+        velocity: DVec3,
+    ) -> PickedInfo {
+        let a = &self.aircraft;
+        let to = position - a.position;
+        let (range, dir) = (to.length(), to.normalize_or_zero());
+        let direction_body = a.attitude.inverse_rotate(dir);
+        PickedInfo {
+            kind,
+            index,
+            label,
+            side,
+            range,
+            closure_mps: -(velocity - a.velocity).dot(dir),
+            bearing: detmath::wrap_two_pi(detmath::atan2(to.y, to.x)),
+            direction_body,
+            // Landebahnen sind nur von der Karte bekannt.
+            seen: if kind == MarkKind::Air { self.picks.air.seen } else { Seen::default() },
+            locked: kind.in_circle(direction_body),
+        }
     }
 
     /// Anzeige- und Autopilot-Daten für den aktuellen Zustand.
@@ -773,37 +807,22 @@ impl Sim {
                 .and_then(|i| self.fighters.list.get(i))
                 .filter(|f| f.airborne())
                 .map(|f| {
-                    let to = f.position - a.position;
-                    let range = to.length();
-                    let direction_body = a.attitude.inverse_rotate(to / range.max(1.0));
-                    AirTargetInfo {
-                        id: f.id,
-                        label: f.spec().label,
-                        range,
-                        closure_mps: -(f.velocity() - a.velocity).dot(to / range.max(1.0)),
-                        direction_body,
-                        in_circle: detmath::acos(direction_body.x.clamp(-1.0, 1.0))
-                            <= sensors::AIR_CIRCLE_RAD,
-                        optical: self.picks.air.seen.optical,
-                        radar: self.picks.air.seen.radar,
-                        bearing: detmath::wrap_two_pi(detmath::atan2(to.y, to.x)),
-                    }
+                    self.picked_info(
+                        MarkKind::Air,
+                        f.id as usize,
+                        f.spec().label,
+                        Side::Hostile,
+                        f.position,
+                        f.velocity(),
+                    )
                 }),
             runway_target: self.picks.runway.index.map(|i| {
                 let r = &self.terrain.runways()[i];
-                let position = runway_point(r);
-                let to = position - a.position;
-                RunwayTargetInfo {
-                    name: r.name,
-                    side: match r.kind {
-                        AirfieldKind::Home | AirfieldKind::Secret => Side::Friendly,
-                        AirfieldKind::Enemy => Side::Hostile,
-                    },
-                    range: to.length(),
-                    direction_body: a.attitude.inverse_rotate(to.normalize_or_zero()),
-                    bearing: detmath::wrap_two_pi(detmath::atan2(to.y, to.x)),
-                    position,
-                }
+                let side = match r.kind {
+                    AirfieldKind::Home | AirfieldKind::Secret => Side::Friendly,
+                    AirfieldKind::Enemy => Side::Hostile,
+                };
+                self.picked_info(MarkKind::Runway, i, r.name, side, runway_point(r), DVec3::ZERO)
             }),
             marks: self.marks(),
             fighters: self

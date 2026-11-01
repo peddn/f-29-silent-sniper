@@ -37,7 +37,7 @@ pub enum RightPage {
     /// Mission: Ziele, Route, Heimweg.
     #[default]
     Mission,
-    /// Aufgeschaltetes Ziel mit optischem Zielbild.
+    /// Gewähltes Ziel mit optischem Zielbild.
     Target,
     /// Bild der Waffe mit Fernsehsuchkopf im Flug.
     WeaponCam,

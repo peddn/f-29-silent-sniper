@@ -14,7 +14,7 @@ use f29_core::systems::{Condition, System};
 use f29_core::targets::TargetRole;
 use f29_core::units;
 use f29_core::weapons::{Seeker, WeaponKind};
-use f29_core::{DVec3, FlightData, TargetInfo};
+use f29_core::{DVec3, FlightData, MarkKind, TargetInfo};
 
 /// Anteil der Bildhöhe, den die Seitenleiste unten belegt.
 pub(crate) const PAGE_BAR: f32 = 0.075;
@@ -507,7 +507,7 @@ pub(crate) fn systems(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     }
 }
 
-/// Ziel: optisches Zielbild (Drahtgitter) des aufgeschalteten Ziels, sonst
+/// Ziel: optisches Zielbild (Drahtgitter) des gewählten Ziels, sonst
 /// Radarmarke oder „NO TARGET“; darunter Name, Klasse, Entfernung, Peilung.
 /// Bildfeld der TGT-Seite im rechten MFD-Bildschirm `screen`.
 pub fn target_image_rect(screen: Rect) -> Rect {
@@ -534,33 +534,17 @@ pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, mode: 
     // und Angaben: Name, rechts daneben, dann drei Zeilen.
     let (status, image, rows) = match mode {
         HudMode::AirToGround => ground_target(dl, fd, c, half, img, screen, camera_feed),
-        HudMode::AirToAir => match &fd.air_target {
+        _ => match if mode == HudMode::Nav { &fd.runway_target } else { &fd.air_target } {
             Some(t) => (
-                sensor_status(t.optical, t.radar),
-                Some(t.optical),
+                if t.kind == MarkKind::Runway { "NAV" } else { sensor_status(t.seen.optical, t.seen.radar) },
+                Some(t.seen.optical),
                 Some((
                     t.label,
-                    "HOSTILE",
+                    t.side.label(),
                     [
                         ("RANGE", format!("{:.1} KM", units::m_to_km(t.range))),
                         ("BEARING", format!("{:03}", heading_deg(t.bearing))),
                         ("CLOSURE", format!("{:+.0} M/S", t.closure_mps)),
-                    ],
-                )),
-            ),
-            None => ("NO LOCK", None, None),
-        },
-        HudMode::Nav => match &fd.runway_target {
-            Some(r) => (
-                "NAV",
-                Some(false),
-                Some((
-                    r.name,
-                    r.side.label(),
-                    [
-                        ("RANGE", format!("{:.1} KM", units::m_to_km(r.range))),
-                        ("BEARING", format!("{:03}", heading_deg(r.bearing))),
-                        ("", String::new()),
                     ],
                 )),
             ),

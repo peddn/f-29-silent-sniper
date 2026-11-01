@@ -36,7 +36,7 @@ pub enum Seeker {
     None,
     /// Optisch: braucht freie Sicht, alle Bodenziele.
     Optical,
-    /// Laser: das Flugzeug muss das Ziel optisch aufgeschaltet halten.
+    /// Laser: das Flugzeug muss das Ziel gewählt und optisch entdeckt halten.
     Laser,
     /// Passiv auf Radarstrahlung: nur Flugabwehrstellungen, ohne Sichtlinie.
     Radiation,

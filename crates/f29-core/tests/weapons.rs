@@ -212,7 +212,7 @@ fn retarded_bomb_avoids_the_frag_warning_at_low_level() {
     assert!(!frag(1), "Fallschirmbombe mit Splitterwarnung");
 }
 
-/// Zielhilfe: Mit aufgeschaltetem Ziel auslösen, wenn die Längsablage null
+/// Zielhilfe: Mit gewähltem Ziel auslösen, wenn die Längsablage null
 /// wird – die Bombe schlägt längs der Flugrichtung am Ziel ein.
 #[test]
 fn release_cue_puts_the_bomb_on_the_target_along_track() {
@@ -232,7 +232,7 @@ fn release_cue_puts_the_bomb_on_the_target_along_track() {
     for _ in 0..ticks(40.0) {
         let aim = sim.flight_data().bomb_aim.expect("Zielhilfe bei gewählter Mk 82");
         assert!(!aim.too_low, "900 m: kein Splitterrisiko");
-        let (along, _) = aim.target_offset.expect("Ablage zum aufgeschalteten Ziel");
+        let (along, _) = aim.target_offset.expect("Ablage zum gewählten Ziel");
         let w = if released.is_none() && sim.stores().door_open() && along <= 0.0 {
             released = Some((sim.flight_data().tick, sim.aircraft().velocity));
             weapon_flags::RELEASE
