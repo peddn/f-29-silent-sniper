@@ -1392,11 +1392,16 @@ Format jedes Eintrags:
     (SA-6, SA-11, SA-5) rot, optisch/infrarotgelenkt (SA-13) orange –, in der
     3D-Ansicht mit Rauchspur.
   - **Ziele der Lenkwaffen** (v0.2.9): Eine Rakete verfolgt ein Bodenziel, das
-    eigene Flugzeug oder einen Täuschkörper; jedes liefert Ort und
-    Geschwindigkeit. Der Suchkopf richtet sich nur nach seiner Art: optisch
-    bzw. Infrarot (Kegel, Reichweite, Sichtlinie), halbaktives Radar (weit weg
-    nur mit Beleuchtung), Laser. Luft-Luft-Raketen beider Seiten werden damit
-    zu Tabelleneinträgen.
+    eigene Flugzeug, einen Jäger oder einen Täuschkörper; jedes liefert Ort
+    und Geschwindigkeit. Der Suchkopf richtet sich nur nach seiner Art – vier
+    Lenkarten: **optisch** bzw. Infrarot (Kegel, Reichweite, Sichtlinie;
+    Maverick, SA-13, AIM-9; Fackeln), **Radar** (ohne Sichtlinie; Düppel),
+    **Anti-Radar** (HARM) und **Laser** (GBU-12). Der Radarsuchkopf ist einer
+    für alle: gegen Bodenziele nur Schiffe (Harpoon), gegen Flugzeuge mit
+    eigenem Radar; ein Wert der Waffentabelle legt fest, ab welcher
+    Entfernung er die Beleuchtung durch die Stellung braucht (SAMs 5 km,
+    halbaktiv wie im Original; AIM-120 nie, Fire and Forget). Luft-Luft-
+    Raketen beider Seiten sind damit nur Tabelleneinträge.
   - **Störer** (v0.2.9, nach dem Original; dort zeitgesteuert mit Vorrat):
     **ECM** (Taste M) ein/aus gegen Radarlenkung, **Infrarotstörer** (Taste U)
     für 30 s gegen Infrarotlenkung, ohne Vorrat, danach 60 s Abklingzeit

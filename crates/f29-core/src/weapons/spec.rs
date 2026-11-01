@@ -45,21 +45,17 @@ pub enum Seeker {
     Laser,
     /// Passiv auf Radarstrahlung: nur Flugabwehrstellungen, ohne Sichtlinie.
     Radiation,
-    /// Aktives Radar gegen Schiffe, ohne Sichtlinie.
-    Naval,
-    /// Halbaktives Radar gegen das Flugzeug (Boden-Luft-Raketen).
-    SemiActive,
-    /// Eigenes Radar gegen Jäger (AIM-120), ohne Sichtlinie.
-    Active,
+    /// Radar, ohne Sichtlinie: gegen Bodenziele nur Schiffe, gegen
+    /// Flugzeuge mit eigenem Radar – weiter als
+    /// [`WeaponSpec::illuminated_beyond_m`] nur mit Beleuchtung durch die
+    /// Stellung (halbaktiv, Boden-Luft-Raketen).
+    Radar,
 }
 
 impl Seeker {
     /// Lässt sich dieser Suchkopf von dieser Art Täuschkörper ablenken?
     pub fn lured_by(self, decoy: DecoyKind) -> bool {
-        matches!(
-            (self, decoy),
-            (Seeker::SemiActive | Seeker::Active, DecoyKind::Chaff) | (Seeker::Optical, DecoyKind::Flare)
-        )
+        matches!((self, decoy), (Seeker::Radar, DecoyKind::Chaff) | (Seeker::Optical, DecoyKind::Flare))
     }
 
     /// Kann dieser Suchkopf ein Ziel der Klasse überhaupt erfassen?
@@ -68,8 +64,7 @@ impl Seeker {
             Seeker::None => false,
             Seeker::Optical | Seeker::Laser => true,
             Seeker::Radiation => class.is_radar(),
-            Seeker::Naval => class.is_naval(),
-            Seeker::SemiActive | Seeker::Active => false,
+            Seeker::Radar => class.is_naval(),
         }
     }
 }
@@ -123,6 +118,10 @@ pub struct WeaponSpec {
     pub decoy_resistance: f64,
     /// Luft-Luft-Rakete: verfolgt Jäger statt Bodenziele.
     pub anti_air: bool,
+    /// Radarsuchkopf gegen Flugzeuge: weiter als so (m) lenkt er nur mit
+    /// Beleuchtung durch die Stellung; 0 = immer mit eigenem Radar (Fire and
+    /// Forget).
+    pub illuminated_beyond_m: f64,
 }
 
 pub(super) const fn deg(d: f64) -> f64 {
@@ -153,6 +152,7 @@ const BOMB: WeaponSpec = WeaponSpec {
     life_s: MAX_FALL_S,
     decoy_resistance: 0.0,
     anti_air: false,
+    illuminated_beyond_m: 0.0,
 };
 
 /// Gemeinsame Grundwerte der Lenkwaffen.
@@ -181,6 +181,7 @@ const MISSILE: WeaponSpec = WeaponSpec {
     life_s: 70.0,
     decoy_resistance: 0.0,
     anti_air: false,
+    illuminated_beyond_m: 0.0,
 };
 
 /// Boden-Luft-Rakete mittlerer Reichweite (Vorbild SA-6): mittelschnell,
@@ -191,7 +192,10 @@ const SAM: WeaponSpec = WeaponSpec {
     name: "SA-6 GAINFUL",
     mass_kg: 600.0,
     per_bay: 0,
-    seeker: Seeker::SemiActive,
+    seeker: Seeker::Radar,
+    // Halbaktiv wie im Original: weit weg nur, solange die Stellung das
+    // Flugzeug erfasst.
+    illuminated_beyond_m: 5_000.0,
     cruise_mps: 650.0,
     accel_mps2: 250.0,
     turn_rate_rad: deg(45.0),
@@ -254,7 +258,7 @@ const SPECS: [WeaponSpec; 12] = [
         name: "AGM-84 HARPOON",
         mass_kg: 520.0,
         per_bay: 1,
-        seeker: Seeker::Naval,
+        seeker: Seeker::Radar,
         cruise_mps: 270.0,
         accel_mps2: 60.0,
         turn_rate_rad: deg(10.0),
@@ -359,7 +363,7 @@ const SPECS: [WeaponSpec; 12] = [
         name: "AIM-120 AMRAAM",
         mass_kg: 152.0,
         per_bay: 3,
-        seeker: Seeker::Active,
+        seeker: Seeker::Radar,
         cruise_mps: 1_000.0,
         accel_mps2: 300.0,
         turn_rate_rad: deg(30.0),

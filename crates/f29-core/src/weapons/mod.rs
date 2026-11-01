@@ -98,9 +98,6 @@ const PREDICT_STEPS: f64 = 4.0;
 /// Feindliche Raketen höchstens so viele gleichzeitig in der Luft (je
 /// Stellung eine, wie im Original).
 pub const MAX_HOSTILE: usize = 4;
-/// Näher als so (m) lenkt eine Boden-Luft-Rakete mit eigenem Suchkopf, weiter
-/// weg nur mit der Beleuchtung ihrer Stellung (halbaktiv).
-pub const SEMI_ACTIVE_M: f64 = 5_000.0;
 /// Boden-Luft-Raketen starten mindestens so steil über der Linie zum
 /// Flugzeug (rad, 10° – innerhalb des Suchkegels).
 const SAM_DIRECT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;

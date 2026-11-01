@@ -64,7 +64,7 @@ pub(super) fn bearing_off(velocity: DVec3, to: DVec3) -> f64 {
 ///   noch in Suchkegel und Reichweite (optisch und mit `los` auch in Sicht)?
 ///   Weit hinter ihr gibt sie auf.
 /// - **Flugzeug:** Peilung im Suchkegel, sonst verloren; halbaktiv weiter als
-///   [`SEMI_ACTIVE_M`] nur mit Beleuchtung durch die Stellung, optisch
+///   [`WeaponSpec::illuminated_beyond_m`] nur mit Beleuchtung durch die Stellung, optisch
 ///   (Infrarot) nur in Reichweite und mit freier Sicht.
 /// - **Keines:** sucht selbst das nächste passende Bodenziel vor dem Suchkopf
 ///   (auch zivile), wenn sie ohne Übergabe abgefeuert wurde.
@@ -121,15 +121,17 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
             let jammed = w.owner.is_some()
                 && to.length() > BURN_THROUGH_M
                 && match s.seeker {
-                    Seeker::SemiActive => ecm,
+                    Seeker::Radar => ecm,
                     Seeker::Optical => ir,
                     _ => false,
                 };
             let sees = !jammed
                 && match s.seeker {
-                    Seeker::SemiActive => v.painted || to.length() <= SEMI_ACTIVE_M,
-                    // Eigenes Radar: sieht ohne Sichtlinie.
-                    Seeker::Active => to.length() <= s.max_range_m,
+                    // Ohne Sichtlinie; weit weg halbaktiv nur mit Beleuchtung.
+                    Seeker::Radar if s.illuminated_beyond_m > 0.0 && to.length() > s.illuminated_beyond_m => {
+                        v.painted
+                    }
+                    Seeker::Radar => to.length() <= s.max_range_m,
                     _ => {
                         to.length() <= s.max_range_m
                             && (!v.los
