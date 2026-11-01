@@ -123,10 +123,6 @@ pub const DECOY_LIFE_S: f64 = 5.0;
 /// stufe plus eins; Schwierigkeitsgrade folgen).
 pub const HIT_SYSTEMS: usize = 2;
 
-/// Abschusskreis um die Flugzeugnase (halber Öffnungswinkel, rad, 8°): Nur ein
-/// Ziel darin übernimmt eine Rakete (Spielerentscheidung v0.2.7).
-pub const LAUNCH_CIRCLE_RAD: f64 = 8.0 * std::f64::consts::PI / 180.0;
-
 /// Zone einer Lenkwaffe gegen das aufgeschaltete Ziel (Zielrahmen und
 /// Feuersignal im HUD).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -312,7 +308,7 @@ impl Weapon {
                 w.boresight = nose;
                 let optical_ok = seeker != Seeker::Optical || l.lock_optical;
                 w.target = lock.filter(|_| optical_ok).and_then(|(i, t)| {
-                    seeker_sees(kind, l.position, nose, LAUNCH_CIRCLE_RAD, t, l.terrain, true)
+                    seeker_sees(kind, l.position, nose, crate::sensors::GROUND_CIRCLE_RAD, t, l.terrain, true)
                         .map(|_| Track::Ground(i))
                 });
                 w.searching = w.target.is_none();

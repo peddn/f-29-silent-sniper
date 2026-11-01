@@ -9,6 +9,7 @@ use crate::math::{DQuat, DVec3};
 use crate::nav::{self, Steerpoint};
 use crate::radar::{Exposure, RadarEvent, RadarKind, RadarNet};
 use crate::rng::Pcg32;
+use crate::sensors::Pick;
 use crate::sensors::{self, LookDir, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
@@ -256,8 +257,9 @@ pub struct Sim {
     /// Feindliche Radarstellungen mit Alarmstufen (M-020).
     radar: RadarNet,
     fighters: Fighters,
-    /// Vom eigenen Radar aufgeschalteter Jäger (Nummer).
-    air_lock: Option<u32>,
+    /// Gewählter Jäger bzw. gewählte Landebahn (M-013, M-022).
+    air: Pick,
+    runway: Pick,
     systems: Systems,
     /// Aufschlag (Punkt, Flugzeit) einer jetzt abgefeuerten Patrone; abgeleitet.
     gun_prediction: Option<(DVec3, f64)>,
@@ -344,7 +346,8 @@ impl Sim {
             gun: Gun::new(seed),
             radar: RadarNet::default(),
             fighters,
-            air_lock: None,
+            air: Pick::default(),
+            runway: Pick::default(),
             systems: Systems::default(),
             gun_prediction: None,
             bomb_prediction: None,
@@ -590,7 +593,19 @@ impl Sim {
             self.sensors.update(&self.targets, &self.terrain, pos, heading);
             done = true;
         }
-        if let Some(look) = LookDir::from_code(controls.look_code()) {
+        let pick_air = controls.has_weapon(weapon_flags::PICK_AIR);
+        if let Some(look) = LookDir::from_code(controls.look_code()).filter(|_| pick_air) {
+            let c = sensors::in_cone(self.sensed_fighters(), pos, heading, look, f64::MAX);
+            self.air.press(look, &c);
+            done = true;
+        } else if let Some(look) = LookDir::from_code(controls.look_code())
+            .filter(|_| controls.has_weapon(weapon_flags::PICK_RUNWAY))
+        {
+            let rw = self.terrain.runways().iter().enumerate();
+            let c = sensors::in_cone(rw.map(|(i, r)| (i, runway_point(r))), pos, heading, look, f64::MAX);
+            self.runway.press(look, &c);
+            done = true;
+        } else if let Some(look) = LookDir::from_code(controls.look_code()) {
             // Erst die mitgeführte Blickrichtung auf den Stand bringen: Die
             // Taste der Richtung, in der das Ziel gerade liegt, schaltet weiter.
             if !done {
@@ -608,33 +623,31 @@ impl Sim {
         }
         if self.tick.is_multiple_of(sensors::UPDATE_TICKS) {
             self.update_contacts();
-            self.update_air_lock();
+            self.update_air_pick();
         }
     }
 
-    /// Radar-Aufschaltung auf Luftziele (M-022): bleibt, solange der Jäger
-    /// fliegt und in Radarreichweite ist; sonst der nächste fliegende im
-    /// Kegel voraus. Ohne Radar keine.
-    fn update_air_lock(&mut self) {
+    /// Jäger, die die eigenen Sensoren erfassen (Radar oder Sicht):
+    /// (Nummer, Ort).
+    fn sensed_fighters(&self) -> impl Iterator<Item = (usize, DVec3)> + '_ {
+        let pos = self.aircraft.position;
+        self.fighters
+            .list
+            .iter()
+            .filter(move |f| f.airborne() && self.sensors.sees_aircraft(&self.terrain, pos, f.position))
+            .map(|f| (f.id as usize, f.position))
+    }
+
+    /// Der gewählte Jäger bleibt, solange ihn ein eigenes System erfasst;
+    /// sonst der nächste erfasste in seiner Blickrichtung (wie bei
+    /// Bodenzielen, M-013).
+    fn update_air_pick(&mut self) {
         let (pos, heading) = (self.aircraft.position, self.aircraft.attitude.to_euler().0);
-        let range = self.sensors.radar_range();
-        let list = &self.fighters.list;
-        let in_range = |f: &&crate::fighters::Fighter| f.airborne() && (f.position - pos).length() <= range;
-        let kept = self.air_lock.and_then(|id| list.get(id as usize)).filter(|f| in_range(f));
-        self.air_lock = if !self.sensors.radar_on {
-            None
-        } else if let Some(f) = kept {
-            Some(f.id)
-        } else {
-            list.iter()
-                .filter(in_range)
-                .filter(|f| {
-                    let to = f.position - pos;
-                    detmath::wrap_pi(detmath::atan2(to.y, to.x) - heading).abs() <= sensors::CONE_HALF_RAD
-                })
-                .min_by(|a, b| (a.position - pos).length().total_cmp(&(b.position - pos).length()))
-                .map(|f| f.id)
-        };
+        let kept = self.air.index.is_some_and(|i| self.sensed_fighters().any(|(k, _)| k == i));
+        if !kept {
+            let c = sensors::in_cone(self.sensed_fighters(), pos, heading, self.air.look, f64::MAX);
+            self.air.index = c.first().map(|&(_, i)| i);
+        }
     }
 
     /// Eigene Erfassung reihum für einige Ziele neu bestimmen (die Sichtlinie
@@ -850,6 +863,11 @@ impl Sim {
 
 /// Nicklage beim Aufsetzen, unter der das Bugrad zuerst aufschlägt (rad).
 const NOSE_FIRST_PITCH: f64 = -0.087;
+
+/// Bahnmitte (NED).
+fn runway_point(r: &f29_terrain::Runway) -> DVec3 {
+    DVec3::new(r.center[0], r.center[1], -r.elevation_m)
+}
 
 /// Route: zwei Wegpunkte, dann die nächstgelegene geheime Piste, dann nach Hause.
 fn build_route(terrain: &Terrain, seed: u64, sp: &Spawn) -> Vec<Steerpoint> {

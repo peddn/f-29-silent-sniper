@@ -364,11 +364,6 @@ impl WeaponKind {
         Self::ALL.into_iter().find(|k| k.code() == code)
     }
 
-    /// Rakete mit Abschusskreis (alle Lenkwaffen außer der Laserbombe).
-    pub fn uses_launch_circle(self) -> bool {
-        self.is_guided() && self.spec().seeker != Seeker::Laser
-    }
-
     /// Schaden pro Treffer gegen eine Zielklasse (M-010): 1 = ein Treffer
     /// zerstört, 0,5 = zwei Treffer, 0 = wirkungslos. `impact_rad` ist der
     /// Eintreffwinkel unter der Waagerechten (gehärtete Ziele, M-012).

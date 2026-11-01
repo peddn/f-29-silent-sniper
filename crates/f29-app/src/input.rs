@@ -71,7 +71,15 @@ impl PilotInput {
     }
 
     /// Erzeugt die Eingabe für einen Tick und verbraucht einmalige Ereignisse.
-    pub fn take_frame(&mut self) -> ControlFrame {
+    /// Eine Blickrichtungstaste trägt die Zielart des HUD-Modus mit (AA:
+    /// Jäger, NAV: Landebahnen, AG: Bodenziele).
+    pub fn take_frame(&mut self, mode: f29_hud::HudMode) -> ControlFrame {
+        let pick = match mode {
+            _ if self.look == 0 => 0,
+            f29_hud::HudMode::AirToAir => weapon_flags::PICK_AIR,
+            f29_hud::HudMode::Nav => weapon_flags::PICK_RUNWAY,
+            f29_hud::HudMode::AirToGround => 0,
+        };
         let mut f = 0;
         if self.airbrake {
             f |= flags::AIRBRAKE;
@@ -91,6 +99,7 @@ impl PilotInput {
         f |= ControlFrame::look_flags(std::mem::take(&mut self.look));
         ControlFrame::from_analog(self.pitch, self.roll, self.yaw, self.throttle, f).with_weapons(
             std::mem::take(&mut self.weapons)
+                | pick
                 | if self.gun { weapon_flags::GUN } else { 0 }
                 | if self.trigger { weapon_flags::TRIGGER } else { 0 },
         )

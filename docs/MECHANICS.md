@@ -917,8 +917,9 @@ Format jedes Eintrags:
     - **Wirkung gewürfelt** (wie im Original): Die Wirkungsmatrix ist die
       Chance, das Ziel zu zerstören (Maverick gegen Gebäude etwa jedes dritte
       Mal), sonst „INEFFECTIVE“. Bomben behalten den Schaden nach Abstand.
-    - **Abschusskreis** (Spielerentscheidung): ein fester Kreis von ±8° um die
-      Flugzeugnase im HUD, gleich für alle Raketen. Übergabe beim Abschuss nur,
+    - **Erfassungskreis** (Spielerentscheidung, v0.2.9 vereinheitlicht): ein
+      fester Kreis um die Flugzeugnase im HUD – gegen Bodenziele ±6°, gegen
+      Luftziele ±10° (M-017). Übergabe beim Abschuss nur,
       wenn das aufgeschaltete Ziel im Kreis liegt, in Reichweite ist und der
       Suchkopf es sieht (Klasse passt, optisch mit Sichtlinie). Optische
       Suchköpfe übernehmen nur eine **optische** Aufschaltung.
@@ -1084,23 +1085,39 @@ Format jedes Eintrags:
 
 - **Verhalten:** Das HUD zeigt je nach Aufgabe nur die passende Symbolik.
 - **Referenzstelle:** keine (eigener Entwurf nach Spielerwunsch).
-- **Unser Design:** drei Modi, mit einer Taste (H) durchgeblättert; der Modus
-  ist reine Anzeige und gehört nicht zum Simulationszustand.
+- **Unser Design:** drei Modi, mit einer Taste (H) durchgeblättert. Der Modus
+  ist ein **Filter der Zielart** (Spielerentscheidung v0.2.9): Er bestimmt,
+  welche Ziele das HUD umrahmt und welche die Richtungstasten I/J/K/L wählen.
+  Er selbst ist reine Anzeige; die Taste sendet nur die Zielart mit ihrer
+  Richtung an die Simulation, die je Art eine eigene Auswahl hält (Boden,
+  Jäger, Landebahn) – so bleiben Replays bitgleich, und beim Umschalten ist
+  die frühere Wahl der Art wieder da.
+  - **Vierecke:** Jedes bekannte Ziel der Art (eigene Sensoren oder AWACS) im
+    Glas bekommt ein schlichtes, gedämpftes Viereck, auch weit außerhalb der
+    Mitte. Das gewählte trägt einen Rahmen mit Ecken, Typ und Entfernung;
+    außerhalb des Glases zeigt ein Randpfeil zu ihm.
+  - **Ein Erfassungskreis je Modus, eine Regel:** Liegt das gewählte Ziel im
+    Kreis, ist es erfasst und wird an eine Rakete übergeben – AG ±6°, AA
+    ±10°.
   - **NAV** (Start): Flugdaten, Navigationspunkt, Konfiguration; mit
-    ausgefahrenem Fahrwerk Gleitlinie und Sinkratenskala. Keine Waffen- und
-    Zielsymbolik.
-  - **AG** (Luft-Boden): Zielrahmen, Zielerfassung, gewählte Waffe und die
+    ausgefahrenem Fahrwerk Gleitlinie und Sinkratenskala. Erfassen lassen
+    sich nur Landebahnen, nur zur Anzeige: Name, „FRIENDLY“ (Heimatbasis,
+    geheime Pisten) bzw. „HOSTILE“ (feindliche Fliegerhorste), „NEUTRAL“
+    vorgesehen; Entfernung in km.
+  - **AG** (Luft-Boden): Bodenziele, Erfassungskreis, gewählte Waffe und die
     Zielhilfe je nach Waffe – Kanone: Kanonenkreuz am vorausberechneten
-    Bodeneinschlag; ungelenkte Bombe: Bombenkreis; Rakete: Abschusskreis (jetzt
-    in der vollen HUD-Farbe statt gedämpft); Lenkwaffen: Feuersignal.
-  - **AA** (Luft-Luft): ein großer Boresight-Kreis (±10°), einheitlich für alle
-    Luft-Luft-Waffen und immer sichtbar.
+    Bodeneinschlag; ungelenkte Bombe: Bombenkreis; Lenkwaffen: Feuersignal.
+  - **AA** (Luft-Luft): Jäger, Erfassungskreis; das gewählte Ziel mit Typ,
+    Entfernung (km) und Annäherung (m/s), blau, sobald es im Kreis liegt.
+    Jäger erfasst das Radar (an) bis zu seiner Reichweite, das Auge bis 15 km
+    (nachts 5 km) mit freier Sicht.
   Das HUD-Glas ist breiter (Daten und Symbole weiter außen). Die Waffenwahl
   (Tab) läuft GUN → BAY 1 → … → BAY 4 → GUN; die Kanone ist die Startwahl. Die
   Auslösetaste feuert bei gewählter Kanone, solange sie gehalten wird (eigenes
   Bit im Waffenbyte), sonst löst sie die Schachtwaffe aus. Die Rücktaste feuert
   die Kanone unabhängig von der Wahl. Die Wahl geht in den Zustandshash ein.
-- **Status:** umgesetzt (v0.2.8)
+- **Status:** umgesetzt (v0.2.8); Modus als Zielfilter, Vierecke, ein Kreis
+  je Modus (v0.2.9)
 
 ### M-020 Radar-/Detektionsmodell (Stealth)
 
@@ -1464,12 +1481,10 @@ Format jedes Eintrags:
     sichtbar bis 15 km (nachts 5 km), in der Ferne mindestens gut einen
     Retro-Bildpunkt groß – ein Punkt am Himmel – und ohne Dunst
     (Spielerwunsch v0.2.9: vorher erst im letzten Moment zu sehen).
-  - **Aufschaltung auf Luftziele:** Das eigene Radar (eingeschaltet) schaltet
-    automatisch den nächsten fliegenden Jäger im Kegel voraus auf und hält
-    ihn, solange er in Radarreichweite fliegt. Im AA-Modus zeigt das HUD ihn
-    als blaue Raute mit Typ, Entfernung (km) und Annäherung (m/s); außerhalb
-    des Glases ein Pfeil zum Rand. Waffen dagegen folgen mit Etappe 2
-    (Kanone mit Vorhaltemarke, AIM-9).
+  - **Auswahl von Luftzielen** (M-017): Im AA-Modus wählen I/J/K/L Jäger;
+    ohne Wahl automatisch der nächste erfasste in der Blickrichtung, die Wahl
+    bleibt, solange ein eigenes System ihn erfasst. Waffen folgen mit
+    Etappe 2 (Kanone mit Vorhaltemarke, AIM-9, AIM-120).
 - **Status:** Etappe 1 umgesetzt (v0.2.9)
 
 ### M-031 Einsatzgebiete und Missionsgenerator

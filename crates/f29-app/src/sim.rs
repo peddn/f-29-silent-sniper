@@ -118,7 +118,12 @@ impl SimState {
     }
 }
 
-fn step_simulation(time: Res<Time>, mut state: ResMut<SimState>, mut pilot: ResMut<PilotInput>) {
+fn step_simulation(
+    time: Res<Time>,
+    mut state: ResMut<SimState>,
+    mut pilot: ResMut<PilotInput>,
+    view: Res<crate::view::ViewSettings>,
+) {
     if state.paused {
         return;
     }
@@ -130,7 +135,7 @@ fn step_simulation(time: Res<Time>, mut state: ResMut<SimState>, mut pilot: ResM
         // Höchstschub zurück und lässt sich nicht darüber schieben.
         let cap = state.sim.systems().capability(f29_core::systems::System::Engine);
         pilot.throttle = pilot.throttle.min(cap);
-        let frame = pilot.take_frame();
+        let frame = pilot.take_frame(view.hud_mode);
         state.prev = state.curr;
         state.sim.step(frame);
         state.recorder.push(frame);

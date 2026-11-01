@@ -518,34 +518,49 @@ fn bomb_aim_draws_the_pipper() {
     assert!(low_red > none_red, "zu tief nicht rot");
 }
 
-/// Abschusskreis nur bei gewählter Rakete (nicht bei Bomben oder Laserbombe).
+/// Ein Kreis je Modus (M-013): AG mit dem kleineren Bodenkreis, gleich
+/// welche Waffe; AA mit dem größeren Luftkreis; NAV ohne.
 #[test]
-fn launch_circle_only_for_missiles() {
-    use f29_core::weapons::{Bay, WeaponKind};
+fn one_circle_per_mode() {
+    use crate::HudMode;
+    use f29_core::sensors::{AIR_CIRCLE_RAD, GROUND_CIRCLE_RAD};
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
-    let base = sample();
-    let lines = |kind: WeaponKind| {
-        let mut fd = base.clone();
-        fd.stores.selected = 0;
-        fd.stores.gun_selected = false;
-        fd.stores.bays[0] = Bay { kind: Some(kind), count: 1 };
-        fd.bomb_aim = None;
-        // Nur Linien auf dem Kreisradius um die Glasmitte zählen.
-        let dl = build(
-            &fd,
-            &layout,
-            &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
-            None,
-        );
-        let c = layout.view_rect().center();
-        let r = layout.focal() * (f29_core::weapons::LAUNCH_CIRCLE_RAD as f32).tan();
+    let fd = sample();
+    let on_circle = |mode: HudMode, rad: f64| {
+        let opts = HudOptions { show_panel: false, hud_mode: mode, ..HudOptions::default() };
+        let dl = build(&fd, &layout, &opts, None);
+        let (c, r) = (layout.view_rect().center(), crate::hud::circle_radius(&layout, rad));
         let on = |p: [f32; 2]| ((p[0] - c[0]).hypot(p[1] - c[1]) - r).abs() < 1e-4;
         dl.lines.iter().filter(|l| on(l.a) && on(l.b)).count()
     };
-    let bomb = lines(WeaponKind::FreeFall);
-    assert_eq!(lines(WeaponKind::GuidedBomb), bomb);
-    assert!(lines(WeaponKind::AirToGround) >= bomb + 30, "kein Kreis bei der Maverick");
-    assert_eq!(lines(WeaponKind::AntiRadar), lines(WeaponKind::AirToGround));
+    assert_eq!(on_circle(HudMode::AirToGround, GROUND_CIRCLE_RAD), 40);
+    assert_eq!(on_circle(HudMode::AirToAir, AIR_CIRCLE_RAD), 48);
+    assert_eq!(on_circle(HudMode::Nav, GROUND_CIRCLE_RAD) + on_circle(HudMode::Nav, AIR_CIRCLE_RAD), 0);
+}
+
+/// Der Modus filtert die Vierecke: AA nur Jäger, AG nur Bodenziele, NAV nur
+/// Landebahnen.
+#[test]
+fn modes_filter_the_target_marks() {
+    use crate::HudMode;
+    use f29_core::{Mark, MarkKind};
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let mut fd = sample();
+    let ahead = |y: f64| f29_core::DVec3::new(1.0, y, 0.02).normalize_or_zero();
+    fd.marks = vec![
+        Mark { kind: MarkKind::Ground, direction_body: ahead(-0.1), selected: false },
+        Mark { kind: MarkKind::Air, direction_body: ahead(0.0), selected: false },
+        Mark { kind: MarkKind::Air, direction_body: ahead(0.05), selected: false },
+        Mark { kind: MarkKind::Runway, direction_body: ahead(0.1), selected: false },
+    ];
+    let dim = |fd: &f29_core::FlightData, mode: HudMode| {
+        let opts = HudOptions { show_panel: false, hud_mode: mode, ..HudOptions::default() };
+        build(fd, &layout, &opts, None).lines.iter().filter(|l| l.ink == Ink::HudDim).count()
+    };
+    let empty = f29_core::FlightData { marks: Vec::new(), ..fd.clone() };
+    assert_eq!(dim(&fd, HudMode::AirToAir) - dim(&empty, HudMode::AirToAir), 8, "zwei Jäger");
+    assert_eq!(dim(&fd, HudMode::AirToGround) - dim(&empty, HudMode::AirToGround), 4, "ein Bodenziel");
+    assert_eq!(dim(&fd, HudMode::Nav) - dim(&empty, HudMode::Nav), 4, "eine Landebahn");
 }
 
 /// Feuersignal: „SHOOT“ (blau), wenn die Vorausberechnung trifft, sonst nur
@@ -651,7 +666,7 @@ fn hud_modes_show_their_symbology() {
             .lines
     };
     let c = layout.view_rect().center();
-    let r = layout.focal() * crate::hud::AA_CIRCLE_DEG.to_radians().tan();
+    let r = crate::hud::circle_radius(&layout, f29_core::sensors::AIR_CIRCLE_RAD);
     let on_aa = |l: &crate::Line| ((l.a[0] - c[0]).hypot(l.a[1] - c[1]) - r).abs() < 1e-4;
     assert_eq!(draw(&fd, HudMode::AirToAir).iter().filter(|l| on_aa(l)).count(), 48, "AA-Kreis");
     assert_eq!(draw(&fd, HudMode::Nav).iter().filter(|l| on_aa(l)).count(), 0);
@@ -671,11 +686,12 @@ fn hud_modes_show_their_symbology() {
         range: 4_000.0,
         closure_mps: 150.0,
         direction_body: f29_core::DVec3::new(1.0, 0.05, -0.02).normalize_or_zero(),
+        in_circle: true,
     });
     let blue = |fd: &f29_core::FlightData, mode: HudMode| {
         draw(fd, mode).iter().filter(|l| l.ink == Ink::HudWarning).count() as i64
     };
-    assert!(blue(&air, HudMode::AirToAir) >= blue(&fd, HudMode::AirToAir) + 4, "Raute fehlt");
+    assert!(blue(&air, HudMode::AirToAir) >= blue(&fd, HudMode::AirToAir) + 12, "Rahmen mit Ecken fehlt");
     assert_eq!(blue(&air, HudMode::AirToGround), blue(&fd, HudMode::AirToGround));
     // Reihenfolge der Modi
     assert_eq!(HudMode::default(), HudMode::Nav);

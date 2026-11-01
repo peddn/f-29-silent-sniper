@@ -2,16 +2,20 @@
 
 use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::{ScreenLayout, heading_deg};
-use f29_core::FlightData;
+use f29_core::sensors;
 use f29_core::units;
 use f29_core::weapons::LaunchZone;
+use f29_core::{FlightData, MarkKind, Side};
 
 /// Zeichenhöhe der HUD-Schrift (Bildschirmeinheiten).
 const TXT: f32 = 0.020;
 const TXT_SMALL: f32 = 0.016;
 /// Luft-Luft-Kreis um die Flugzeugnase (halber Öffnungswinkel), einheitlich
 /// für alle Luft-Luft-Waffen (Spielerwunsch v0.2.8).
-pub(crate) const AA_CIRCLE_DEG: f32 = 10.0;
+/// Radius des Erfassungskreises `rad` auf dem Bildschirm.
+pub(crate) fn circle_radius(layout: &ScreenLayout, rad: f64) -> f32 {
+    layout.focal() * (rad as f32).tan()
+}
 
 /// HUD-Modus (Taste H blättert): Was das HUD neben den Flugdaten zeigt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -73,18 +77,24 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
     boresight(dl, c, vh);
     flight_path_marker(dl, fd, layout, &glass, vh);
     steerpoint_marker(dl, fd, layout, &glass, vh);
+    // Der Modus filtert die Zielart: Vierecke um alle bekannten Ziele dieser
+    // Art, das gewählte eigens; AA und AG mit ihrem Erfassungskreis (M-013).
     match mode {
-        HudMode::Nav => {}
+        HudMode::Nav => {
+            marks(dl, fd, layout, &glass, vh, MarkKind::Runway);
+            runway_marker(dl, fd, layout, &glass, vh);
+        }
         HudMode::AirToGround => {
+            dl.circle(c, circle_radius(layout, sensors::GROUND_CIRCLE_RAD), 40, Ink::Hud);
+            marks(dl, fd, layout, &glass, vh, MarkKind::Ground);
             target_marker(dl, fd, layout, &glass, vh);
             bomb_aim(dl, fd, layout, &glass, vh);
             gun_cross(dl, fd, layout, &glass, vh);
-            launch_circle(dl, fd, layout, c);
             shoot_cue(dl, fd, &glass);
         }
         HudMode::AirToAir => {
-            let r = layout.focal() * AA_CIRCLE_DEG.to_radians().tan();
-            dl.circle(c, r, 48, Ink::Hud);
+            dl.circle(c, circle_radius(layout, sensors::AIR_CIRCLE_RAD), 48, Ink::Hud);
+            marks(dl, fd, layout, &glass, vh, MarkKind::Air);
             air_target_marker(dl, fd, layout, &glass, vh);
         }
     }
@@ -245,22 +255,6 @@ fn gun_cross(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass
     }
 }
 
-/// Abschusskreis der Raketen um die Flugzeugnase (M-014): Liegt das
-/// aufgeschaltete Ziel darin, übernimmt die Rakete es beim Abschuss.
-fn launch_circle(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, center: [f32; 2]) {
-    let st = &fd.stores;
-    let Some(kind) = st.bays[st.selected].kind.filter(|_| st.bays[st.selected].count > 0 && !st.gun_selected)
-    else {
-        return;
-    };
-    if !kind.uses_launch_circle() {
-        return;
-    }
-    let r = layout.focal() * (f29_core::weapons::LAUNCH_CIRCLE_RAD as f32).tan();
-    // Heller als früher, fast wie die übrige Symbolik (Spielerwunsch v0.2.8).
-    dl.circle(center, r, 40, Ink::Hud);
-}
-
 /// Feuersignal der Lenkwaffen unten mittig im Glas: „LOCKED“, solange die
 /// Waffe das Ziel übernähme, darüber „SHOOT“ (umrahmt), wenn die
 /// vorausberechnete Flugbahn trifft.
@@ -359,17 +353,7 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
                 dl.rect(r, ink);
             }
             if matches!(zone, Some(LaunchZone::Locked | LaunchZone::Good)) {
-                // Kräftige Ecken außen um den Rahmen
-                let o = Rect::from_center(p, [s * 1.45, s * 1.45]);
-                let k = s * 0.55;
-                for (cx, cy, dx, dy) in [
-                    (o.min[0], o.min[1], 1.0, 1.0),
-                    (o.max[0], o.min[1], -1.0, 1.0),
-                    (o.min[0], o.max[1], 1.0, -1.0),
-                    (o.max[0], o.max[1], -1.0, -1.0),
-                ] {
-                    dl.polyline(&[[cx + dx * k, cy], [cx, cy], [cx, cy + dy * k]], false, ink);
-                }
+                corners(dl, p, s, ink);
             }
             if t.civilian {
                 dl.line(r.min, r.max, ink);
@@ -399,25 +383,88 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
     }
 }
 
-/// Aufgeschalteter Jäger (AA-Modus): Raute mit Typ, darunter Entfernung in
-/// km und Annäherung; außerhalb des Glases ein Pfeil zum Rand.
+/// Kräftige Ecken außen um einen Zielrahmen der halben Größe `s`.
+fn corners(dl: &mut DisplayList, p: [f32; 2], s: f32, ink: Ink) {
+    let o = Rect::from_center(p, [s * 1.45, s * 1.45]);
+    let k = s * 0.55;
+    for (cx, cy, dx, dy) in [
+        (o.min[0], o.min[1], 1.0, 1.0),
+        (o.max[0], o.min[1], -1.0, 1.0),
+        (o.min[0], o.max[1], 1.0, -1.0),
+        (o.max[0], o.max[1], -1.0, -1.0),
+    ] {
+        dl.polyline(&[[cx + dx * k, cy], [cx, cy], [cx, cy + dy * k]], false, ink);
+    }
+}
+
+/// Schlichte Vierecke um alle bekannten Ziele der Art `kind` im Glas (das
+/// gewählte zeichnet sein eigener Rahmen).
+fn marks(
+    dl: &mut DisplayList,
+    fd: &FlightData,
+    layout: &ScreenLayout,
+    glass: &Rect,
+    vh: f32,
+    kind: MarkKind,
+) {
+    let s = vh * 0.012;
+    for m in fd.marks.iter().filter(|m| m.kind == kind && !m.selected) {
+        if let Some(p) = layout.project_body(m.direction_body.to_array()).filter(|p| glass.contains(*p)) {
+            dl.rect(Rect::from_center(p, [s, s]), Ink::HudDim);
+        }
+    }
+}
+
+/// Gewähltes Ziel als Rahmen mit Ecken, darüber `top`, darunter `bottom`;
+/// außerhalb des Glases ein Pfeil zum Rand.
+#[allow(clippy::too_many_arguments)]
+fn picked_marker(
+    dl: &mut DisplayList,
+    layout: &ScreenLayout,
+    glass: &Rect,
+    vh: f32,
+    direction_body: f29_core::DVec3,
+    top: &str,
+    bottom: &str,
+    ink: Ink,
+) {
+    let s = vh * 0.02;
+    match layout.project_body(direction_body.to_array()) {
+        Some(p) if glass.contains(p) => {
+            dl.rect(Rect::from_center(p, [s, s]), ink);
+            corners(dl, p, s, ink);
+            dl.text_mid([p[0], p[1] + s * 2.4], TXT_SMALL * 0.8, Align::Center, top, ink);
+            dl.text_mid([p[0], p[1] - s * 2.4], TXT_SMALL * 0.8, Align::Center, bottom, ink);
+        }
+        _ => {
+            edge_arrow(dl, direction_body, glass, s * 0.8, ink);
+        }
+    }
+}
+
+/// Gewählter Jäger (AA-Modus): Typ, Entfernung (km) und Annäherung (m/s);
+/// blau, sobald er im Erfassungskreis liegt (erfasst).
 fn air_target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
     let Some(t) = &fd.air_target else {
         return;
     };
-    let s = vh * 0.022;
-    match layout.project_body(t.direction_body.to_array()) {
-        Some(p) if glass.contains(p) => {
-            let pts = [[p[0], p[1] + s], [p[0] + s, p[1]], [p[0], p[1] - s], [p[0] - s, p[1]]];
-            dl.polyline(&pts, true, Ink::HudWarning);
-            dl.text_mid([p[0], p[1] + s * 2.0], TXT_SMALL * 0.8, Align::Center, t.label, Ink::HudWarning);
-            let info = format!("{:.1} {:+.0}", t.range / 1_000.0, t.closure_mps);
-            dl.text_mid([p[0], p[1] - s * 2.0], TXT_SMALL * 0.8, Align::Center, &info, Ink::HudWarning);
-        }
-        _ => {
-            edge_arrow(dl, t.direction_body, glass, s * 0.8, Ink::HudWarning);
-        }
-    }
+    let ink = if t.in_circle { Ink::HudWarning } else { Ink::Hud };
+    let info = format!("{:.1} {:+.0}", t.range / 1_000.0, t.closure_mps);
+    picked_marker(dl, layout, glass, vh, t.direction_body, t.label, &info, ink);
+}
+
+/// Gewählte Landebahn (NAV-Modus): Name, Seite und Entfernung (km).
+fn runway_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
+    let Some(r) = &fd.runway_target else {
+        return;
+    };
+    let ink = match r.side {
+        Side::Friendly => Ink::Hud,
+        Side::Neutral => Ink::HudDim,
+        Side::Hostile => Ink::HudWarning,
+    };
+    let info = format!("{} {:.1}", r.side.label(), r.range / 1_000.0);
+    picked_marker(dl, layout, glass, vh, r.direction_body, r.name, &info, ink);
 }
 
 /// Rechteck aus Strichen (drei je Seite).

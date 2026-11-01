@@ -295,8 +295,12 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Rückflug und Landung; Karte (v0.2.9)
 - [x] Etappe 1b: Jäger in 3D, Radar-Aufschaltung auf Luftziele, Zielrahmen im
       AA-Modus (v0.2.9)
+- [x] HUD-Modus als Zielfilter: Vierecke um alle bekannten Ziele der Art,
+      I/J/K/L wählen je Modus Jäger (AA), Bodenziele (AG) oder Landebahnen mit
+      FRIENDLY/HOSTILE (NAV); ein Erfassungskreis je Modus (AA ±10°, AG ±6°);
+      Jäger als Punkt bis 15 km sichtbar; `--no-damage` (v0.2.9)
 - [ ] Etappe 2: Kanone gegen Luftziele mit Vorhaltemarke, AIM-9 Sidewinder,
-      feindliche Fackeln, Schaden an Jägern
+      AIM-120 AMRAAM, feindliche Fackeln und Düppel, Schaden an Jägern
 - [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
 - [ ] Luft-Luft-Raketen, Bordkanone gegen Luftziele
 - [ ] Feindliche Jäger und Abfangjäger mit KI (aufbauend auf dem Autopiloten)

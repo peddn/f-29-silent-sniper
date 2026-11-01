@@ -45,6 +45,11 @@ pub mod weapon_flags {
     pub const ECM: u16 = 1 << 7;
     /// Infrarotstörer für seine Wirkdauer einschalten.
     pub const IR_JAMMER: u16 = 1 << 8;
+    /// Zielart einer Blickrichtungstaste (mit `flags::LOOK_*` im selben
+    /// Tick): Jäger bzw. Landebahn; ohne beide ein Bodenziel. Das HUD sendet
+    /// die Art seines Modus (AA, NAV, AG).
+    pub const PICK_AIR: u16 = 1 << 9;
+    pub const PICK_RUNWAY: u16 = 1 << 10;
 }
 
 /// Ein Tick Steuereingabe, quantisiert.

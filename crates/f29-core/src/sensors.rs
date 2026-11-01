@@ -30,6 +30,14 @@ pub const NIGHT_OPTICAL_FACTOR: f64 = 0.4;
 pub const NIGHT_RADAR_FACTOR: f64 = 1.0;
 /// Halber Öffnungswinkel des Erfassungskegels um die Blickrichtung (rad, 45°).
 pub const CONE_HALF_RAD: f64 = std::f64::consts::FRAC_PI_4;
+/// Erfassungskreis um die Nase (halber Öffnungswinkel, rad): Liegt das
+/// gewählte Ziel darin, ist es erfasst und wird an eine Rakete übergeben –
+/// eine Regel, die Größe je Zielart (Spielerentscheidung v0.2.9).
+pub const AIR_CIRCLE_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
+pub const GROUND_CIRCLE_RAD: f64 = 6.0 * std::f64::consts::PI / 180.0;
+/// Optische Sichtweite gegen Jäger bei Tag bzw. Nacht (m).
+pub const AIR_SIGHT_M: f64 = 15_000.0;
+pub const AIR_SIGHT_NIGHT_M: f64 = 5_000.0;
 /// Erfassung alle so viele Ticks (4 Hz).
 pub const UPDATE_TICKS: u64 = 30;
 /// Abstand der Prüfpunkte entlang der Sichtlinie (m).
@@ -116,6 +124,49 @@ pub struct Lock {
     pub radar: bool,
 }
 
+/// Auswahl einer weiteren Zielart (Jäger, Landebahnen) mit eigener
+/// Blickrichtung.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Pick {
+    pub look: LookDir,
+    pub index: Option<usize>,
+}
+
+impl Pick {
+    /// Richtungstaste `look`: Dieselbe Richtung schaltet zum nächstweiteren
+    /// Kandidaten, eine neue wählt den nächsten dort. `candidates` sind
+    /// (Entfernung, Index), nach Entfernung sortiert ([`in_cone`]).
+    pub fn press(&mut self, look: LookDir, candidates: &[(f64, usize)]) {
+        let next =
+            self.index.filter(|_| look == self.look).and_then(|i| candidates.iter().position(|c| c.1 == i));
+        let start = next.map_or(0, |k| k + 1);
+        self.look = look;
+        self.index = (!candidates.is_empty()).then(|| candidates[start % candidates.len()].1);
+    }
+}
+
+/// Punkte im Erfassungskegel der Blickrichtung `look` (Kurs `heading`) bis
+/// `max_range`, nach Entfernung sortiert: (Entfernung, Index).
+pub fn in_cone(
+    points: impl IntoIterator<Item = (usize, DVec3)>,
+    pos: DVec3,
+    heading: f64,
+    look: LookDir,
+    max_range: f64,
+) -> Vec<(f64, usize)> {
+    let look = heading + look.offset();
+    let mut c: Vec<(f64, usize)> = points
+        .into_iter()
+        .filter_map(|(i, p)| {
+            let to = p - pos;
+            let off = detmath::wrap_pi(detmath::atan2(to.y, to.x) - look).abs();
+            (to.length() <= max_range && off <= CONE_HALF_RAD).then_some((to.length(), i))
+        })
+        .collect();
+    c.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    c
+}
+
 /// Zustand der Zielerfassung.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sensors {
@@ -192,23 +243,24 @@ impl Sensors {
     /// Kandidaten im Kegel der Blickrichtung und in Reichweite des größeren
     /// Systems, nach Entfernung sortiert: `(Entfernung, Index)`.
     fn candidates(&self, targets: &[Target], pos: DVec3, heading: f64) -> Vec<(f64, usize)> {
-        let look = heading + self.look.offset();
         let max_range =
             if self.radar_on { self.radar_range().max(self.optical_range()) } else { self.optical_range() };
-        let mut c: Vec<(f64, usize)> = targets
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| t.is_intact())
-            .filter_map(|(i, t)| {
-                let c = t.center_ned();
-                let (dn, de, dd) = (c[0] - pos.x, c[1] - pos.y, c[2] - pos.z);
-                let range = (dn * dn + de * de + dd * dd).sqrt();
-                let off = detmath::wrap_pi(detmath::atan2(de, dn) - look).abs();
-                (range <= max_range && off <= CONE_HALF_RAD).then_some((range, i))
-            })
-            .collect();
-        c.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-        c
+        let intact = targets.iter().enumerate().filter(|(_, t)| t.is_intact()).map(|(i, t)| {
+            let c = t.center_ned();
+            (i, DVec3::new(c[0], c[1], c[2]))
+        });
+        in_cone(intact, pos, heading, self.look, max_range)
+    }
+
+    /// Sieht ein eigenes System einen Jäger bei `at`? Radar (falls an) in
+    /// Reichweite, oder optisch bis zur Sichtweite mit freier Sicht.
+    pub fn sees_aircraft(&self, terrain: &Terrain, pos: DVec3, at: DVec3) -> bool {
+        let range = (at - pos).length();
+        let sight =
+            if self.night { AIR_SIGHT_NIGHT_M } else { AIR_SIGHT_M } * self.optics_capability.clamp(0.0, 1.0);
+        (self.radar_on && range <= self.radar_range())
+            || (range <= sight
+                && line_of_sight(|n, e| terrain.elevation(n, e), [pos.x, pos.y, -pos.z], [at.x, at.y, -at.z]))
     }
 
     /// Erfasst ein Kandidat eines der Systeme? Liefert die Aufschaltung.
@@ -294,6 +346,39 @@ mod tests {
         assert!(line_of_sight(ridge, [0.0, 0.0, 1_200.0], [2_000.0, 0.0, 5.0]));
         // Ziel am Boden, flaches Gelände: frei.
         assert!(line_of_sight(|_, _| 0.0, [0.0, 0.0, 50.0], [5_000.0, 0.0, 2.0]));
+    }
+
+    /// Jäger: Radar (an) weit, sonst nur in Sichtweite mit freier Sicht,
+    /// nachts kürzer.
+    #[test]
+    fn aircraft_are_seen_by_radar_or_by_eye() {
+        let terrain = Terrain::new(1);
+        let pos = DVec3::new(0.0, 0.0, -9_000.0);
+        let at = |km: f64| DVec3::new(km * 1_000.0, 0.0, -9_000.0);
+        let mut s = Sensors::default();
+        assert!(s.sees_aircraft(&terrain, pos, at(12.0)));
+        assert!(!s.sees_aircraft(&terrain, pos, at(20.0)), "ohne Radar zu weit");
+        s.radar_on = true;
+        assert!(s.sees_aircraft(&terrain, pos, at(40.0)));
+        s.radar_on = false;
+        s.night = true;
+        assert!(!s.sees_aircraft(&terrain, pos, at(8.0)), "nachts zu weit");
+    }
+
+    /// Dieselbe Richtung schaltet zum nächstweiteren, eine neue Richtung
+    /// beginnt beim nächsten.
+    #[test]
+    fn pick_cycles_by_range() {
+        let mut p = Pick::default();
+        let c = [(1.0, 7), (2.0, 3), (3.0, 9)];
+        p.press(LookDir::Forward, &c);
+        assert_eq!(p.index, Some(7));
+        p.press(LookDir::Forward, &c);
+        assert_eq!(p.index, Some(3));
+        p.press(LookDir::Right, &c);
+        assert_eq!(p.index, Some(7));
+        p.press(LookDir::Right, &[]);
+        assert_eq!(p.index, None);
     }
 
     #[test]

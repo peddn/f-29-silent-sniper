@@ -218,8 +218,11 @@ pub struct FlightData {
     pub decoys: Vec<DecoyInfo>,
     /// Feindliche Jäger in der Luft.
     pub fighters: Vec<FighterInfo>,
-    /// Aufgeschalteter Jäger.
+    /// Gewählter Jäger bzw. gewählte Landebahn.
     pub air_target: Option<AirTargetInfo>,
+    pub runway_target: Option<RunwayTargetInfo>,
+    /// Bekannte Ziele aller Arten vor dem Flugzeug.
+    pub marks: Vec<Mark>,
     /// Bild der jüngsten eigenen Waffe mit Fernsehsuchkopf in der Luft.
     pub weapon_cam: Option<WeaponCam>,
     /// Jüngste Detonation (Klang).
@@ -344,7 +347,7 @@ pub struct MunitionInfo {
     pub optical: bool,
 }
 
-/// Vom eigenen Radar aufgeschalteter Jäger (HUD im AA-Modus).
+/// Gewählter Jäger (HUD im AA-Modus).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AirTargetInfo {
     pub id: u32,
@@ -354,6 +357,53 @@ pub struct AirTargetInfo {
     pub closure_mps: f64,
     /// Richtung zum Jäger in Körperachsen, normiert.
     pub direction_body: DVec3,
+    /// Im Erfassungskreis ([`crate::sensors::AIR_CIRCLE_RAD`]): erfasst.
+    pub in_circle: bool,
+}
+
+/// Seite eines Flugplatzes (Anzeige im NAV-Modus).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    Friendly,
+    Neutral,
+    Hostile,
+}
+
+impl Side {
+    pub fn label(self) -> &'static str {
+        match self {
+            Side::Friendly => "FRIENDLY",
+            Side::Neutral => "NEUTRAL",
+            Side::Hostile => "HOSTILE",
+        }
+    }
+}
+
+/// Gewählte Landebahn (HUD im NAV-Modus, nur Anzeige).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RunwayTargetInfo {
+    pub name: &'static str,
+    pub side: Side,
+    pub range: f64,
+    pub direction_body: DVec3,
+}
+
+/// Zielart einer HUD-Markierung.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkKind {
+    Ground,
+    Air,
+    Runway,
+}
+
+/// Ein bekanntes Ziel vor dem Flugzeug (HUD-Viereck): eigene Sensoren oder
+/// AWACS; Landebahnen immer.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Mark {
+    pub kind: MarkKind,
+    pub direction_body: DVec3,
+    /// Das gewählte Ziel seiner Art (das HUD zeichnet es eigens).
+    pub selected: bool,
 }
 
 /// Ein feindlicher Jäger in der Luft (Karte, 3D, HUD).
@@ -453,6 +503,43 @@ impl Sim {
                 })
                 .collect(),
         }
+    }
+
+    /// Bekannte Ziele vor dem Flugzeug für die HUD-Vierecke: Bodenziele der
+    /// eigenen Sensoren oder des AWACS, Jäger ebenso, alle Landebahnen.
+    fn marks(&self) -> Vec<Mark> {
+        let a = &self.aircraft;
+        let awacs = self.config.spawn.awacs;
+        let ground =
+            self.targets.iter().enumerate().filter(|(i, t)| {
+                t.is_intact() && (awacs || self.own_contacts.get(*i).copied().unwrap_or(false))
+            });
+        let ground = ground.map(|(i, t)| {
+            let c = t.center_ned();
+            (MarkKind::Ground, DVec3::new(c[0], c[1], c[2]), self.sensors.lock.is_some_and(|l| l.target == i))
+        });
+        let air = self
+            .fighters
+            .list
+            .iter()
+            .filter(|f| {
+                f.airborne() && (awacs || self.sensors.sees_aircraft(&self.terrain, a.position, f.position))
+            })
+            .map(|f| (MarkKind::Air, f.position, self.air.index == Some(f.id as usize)));
+        let runways = self
+            .terrain
+            .runways()
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (MarkKind::Runway, runway_point(r), self.runway.index == Some(i)));
+        ground
+            .chain(air)
+            .chain(runways)
+            .filter_map(|(kind, p, selected)| {
+                let direction_body = a.attitude.inverse_rotate((p - a.position).normalize_or_zero());
+                (direction_body.x > 0.0).then_some(Mark { kind, direction_body, selected })
+            })
+            .collect()
     }
 
     /// Anzeige- und Autopilot-Daten für den aktuellen Zustand.
@@ -656,17 +743,36 @@ impl Sim {
                 })
                 .collect(),
             decoys: cm.decoys.iter().map(|d| DecoyInfo { kind: d.kind, position: d.position }).collect(),
-            air_target: self.air_lock.and_then(|id| self.fighters.list.get(id as usize)).map(|f| {
-                let to = f.position - a.position;
-                let range = to.length();
-                AirTargetInfo {
-                    id: f.id,
-                    label: f.spec().label,
-                    range,
-                    closure_mps: -(f.velocity() - a.velocity).dot(to / range.max(1.0)),
-                    direction_body: a.attitude.inverse_rotate(to / range.max(1.0)),
+            air_target: self.air.index.and_then(|i| self.fighters.list.get(i)).filter(|f| f.airborne()).map(
+                |f| {
+                    let to = f.position - a.position;
+                    let range = to.length();
+                    let direction_body = a.attitude.inverse_rotate(to / range.max(1.0));
+                    AirTargetInfo {
+                        id: f.id,
+                        label: f.spec().label,
+                        range,
+                        closure_mps: -(f.velocity() - a.velocity).dot(to / range.max(1.0)),
+                        direction_body,
+                        in_circle: detmath::acos(direction_body.x.clamp(-1.0, 1.0))
+                            <= sensors::AIR_CIRCLE_RAD,
+                    }
+                },
+            ),
+            runway_target: self.runway.index.map(|i| {
+                let r = &self.terrain.runways()[i];
+                let to = runway_point(r) - a.position;
+                RunwayTargetInfo {
+                    name: r.name,
+                    side: match r.kind {
+                        AirfieldKind::Home | AirfieldKind::Secret => Side::Friendly,
+                        AirfieldKind::Enemy => Side::Hostile,
+                    },
+                    range: to.length(),
+                    direction_body: a.attitude.inverse_rotate(to.normalize_or_zero()),
                 }
             }),
+            marks: self.marks(),
             fighters: self
                 .fighters
                 .list
