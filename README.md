@@ -91,7 +91,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | Leertaste | 2 | gewählte Waffe auslösen (Schachtwaffen nur bei offenem Schacht; die Kanone feuert, solange die Taste gehalten wird) |
 | Rücktaste (gehalten) | 1 (Abzug) | Bordkanone feuern, gleich welche Waffe gewählt ist (nicht am Boden) |
 | H | 12 | HUD-Modus: NAV → AG (Luft-Boden) → AA (Luft-Luft) |
-| I / L / K / J | Coolie-Hat | Blickrichtung der Zielerfassung: voraus / rechts / hinten / links (schaltet automatisch auf das nächste Ziel; dieselbe Richtung noch einmal = nächstweiteres Ziel; die Richtung folgt einem aufgeschalteten Ziel) |
+| I / L / K / J | Coolie-Hat | Blickrichtung der Zielerfassung: voraus / rechts / hinten / links – wählt im HUD-Modus AA Jäger, AG Bodenziele, NAV Landebahnen (automatisch das nächste entdeckte Ziel; dieselbe Richtung noch einmal = nächstweiteres; die Richtung folgt dem gewählten Ziel) |
 | Shift+F1 / Shift+F2 | | Cockpit / Verfolger |
 | Shift+F3 | | Retro-Look: voll → nur Palette → aus |
 | Shift+F4 | | HUD ein/aus |
@@ -299,6 +299,10 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       I/J/K/L wählen je Modus Jäger (AA), Bodenziele (AG) oder Landebahnen mit
       FRIENDLY/HOSTILE (NAV); ein Erfassungskreis je Modus (AA ±10°, AG ±6°);
       Jäger als Punkt bis 15 km sichtbar; `--no-damage` (v0.2.9)
+- [x] Zielsystem vereinheitlicht: vier Stufen gemeldet (AWACS, gestrichelt) /
+      entdeckt (Radar oder optisch, rundum, für alle Zielarten gleich; R/O) /
+      gewählt (doppelt) / erfasst (Ecken), in HUD und Karte aus einer Liste;
+      eine Auswahl je Zielart (v0.2.9)
 - [ ] Etappe 2: Kanone gegen Luftziele mit Vorhaltemarke, AIM-9 Sidewinder,
       AIM-120 AMRAAM, feindliche Fackeln und Düppel, Schaden an Jägern
 - [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)

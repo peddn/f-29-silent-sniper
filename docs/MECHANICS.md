@@ -745,9 +745,9 @@ Format jedes Eintrags:
 
 ### M-013 Zielerfassung und Lenkung
 
-- **Verhalten:** Bodenziele (und Flugzeuge) werden mit einem Zielsystem aufgeschaltet
+- **Verhalten:** Bodenziele (und Flugzeuge) werden mit einem Zielsystem gewählt
   und im Cockpit mit Name, Entfernung und Bild gezeigt. Gelenkte Waffen fliegen das
-  aufgeschaltete Ziel an.
+  gewählte Ziel an.
 - **Referenzstelle:** f19re `src_en/egtacmap.c` (Zielauswahl pro Bild),
   `src_en/egtarget.c` (Aufschalten, Zielrahmen, Zielbild), `src_en/egcombat.c`
   (Suchkopf der Flugkörper, Abschuss), `src/egkeys.c` (Tasten).
@@ -773,29 +773,43 @@ Format jedes Eintrags:
     fliegt er geradeaus weiter.
   - Waffenarten wechselt eine Taste (Luft-Boden, Luft-Luft, Kanone), die Station eine
     andere; der Schacht muss offen sein, sonst Meldung „Schacht zu“.
+- **Vier Stufen eines Ziels (v0.2.9, Spielerentscheidung; gelten für Boden-
+  und Luftziele und Landebahnen, Begriffe so in Code und Doku):**
+  1. **gemeldet** – nur vom AWACS bekannt: sichtbar, nicht wählbar;
+  2. **entdeckt** – vom eigenen Radar oder optischen System: wählbar;
+  3. **gewählt** – je Zielart eines, mit den Richtungstasten oder
+     automatisch (früher „aufgeschaltet“);
+  4. **erfasst** – das gewählte Ziel im Erfassungskreis (M-017), mit dem
+     Suchkopf der gewählten Waffe; nur so wird es an eine Rakete übergeben.
 - **Unser Design (v0.2.1, Spielerentscheidungen):** Die F-29 hat zwei
-  Erfassungssysteme (`f29_core::sensors`):
+  Sensoren (`f29_core::sensors`), beide **rundum** und für alle Zielarten
+  gleich (seit v0.2.9 auch für Jäger; das Auge ist keine Mechanik mehr,
+  nur die Darstellung ferner Jäger als Punkt):
   - **Radar:** schaltet ohne Sichtlinie auf, also auch durch Berge; größere
     Reichweite; abschaltbar (Taste V, beim Start aus). Eingeschaltet erhöht es die
     eigene Sichtbarkeit (kommt mit M-020).
-  - **Optisch:** braucht freie Sichtlinie (Prüfung gegen das Gelände), hat eine
-    kürzere Reichweite, verrät das Flugzeug aber nicht. Nur ein optisch erfasstes
-    Ziel liefert ein Zielbild.
-  - Das Aufschalten ist **immer automatisch**: das nächste intakte Ziel in einem
-    Kegel um die gewählte Blickrichtung (I voraus, L rechts, K hinten, J links), wie
-    im Original. Zivile Ziele werden mit aufgeschaltet, aber gekennzeichnet.
+  - **Optisch** (im Spiel als Infrarot erzählt, spielmechanisch nur optisch):
+    braucht freie Sichtlinie (Prüfung gegen das Gelände), nachts kürzere
+    Reichweite, verrät das Flugzeug aber nicht. Nur ein optisch entdecktes Ziel
+    liefert ein Zielbild; optische Suchköpfe (Maverick, später AIM-9) nutzen
+    dasselbe System.
+  - Das Wählen ist **automatisch**: das nächste entdeckte Ziel in einem
+    Kegel um die Blickrichtung (I voraus, L rechts, K hinten, J links), wie
+    im Original. Der Kegel gilt nur fürs Wählen, nicht fürs Entdecken. Zivile
+    Ziele werden mit gewählt, aber gekennzeichnet. Seit v0.2.9 gilt dieselbe
+    Auswahl je Zielart (Bodenziel, Jäger, Landebahn), getrennt gehalten.
   - **Zielwechsel (v0.2.2):** Dieselbe Richtungstaste noch einmal schaltet zum
     nächstweiteren erfassten Ziel dieser Richtung; nach dem weitesten geht es zurück
     zum nächsten. Eine andere Richtung setzt auf deren nächstes Ziel.
-  - **Aufschaltung halten (v0.2.3):** Der Kegel gilt nur für das Aufschalten. Eine
-    bestehende Aufschaltung bleibt, solange ein System das Ziel erfasst (Reichweite,
+  - **Wahl halten (v0.2.3):** Der Kegel gilt nur für das Wählen. Eine
+    bestehende Wahl bleibt, solange ein System das Ziel entdeckt (Reichweite,
     beim optischen System auch Sichtlinie), und die Blickrichtung dreht mit dem Ziel
     mit – beim Überflug etwa von voraus über die Seite nach hinten. Die Taste der
     Richtung, in der das Ziel gerade liegt, schaltet dort zum nächsten weiter.
   - Anzeige: Zielrahmen im HUD (durchgekreuzt bei zivilen Zielen, Pfeil am Rand
     außerhalb des Sichtfelds) mit „OPT“ oder „RDR“; Zeile mit Radar, Blickrichtung
     und Entfernung; neue MFD-Seite TGT mit optischem Zielbild, Name, Klasse, Rolle,
-    Entfernung, Peilung; auf der Karte ist das aufgeschaltete Ziel eingeklammert.
+    Entfernung, Peilung; auf der Karte ist das gewählte Ziel doppelt gerahmt.
   - **Zielkamera (v0.2.2):** Das Zielbild ist eine zweite 3D-Kamera unter dem Rumpf,
     die auf die Zielmitte blickt und so weit zoomt, dass das Ziel knapp die halbe
     Bildhöhe füllt. Sie rendert in eine grobe Textur (144 Zeilen); ein eigener
@@ -900,7 +914,7 @@ Format jedes Eintrags:
     liefert den Aufschlagpunkt (für die Zielhilfe).
   - Bombeneinschlag: Alle Ziele im Wirkradius erhalten Schaden nach Abstand
     (M-011), gehärtete Ziele nur bei steilem Eintreffen (M-012). Zerstörte Ziele
-    werden zum flachen, dunklen Wrack, die Aufschaltung fällt ab.
+    werden zum flachen, dunklen Wrack.
   - **Lenkwaffen – physikalisch seit v0.2.9 (wie im Original, Spielerentscheidung):
     Der Flug entscheidet über den Treffer, gewürfelt wird nur die Wirkung.**
     Dasselbe System ist für die feindlichen Raketen vorgesehen (Etappe 3).
@@ -920,27 +934,27 @@ Format jedes Eintrags:
     - **Erfassungskreis** (Spielerentscheidung, v0.2.9 vereinheitlicht): ein
       fester Kreis um die Flugzeugnase im HUD – gegen Bodenziele ±6°, gegen
       Luftziele ±10° (M-017). Übergabe beim Abschuss nur,
-      wenn das aufgeschaltete Ziel im Kreis liegt, in Reichweite ist und der
+      wenn das gewählte Ziel im Kreis liegt, in Reichweite ist und der
       Suchkopf es sieht (Klasse passt, optisch mit Sichtlinie). Optische
-      Suchköpfe übernehmen nur eine **optische** Aufschaltung.
+      Suchköpfe übernehmen nur ein **optisch** entdecktes Ziel.
     - Ohne Übergabe fliegt die Rakete nach dem Herausfallen **in ihrer
       Abschusslage geradeaus**; erkennt ihr Suchkopf (Kegel um die Flugrichtung)
       dabei ein Ziel, schaltet sie es auf und verfolgt es – **auch zivile
       Ziele**; HARM nur Flugabwehr, Harpoon nur Schiffe.
     - **Laserbombe GBU-12 Paveway II** (ersetzt die Walleye, Spielerentscheidung):
-      übernimmt ein optisch aufgeschaltetes Ziel, fällt physikalisch und dreht
-      ihre Flugbahn mit begrenzter Rate zum Laserfleck. Kein Abschusskreis,
+      übernimmt ein gewähltes, optisch entdecktes Ziel, fällt physikalisch und dreht
+      ihre Flugbahn mit begrenzter Rate zum Laserfleck. Kein Erfassungskreis,
       sonst ginge nur der Sturzflug. Das Flugzeug muss das Ziel **bis zum
-      Einschlag optisch aufgeschaltet halten** (Laserbeleuchtung,
+      Einschlag gewählt und optisch entdeckt halten** (Laserbeleuchtung,
       Spielerentscheidung); reißt die Sicht ab oder wechselt der Pilot das
       Ziel, meldet das HUD „LASER LOST“ und die Bombe fällt ungelenkt weiter.
       Ob ihre Energie reicht, zeigt allein die Vorausberechnung.
     - **Vorausberechnung („SHOOT“):** Zwanzigmal pro Sekunde (und sofort nach
-      einer neuen Aufschaltung) fliegt der Kern die gewählte Lenkwaffe vom
+      einer neuen Wahl) fliegt der Kern die gewählte Lenkwaffe vom
       momentanen Abschusspunkt aus in groben Schritten bis zum Ende voraus –
       mit derselben Übergabe und demselben Flug wie beim echten Auslösen,
       Sichtlinie und Laser als gehalten angenommen. Daraus die Zone: übernähme
-      nicht (außer Reichweite, nicht im Abschusskreis), übernähme, aber
+      nicht (außer Reichweite, nicht im Erfassungskreis), übernähme, aber
       verfehlte („LOCKED“), träfe („SHOOT“). Der frühere Sweet Spot (feste
       Wunschentfernung) und die Startgüte entfallen.
   - **Zielrahmen** (wie im Original: erfasst, näher dran Farbwechsel; keine
@@ -949,7 +963,7 @@ Format jedes Eintrags:
     Vorausberechnung trifft,
     gestrichelt „NO EFF“, wenn die Waffe nicht wirkt oder ihr Suchkopf die Klasse
     nicht sieht. Beschädigte Ziele tragen „DMG“.
-  - **Wrack:** Nach der Zerstörung bleibt die Aufschaltung auf dem Wrack (Rahmen
+  - **Wrack:** Nach der Zerstörung bleibt die Wahl auf dem Wrack (Rahmen
     gedämpft, „DESTROYED“, Zielbild zeigt das Wrack), bis der Spieler mit einer
     Richtungstaste ein neues Ziel wählt; Wracks sind dann nicht mehr anwählbar.
     Auf der Karte verschwinden zerstörte Ziele.
@@ -1000,7 +1014,8 @@ Format jedes Eintrags:
     Schacht, Klappenzustand (SAFE/DOORS/ARMED) und Bereitschaft.
 - **Unsere Werte:** Mk 82 241 kg, Cw·A 0,020 m²,
   Fallschirm 0,9 m² nach 0,3 s, zwei je Schacht, Wirkradius 30 m, Splitterbereich
-  180 m. GBU-12 227 kg, Cw·A 0,022 m², Steuerung 6°/s. Abschusskreis ±8°.
+  180 m. GBU-12 227 kg, Cw·A 0,022 m², Steuerung 6°/s. Erfassungskreis ±6° gegen Bodenziele (bis v0.2.8
+  Abschusskreis ±8°).
   Maverick 210 kg, 700 m/s nach gemächlicher Beschleunigung (70 m/s², bleibt
   länger sichtbar), 25°/s, 16 km, Suchkegel ±25°, Wirkradius 8 m;
   HARM 360 kg, 650 m/s, 20°/s, 30 km, ±35°; Harpoon 520 kg, 270 m/s,
@@ -1092,15 +1107,16 @@ Format jedes Eintrags:
   Richtung an die Simulation, die je Art eine eigene Auswahl hält (Boden,
   Jäger, Landebahn) – so bleiben Replays bitgleich, und beim Umschalten ist
   die frühere Wahl der Art wieder da.
-  - **Vierecke:** Jedes bekannte Ziel der Art (eigene Sensoren oder AWACS) im
-    Glas bekommt ein schlichtes, gedämpftes Viereck, auch weit außerhalb der
-    Mitte. Das gewählte trägt einen doppelten, hellen Rahmen mit Typ und
-    Entfernung, aufgeschaltet (im Erfassungskreis) dazu Ecken; außerhalb des
-    Glases zeigt ein Randpfeil zu ihm. Die Karte rahmt ebenso nur die Ziele
-    der Modusart ein – gewählt ist so immer genau eines zu sehen.
-    Alle Vierecke sind gleich groß, unabhängig von der Entfernung. Die
-    TGT-Seite zeigt das gewählte Ziel des Modus (im AA-Modus den Jäger mit
-    Kamerabild, solange das Auge ihn sieht; in NAV die Landebahn).
+  - **Vierecke nach den vier Stufen (M-013),** gleich groß, unabhängig von
+    der Entfernung, für jedes Ziel der Modusart im Glas: *gemeldet*
+    gestrichelt und gedämpft; *entdeckt* durchgezogen mit Kürzel R, O oder
+    RO (Radar, optisch); *gewählt* doppelter, heller Rahmen mit Typ und
+    Entfernung, außerhalb des Glases ein Randpfeil; *erfasst* dazu Ecken
+    (blau). Die Karte zeigt dieselben Stufen aus derselben Liste und nur für
+    die Modusart – gewählt ist so immer genau eines zu sehen; Jäger stehen
+    dort nur, wenn sie gemeldet oder entdeckt sind. Die TGT-Seite zeigt das
+    gewählte Ziel des Modus (im AA-Modus den Jäger mit Kamerabild, solange
+    ihn das optische System sieht; in NAV die Landebahn).
   - **Ein Erfassungskreis je Modus, eine Regel:** Liegt das gewählte Ziel im
     Kreis, ist es erfasst und wird an eine Rakete übergeben – AG ±6°, AA
     ±10°.
@@ -1114,8 +1130,7 @@ Format jedes Eintrags:
     Bodeneinschlag; ungelenkte Bombe: Bombenkreis; Lenkwaffen: Feuersignal.
   - **AA** (Luft-Luft): Jäger, Erfassungskreis; das gewählte Ziel mit Typ,
     Entfernung (km) und Annäherung (m/s), blau, sobald es im Kreis liegt.
-    Jäger erfasst das Radar (an) bis zu seiner Reichweite, das Auge bis 15 km
-    (nachts 5 km) mit freier Sicht.
+    Jäger entdecken Radar und optisches System wie Bodenziele (M-013).
   Das HUD-Glas ist breiter (Daten und Symbole weiter außen). Die Waffenwahl
   (Tab) läuft GUN → BAY 1 → … → BAY 4 → GUN; die Kanone ist die Startwahl. Die
   Auslösetaste feuert bei gewählter Kanone, solange sie gehalten wird (eigenes
@@ -1482,13 +1497,13 @@ Format jedes Eintrags:
   - **Eigenes Radar:** pingt wie eine Radarstellung gegen dasselbe
     Stealth-Level (M-020), nur im Kegel um die Nase.
   - **Anzeige:** Karte (roter Pfeil in Flugrichtung, Kreis, solange sein
-    Radar das Flugzeug sieht); 3D-Modell (eigener Low-Poly-Deltajäger),
+    Radar das Flugzeug sieht; nur gemeldete oder entdeckte Jäger, M-013); 3D-Modell (eigener Low-Poly-Deltajäger),
     sichtbar bis 15 km (nachts 5 km), in der Ferne mindestens gut einen
     Retro-Bildpunkt groß – ein Punkt am Himmel – und ohne Dunst
     (Spielerwunsch v0.2.9: vorher erst im letzten Moment zu sehen).
   - **Auswahl von Luftzielen** (M-017): Im AA-Modus wählen I/J/K/L Jäger;
-    ohne Wahl automatisch der nächste erfasste in der Blickrichtung, die Wahl
-    bleibt, solange ein eigenes System ihn erfasst. Waffen folgen mit
+    ohne Wahl automatisch der nächste entdeckte in der Blickrichtung, die Wahl
+    bleibt, solange ein eigenes System ihn entdeckt (M-013). Waffen folgen mit
     Etappe 2 (Kanone mit Vorhaltemarke, AIM-9, AIM-120).
 - **Status:** Etappe 1 umgesetzt (v0.2.9)
 
