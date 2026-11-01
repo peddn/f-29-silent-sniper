@@ -2,6 +2,7 @@
 
 use crate::controls::{ControlFrame, flags, weapon_flags};
 use crate::detmath;
+use crate::fighters::{FighterEvent, Fighters};
 use crate::flight::{self, AeroData, AircraftState};
 use crate::gun::{self, Gun, GunEvent};
 use crate::math::{DQuat, DVec3};
@@ -250,6 +251,7 @@ pub struct Sim {
     gun: Gun,
     /// Feindliche Radarstellungen mit Alarmstufen (M-020).
     radar: RadarNet,
+    fighters: Fighters,
     systems: Systems,
     /// Aufschlag (Punkt, Flugzeit) einer jetzt abgefeuerten Patrone; abgeleitet.
     gun_prediction: Option<(DVec3, f64)>,
@@ -311,6 +313,7 @@ impl Sim {
             .max(0.0);
         let route = build_route(&terrain, config.seed, sp);
         let targets = targets::generate(&terrain, seed, &route);
+        let fighters = Fighters::new(&terrain);
         let mut sensors = Sensors { night: sp.night, ..Sensors::default() };
         sensors.update(&targets, &terrain, aircraft.position, aircraft.attitude.to_euler().0);
         let aero = flight::aero_data(&spec, &aircraft);
@@ -334,6 +337,7 @@ impl Sim {
             stores,
             gun: Gun::new(seed),
             radar: RadarNet::default(),
+            fighters,
             systems: Systems::default(),
             gun_prediction: None,
             bomb_prediction: None,
@@ -394,6 +398,7 @@ impl Sim {
         if self.status != Status::Flying {
             self.gun.trigger(self.tick, false, DVec3::ZERO, DVec3::ZERO, DQuat::IDENTITY, DT);
             self.radar.step(self.tick, &self.targets, None);
+            self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), None);
             return;
         }
         self.update_weapon_controls(&controls);
@@ -410,6 +415,7 @@ impl Sim {
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
         let exposure = self.exposure();
         self.radar.step(self.tick, &self.targets, Some(&exposure));
+        self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), Some(&exposure));
         self.launch_sams();
         // Neu aufgeschaltet: Abschusslage sofort, sonst im Takt der Bombenanzeige.
         let guided = self.stores.selected_weapon().is_some_and(|k| k.is_guided());
@@ -465,6 +471,11 @@ impl Sim {
     /// Feindliche Radarstellungen (M-020).
     pub fn radar(&self) -> &RadarNet {
         &self.radar
+    }
+
+    /// Feindliche Jäger (M-022).
+    pub fn fighters(&self) -> &Fighters {
+        &self.fighters
     }
 
     /// Aufschlag der gewählten ungelenkten Bombe bzw. Abschusslage der

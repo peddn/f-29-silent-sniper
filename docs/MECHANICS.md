@@ -1434,8 +1434,33 @@ Format jedes Eintrags:
   - **Getroffen:** Ein abgeschossenes Flugzeug zieht eine Rauchspur, stürzt
     ab und zählt als Abschuss; die Konfliktstufe macht die Jäger
     aggressiver, zahlreicher und schneller.
-- **Unser Design:** offen (Entwurf v0.4, Etappe 1: Jäger ohne Waffen).
-- **Status:** Lesephase abgeschlossen (v0.2.9)
+- **Unser Design (v0.2.9, Etappe 1: ohne Waffen, Spielerentscheidungen):**
+  `f29_core::fighters`.
+  - **Plätze:** zwei feindliche Fliegerhorste „RED 1“ und „RED 2“ je
+    Mission, 45–75 km von der Heimatbasis, mit derselben Erzeugung wie die
+    eigenen Pisten (2,5 km Bahn); auf der Karte rot.
+  - **Jäger:** je Platz fünf, drei MiG-21 (Puls-Radar 15 km, Kegel ±30°,
+    15 min Flugdauer) und zwei MiG-29 (Doppler-Radar 35 km, ±60°, 20 min,
+    wendiger). Höchstens sechs gleichzeitig in der Luft.
+  - **Start:** bei Alarm – jüngster Ping-Ort einer Radarstellung ab Stufe 2
+    oder frischer Radarkontakt eines Jägers –, wenn der Ort innerhalb der
+    halben Flugstrecke des Typs liegt; je Platz rollt einer nach dem
+    anderen. Meldung „RED 1 - MIG-29 TAKEOFF“.
+  - **Bewegungsmodell** wie im Original (Querlage mit Rollrate, koordinierte
+    Kurve, Steigrate, Fahrt je Typ, mindestens 250 m über Grund).
+  - **Zustände:** Abfangen zum Kontaktort in dessen Höhe; Patrouille als
+    Rennbahn über den Kontaktort (darüber, 12 km geradeaus, wenden – auf dem
+    Rückweg schaut das Radar ihn an); Verfolgen, solange das eigene Radar
+    das Flugzeug in den letzten 15 s erfasst hat (Meldung „MIG-21 RADAR
+    CONTACT“); Rückflug, wenn die Flugdauer um ist, Landung („LANDED“) und
+    wieder bereit. Statt der Manövertabelle des Originals fliegen sie in
+    Etappe 1 einfach auf das Flugzeug zu.
+  - **Eigenes Radar:** pingt wie eine Radarstellung gegen dasselbe
+    Stealth-Level (M-020), nur im Kegel um die Nase.
+  - **Anzeige:** Karte (roter Pfeil in Flugrichtung, Kreis, solange sein
+    Radar das Flugzeug sieht).
+- **Status:** Etappe 1 Kern und Karte umgesetzt (v0.2.9); 3D-Modell und
+  Aufschaltung auf Luftziele folgen
 
 ### M-031 Einsatzgebiete und Missionsgenerator
 

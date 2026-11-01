@@ -99,7 +99,9 @@ impl MapRaster {
         // Bahnen als dunkle bzw. erdfarbene Striche einzeichnen
         for rw in terrain.runways() {
             let color = match rw.kind {
-                f29_core::terrain::AirfieldKind::Home => to_u8(palette::mix(0, 13, 0.3)),
+                f29_core::terrain::AirfieldKind::Home | f29_core::terrain::AirfieldKind::Enemy => {
+                    to_u8(palette::mix(0, 13, 0.3))
+                }
                 f29_core::terrain::AirfieldKind::Secret => to_u8(palette::srgb(11)),
             };
             let steps = (rw.length_m / (map.spacing * 0.5)).ceil() as usize;

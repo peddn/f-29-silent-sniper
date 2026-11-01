@@ -377,7 +377,9 @@ mod tests {
             let r = t.runways();
             assert!(r.len() >= 2, "Seed {seed}: nur {} Bahnen", r.len());
             assert_eq!(r[0].kind, AirfieldKind::Home);
-            assert!(r[1..].iter().all(|x| x.kind == AirfieldKind::Secret));
+            assert!(r[1..].iter().all(|x| x.kind != AirfieldKind::Home));
+            let enemy = r.iter().filter(|x| x.kind == AirfieldKind::Enemy).count();
+            assert_eq!(enemy, 2, "Seed {seed}: {enemy} feindliche Plätze");
             assert_eq!(Terrain::new(seed).runways(), r);
         }
     }

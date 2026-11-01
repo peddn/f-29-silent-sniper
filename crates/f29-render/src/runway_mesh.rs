@@ -102,7 +102,7 @@ pub fn runway(rw: &Runway) -> MeshData {
     let (hl, hw) = (rw.length_m * 0.5, rw.width_m * 0.5);
     let white = palette::srgb(6);
     match rw.kind {
-        AirfieldKind::Home => {
+        AirfieldKind::Home | AirfieldKind::Enemy => {
             p.rect(-hl, hl, -hw, hw, SURFACE_Y, palette::mix(0, 13, 0.45));
             // Randlinien
             for s in [-1.0, 1.0] {

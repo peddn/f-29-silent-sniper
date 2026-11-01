@@ -1,4 +1,5 @@
-//! Flugplätze: eine Heimatbasis und geheime Pisten.
+//! Flugplätze: eine Heimatbasis, geheime Pisten und zwei feindliche
+//! Fliegerhorste (Jäger, M-022).
 //!
 //! Die Plätze werden aus dem Seed deterministisch auf flachem Land gewählt.
 //! Das Gelände wird unter der Bahn auf eine Höhe eingeebnet und weich in die
@@ -18,6 +19,8 @@ pub enum AirfieldKind {
     Home,
     /// Geheime Piste: kurz, schmal, kaum markiert, unbefeuert.
     Secret,
+    /// Feindlicher Fliegerhorst: Heimat der Jäger.
+    Enemy,
 }
 
 /// Eine Start- und Landebahn.
@@ -48,6 +51,8 @@ const HOME_LENGTH_M: f64 = 3_000.0;
 const HOME_WIDTH_M: f64 = 45.0;
 const SECRET_LENGTH_M: f64 = 1_500.0;
 const SECRET_WIDTH_M: f64 = 30.0;
+const ENEMY_LENGTH_M: f64 = 2_500.0;
+const ENEMY_WIDTH_M: f64 = 40.0;
 /// Bahnen nicht tiefer (Strand, Wasser) und nicht höher als das.
 const MIN_SITE_M: f64 = 12.0;
 const MAX_SITE_M: f64 = 900.0;
@@ -237,8 +242,16 @@ pub(crate) fn place_airfields(seed: u64, raw: impl Fn(f64, f64) -> f64) -> Vec<R
     };
     out.push(runway_from(&home, AirfieldKind::Home, "HOME", HOME_LENGTH_M, HOME_WIDTH_M));
 
-    // Geheime Pisten: 22–60 km von der Basis, untereinander mindestens 20 km.
-    for (i, name) in ["STRIP A", "STRIP B"].into_iter().enumerate() {
+    // Geheime Pisten: 22–60 km von der Basis, untereinander mindestens
+    // 20 km; danach die feindlichen Fliegerhorste 45–75 km von der Basis,
+    // mindestens 25 km von allen anderen.
+    let plan = [
+        (AirfieldKind::Secret, "STRIP A", SECRET_LENGTH_M, SECRET_WIDTH_M, 22_000.0, 60_000.0, 20_000.0),
+        (AirfieldKind::Secret, "STRIP B", SECRET_LENGTH_M, SECRET_WIDTH_M, 22_000.0, 60_000.0, 20_000.0),
+        (AirfieldKind::Enemy, "RED 1", ENEMY_LENGTH_M, ENEMY_WIDTH_M, 45_000.0, 75_000.0, 25_000.0),
+        (AirfieldKind::Enemy, "RED 2", ENEMY_LENGTH_M, ENEMY_WIDTH_M, 45_000.0, 75_000.0, 25_000.0),
+    ];
+    for (i, (kind, name, len, width, near, far, apart)) in plan.into_iter().enumerate() {
         let others: Vec<[f64; 2]> = out.iter().map(|r| r.center).collect();
         let hc = home.center;
         let site = best_site(
@@ -247,22 +260,22 @@ pub(crate) fn place_airfields(seed: u64, raw: impl Fn(f64, f64) -> f64) -> Vec<R
             0x5354_5250 + (i as u64) * 0x1_0000,
             64,
             |_, a, b| {
-                let c = [hc[0] + (a * 2.0 - 1.0) * 60_000.0, hc[1] + (b * 2.0 - 1.0) * 60_000.0];
+                let c = [hc[0] + (a * 2.0 - 1.0) * far, hc[1] + (b * 2.0 - 1.0) * far];
                 let dist = |p: [f64; 2]| {
                     let (dx, dy) = (c[0] - p[0], c[1] - p[1]);
                     (dx * dx + dy * dy).sqrt()
                 };
                 let dh = dist(hc);
-                if !(22_000.0..=60_000.0).contains(&dh) || others.iter().any(|p| dist(*p) < 20_000.0) {
+                if !(near..=far).contains(&dh) || others.iter().any(|p| dist(*p) < apart) {
                     return None;
                 }
                 Some((c, 0.0))
             },
-            SECRET_LENGTH_M,
-            SECRET_WIDTH_M,
+            len,
+            width,
         );
         if let Some(site) = site {
-            out.push(runway_from(&site, AirfieldKind::Secret, name, SECRET_LENGTH_M, SECRET_WIDTH_M));
+            out.push(runway_from(&site, kind, name, len, width));
         }
     }
     out

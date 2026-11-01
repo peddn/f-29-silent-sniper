@@ -310,7 +310,11 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
                     continue;
                 }
                 let pts = rw.corners.map(|p| proj.to_screen(p));
-                let ink = if rw.kind == AirfieldKind::Home { Ink::Panel } else { Ink::Needle };
+                let ink = match rw.kind {
+                    AirfieldKind::Home => Ink::Panel,
+                    AirfieldKind::Secret => Ink::Needle,
+                    AirfieldKind::Enemy => Ink::Warning,
+                };
                 dl.polyline(&pts, true, ink);
                 let pc = proj.to_screen(rw.center);
                 dl.text_mid([pc[0] + txt * 0.8, pc[1] - txt * 1.4], txt * 0.8, Align::Left, rw.name, ink);
@@ -453,6 +457,26 @@ fn draw_map(dl: &mut DisplayList, fd: &FlightData, screen: Rect, state: &MfdStat
             dl.line(tail, p, ink);
         } else {
             dl.circle(p, txt * 0.18, 6, ink);
+        }
+    }
+
+    // Feindliche Jäger: kleiner Pfeil in Flugrichtung, rot; ein Jäger, dessen
+    // Radar das Flugzeug sieht, mit Kreis.
+    for f in &fd.fighters {
+        let pos = [f.position.x, f.position.y];
+        let p = proj.to_screen(pos);
+        if !near(pos) || !screen.contains(p) {
+            continue;
+        }
+        let (d, k) = (proj.direction(f.heading), txt * 0.55);
+        let side = [d[1], -d[0]];
+        let tip = [p[0] + d[0] * k * 1.4, p[1] + d[1] * k * 1.4];
+        for sgn in [-1.0, 1.0] {
+            let wing = [p[0] - d[0] * k + side[0] * k * sgn, p[1] - d[1] * k + side[1] * k * sgn];
+            dl.line(tip, wing, Ink::Warning);
+        }
+        if f.pursuing {
+            dl.circle(p, k * 2.0, 10, Ink::Warning);
         }
     }
 

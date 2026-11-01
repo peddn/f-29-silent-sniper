@@ -85,6 +85,18 @@ impl Sim {
             h.u64(d.owner.map_or(u64::MAX, |o| o as u64));
             h.f64(d.age_s);
         }
+        for f in &self.fighters.list {
+            h.u64(u64::from(f.id) | (f.mode as u64) << 32 | (f.base as u64) << 40);
+            for v in [f.position, f.goal] {
+                h.f64(v.x);
+                h.f64(v.y);
+                h.f64(v.z);
+            }
+            for v in [f.heading, f.pitch, f.bank, f.speed, f.flight_s] {
+                h.f64(v);
+            }
+            h.u64(f.contact_tick.unwrap_or(u64::MAX));
+        }
         for s in &self.radar.sites {
             h.u64(u64::from(s.alert));
             h.u64(s.last_change_tick | u64::from(s.painted) << 63);

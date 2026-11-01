@@ -272,6 +272,38 @@ fn munitions_show_on_the_map() {
     assert_eq!(own.2, none_orange, "eigene Maverick bleibt in Flugzeugfarbe");
 }
 
+/// Feindliche Jäger erscheinen als roter Pfeil auf der Karte, mit Kreis,
+/// wenn ihr Radar das Flugzeug sieht.
+#[test]
+fn fighters_show_on_the_map() {
+    use f29_core::FighterInfo;
+    let sim = Sim::new(SimConfig::new(0x0F29));
+    let base = sim.flight_data();
+    let map = MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let m = layout.mfd_layout().unwrap();
+    let ahead = base.position + f29_core::DVec3::new(base.heading.cos(), base.heading.sin(), 0.0) * 3_000.0;
+    let red = |fighters: Vec<FighterInfo>| {
+        let mut fd = base.clone();
+        fd.fighters = fighters;
+        let opts = HudOptions { show_hud: false, ..HudOptions::default() };
+        let dl = build(&fd, &layout, &opts, Some(&map));
+        dl.lines.iter().filter(|l| m.left.contains(l.a) && l.ink == Ink::Warning).count()
+    };
+    let f = FighterInfo {
+        id: 0,
+        label: "MIG-29",
+        position: ahead,
+        velocity: f29_core::DVec3::ZERO,
+        heading: 0.0,
+        bank: 0.0,
+        pursuing: false,
+    };
+    let none = red(Vec::new());
+    assert_eq!(red(vec![f]), none + 2, "Pfeil aus zwei Strichen");
+    assert_eq!(red(vec![FighterInfo { pursuing: true, ..f }]), none + 12, "mit Kreis");
+}
+
 #[test]
 fn fuel_bar_shrinks_with_fuel() {
     let layout = ScreenLayout::cockpit(16.0 / 9.0);

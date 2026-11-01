@@ -216,6 +216,8 @@ pub struct FlightData {
     pub munitions: Vec<MunitionInfo>,
     /// Täuschkörper in der Luft.
     pub decoys: Vec<DecoyInfo>,
+    /// Feindliche Jäger in der Luft.
+    pub fighters: Vec<FighterInfo>,
     /// Bild der jüngsten eigenen Waffe mit Fernsehsuchkopf in der Luft.
     pub weapon_cam: Option<WeaponCam>,
     /// Jüngste Detonation (Klang).
@@ -338,6 +340,21 @@ pub struct MunitionInfo {
     pub hostile: bool,
     /// Optischer bzw. Infrarot-Suchkopf statt Radarlenkung.
     pub optical: bool,
+}
+
+/// Ein feindlicher Jäger in der Luft (Karte, 3D, HUD).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FighterInfo {
+    pub id: u32,
+    pub label: &'static str,
+    /// NED (m) und Geschwindigkeit (m/s).
+    pub position: DVec3,
+    pub velocity: DVec3,
+    /// Kurs und Querlage (rad).
+    pub heading: f64,
+    pub bank: f64,
+    /// Sein Radar sieht das Flugzeug gerade.
+    pub pursuing: bool,
 }
 
 /// Ein Täuschkörper in der Luft (Karte).
@@ -625,6 +642,21 @@ impl Sim {
                 })
                 .collect(),
             decoys: cm.decoys.iter().map(|d| DecoyInfo { kind: d.kind, position: d.position }).collect(),
+            fighters: self
+                .fighters
+                .list
+                .iter()
+                .filter(|f| f.airborne())
+                .map(|f| FighterInfo {
+                    id: f.id,
+                    label: f.spec().label,
+                    position: f.position,
+                    velocity: f.velocity(),
+                    heading: f.heading,
+                    bank: f.bank,
+                    pursuing: f.mode == crate::fighters::Mode::Pursue,
+                })
+                .collect(),
             weapon_cam: self
                 .stores
                 .in_flight
@@ -758,6 +790,19 @@ impl Sim {
                     }
                     GunEvent::Destroyed(i) => (format!("GUN {} DESTROYED", name(i)), false),
                     GunEvent::Empty => ("GUN EMPTY".to_string(), true),
+                };
+                message(tick, text)
+            }))
+            .chain(self.fighters.events.recent(self.tick, window).map(|&(tick, e)| {
+                let base = |b: usize| self.terrain.runways()[b].name;
+                let text = match e {
+                    FighterEvent::Takeoff { kind, base: b } => {
+                        (format!("{} - {} TAKEOFF", base(b), kind.spec().label), true)
+                    }
+                    FighterEvent::Contact { kind } => (format!("{} RADAR CONTACT", kind.spec().label), true),
+                    FighterEvent::Landed { kind, base: b } => {
+                        (format!("{} - {} LANDED", base(b), kind.spec().label), false)
+                    }
                 };
                 message(tick, text)
             }))

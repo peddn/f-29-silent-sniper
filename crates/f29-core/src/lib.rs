@@ -17,6 +17,7 @@ pub mod controls;
 pub mod detmath;
 pub mod envelope;
 pub mod events;
+pub mod fighters;
 pub mod flight;
 pub mod gun;
 pub mod math;
@@ -35,9 +36,9 @@ pub mod weapons;
 pub use controls::ControlFrame;
 pub use math::{DQuat, DVec3};
 pub use sim::{
-    BlastInfo, BlastKind, BombAim, CrashCause, DT, DecoyInfo, FlightData, GunAim, GunInfo, MunitionInfo,
-    PingInfo, RadarSiteInfo, Sim, SimConfig, SpawnKind, Status, StoresInfo, TICK_HZ, TargetInfo, ThreatInfo,
-    ThreatSite, Touchdown, WeaponCam, WeaponMessage,
+    BlastInfo, BlastKind, BombAim, CrashCause, DT, DecoyInfo, FighterInfo, FlightData, GunAim, GunInfo,
+    MunitionInfo, PingInfo, RadarSiteInfo, Sim, SimConfig, SpawnKind, Status, StoresInfo, TICK_HZ,
+    TargetInfo, ThreatInfo, ThreatSite, Touchdown, WeaponCam, WeaponMessage,
 };
 
 pub use f29_data as data;

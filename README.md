@@ -287,6 +287,10 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [ ] Flugzeugträger
 
 ### v0.4: Luftkampf
+- [x] Etappe 1a: zwei feindliche Fliegerhorste, je fünf Jäger (MiG-21, MiG-29),
+      Start bei Alarm, Abfangen, Patrouille, Verfolgen mit eigenem Radar,
+      Rückflug und Landung; Karte (v0.2.9)
+- [ ] Etappe 1b: Jäger in 3D, Radar-Aufschaltung auf Luftziele, Zielrahmen im AA-Modus
 - [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
 - [ ] Luft-Luft-Raketen, Bordkanone gegen Luftziele
 - [ ] Feindliche Jäger und Abfangjäger mit KI (aufbauend auf dem Autopiloten)
