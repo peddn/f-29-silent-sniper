@@ -77,10 +77,8 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
     }
     if w.target.is_some_and(|t| !matches!(t, Track::Decoy(_)))
         && let Some(d) = v.decoys.iter().find(|d| {
-            s.seeker.lured_by(d.kind) && {
-                let to = d.position - w.position;
-                to.length() <= s.max_range_m && bearing_off(w.velocity, to) <= s.seeker_cone_rad
-            }
+            let to = d.position - w.position;
+            d.lures(w) && to.length() <= s.max_range_m && bearing_off(w.velocity, to) <= s.seeker_cone_rad
         })
     {
         w.target = Some(Track::Decoy(d.id));
@@ -105,16 +103,17 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
             None
         }
         Some(track) => {
-            let Some((p, vel)) = v.locate(track) else {
+            let Some((p, _)) = v.locate(track) else {
                 w.target = None;
                 w.tracking = false;
                 return None;
             };
             let to = p - w.position;
-            // Suchkegel um den Treffpunkt, auf den die Rakete zufliegt: Mit
-            // Vorhalt liegt das Ziel neben der Nase (im Original ohne Vorhalt
-            // immer auf ihr).
-            let off = bearing_off(w.velocity, intercept(w, p, vel) - w.position);
+            // Suchkegel um die Richtung zum Ziel: Mit Vorhalt liegt ein
+            // querab fliegendes Flugzeug neben der Nase; wird der
+            // Vorhaltwinkel größer als der Kegel, verliert die Rakete es
+            // (Querflug schüttelt ab, Spielerwunsch v0.2.9).
+            let off = bearing_off(w.velocity, to);
             if off > GIVE_UP_RAD {
                 w.target = None;
                 w.tracking = false;
@@ -144,6 +143,12 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
                     }
                 };
             w.tracking = off <= s.seeker_cone_rad && sees;
+            // Fällt das Flugzeug aus dem Suchkegel, ist es verloren: Querflug
+            // schüttelt ab (Spielerwunsch v0.2.9). Stören und fehlende
+            // Beleuchtung wirken dagegen nur vorübergehend.
+            if off > s.seeker_cone_rad && track == Track::Aircraft {
+                w.target = None;
+            }
             None
         }
         None if w.searching => {
@@ -314,8 +319,8 @@ pub(super) fn steer_bomb(w: &mut Weapon, aim: Option<DVec3>, dt: f64) {
 }
 
 /// Treffpunkt mit Vorhalt: wo das Ziel (bei `aim`, Geschwindigkeit `vel`)
-/// nach der Restflugzeit sein wird, gewichtet mit dem Vorhaltfaktor der
-/// Waffe. Für stehende Ziele die Zielmitte (reine Verfolgung wie im Original).
+/// nach der Restflugzeit sein wird. Für stehende Ziele die Zielmitte (reine
+/// Verfolgung wie im Original).
 pub(super) fn intercept(w: &Weapon, aim: DVec3, vel: DVec3) -> DVec3 {
     let s = w.kind.spec();
     let to = aim - w.position;
@@ -326,7 +331,7 @@ pub(super) fn intercept(w: &Weapon, aim: DVec3, vel: DVec3) -> DVec3 {
         return aim;
     }
     let closing = (w.velocity - vel).dot(to / range.max(1.0)).max(1.0);
-    aim + vel * (s.lead * (range / closing).min(MAX_LEAD_S))
+    aim + vel * (range / closing).min(MAX_LEAD_S)
 }
 
 /// Ein Zeitschritt Rakete: erst frei aus dem Schacht fallen, dann mit

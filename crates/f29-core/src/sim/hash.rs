@@ -82,7 +82,8 @@ impl Sim {
         h.u64(u64::from(cm.chaff) | u64::from(cm.flares) << 8 | u64::from(cm.ecm) << 16);
         h.f64(cm.ir_jammer_s);
         for d in &cm.decoys {
-            h.u64(u64::from(d.id));
+            h.u64(u64::from(d.id) | u64::from(d.salt) << 32);
+            h.u64(d.owner.map_or(u64::MAX, |o| o as u64));
             h.f64(d.age_s);
         }
         for s in &self.radar.sites {

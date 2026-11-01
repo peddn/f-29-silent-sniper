@@ -24,6 +24,7 @@ pub mod nav;
 pub mod radar;
 pub mod replay;
 pub mod rng;
+pub mod sam_report;
 pub mod sensors;
 pub mod sim;
 pub mod systems;

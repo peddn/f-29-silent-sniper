@@ -115,9 +115,9 @@ pub const BURN_THROUGH_M: f64 = 2_000.0;
 pub const IR_JAMMER_S: f64 = 30.0;
 /// Danach muss er so lange abkühlen, bevor er wieder läuft (s).
 pub const IR_COOLDOWN_S: f64 = 60.0;
-/// Täuschkörper: Vorrat je Art, höchstens so viele gleichzeitig, Brenndauer (s).
+/// Täuschkörper: Vorrat je Art und Brenndauer (s). Jeder Tastendruck wirft
+/// einen aus, ohne Grenze für die Zahl in der Luft (Spielerwunsch v0.2.9).
 pub const DECOY_STOCK: u8 = 20;
-pub const MAX_DECOYS: usize = 3;
 pub const DECOY_LIFE_S: f64 = 5.0;
 /// So viele Bordsysteme beschädigt ein Raketentreffer (Original: Konflikt-
 /// stufe plus eins; Schwierigkeitsgrade folgen).
@@ -671,8 +671,8 @@ impl Stores {
         true
     }
 
-    /// Wirft einen Täuschkörper bei `position` ab (höchstens
-    /// [`MAX_DECOYS`] gleichzeitig; leerer Vorrat meldet sich).
+    /// Wirft einen Täuschkörper des Flugzeugs bei `position` ab (leerer
+    /// Vorrat meldet sich).
     pub fn drop_decoy(&mut self, tick: u64, kind: DecoyKind, position: DVec3) {
         let cm = &mut self.countermeasures;
         let stock = match kind {
@@ -683,13 +683,13 @@ impl Stores {
             self.events.push(tick, WeaponEvent::DecoyEmpty(kind));
             return;
         }
-        if cm.decoys.len() >= MAX_DECOYS {
-            return;
-        }
         *stock -= 1;
         let id = self.next_id;
         self.next_id += 1;
-        cm.decoys.push(Decoy { id, kind, position, age_s: 0.0 });
+        // Zufall und Abwurfzeitpunkt: Der k-te Täuschkörper einer Mission
+        // würfelt nicht immer gleich.
+        let salt = self.rng.next_u32() ^ tick as u32;
+        cm.decoys.push(Decoy { id, kind, owner: None, position, age_s: 0.0, salt });
     }
 
     /// Alle Waffen im Flug einen Zeitschritt weiterbewegen; Zünder und

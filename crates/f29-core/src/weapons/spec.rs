@@ -24,6 +24,9 @@ pub enum WeaponKind {
     LongRangeSam,
     /// Kurzstrecken-Boden-Luft-Rakete (Kurzstrecken-Flugabwehr).
     ShortRangeSam,
+    /// Moderne Boden-Luft-Rakete mittlerer Reichweite (jede dritte
+    /// SAM-Stellung): wendig und schwer zu täuschen.
+    ModernSam,
 }
 
 /// Suchkopf einer gelenkten Waffe.
@@ -94,9 +97,6 @@ pub struct WeaponSpec {
     /// Bogen: Die Rakete zielt um diesen Anteil der Entfernung über das Ziel
     /// (wie im Original; schrumpft beim Annähern, 0 = direkt).
     pub loft: f64,
-    /// Vorhaltfaktor 0..1 gegen bewegte Ziele: 0 = reine Verfolgung (wie im
-    /// Original, leicht auszukurven), 1 = voller Vorhalt (Kollisionskurs).
-    pub lead: f64,
     /// Reichweite des Suchkopfs (m) bei Übergabe und Selbstsuche (Laserbombe:
     /// ohne Belang, sie folgt dem Laserfleck).
     pub max_range_m: f64,
@@ -108,6 +108,9 @@ pub struct WeaponSpec {
     pub frag_radius_m: f64,
     /// Längste Flugzeit (s).
     pub life_s: f64,
+    /// Chance (0..1), einen passenden Täuschkörper im Suchkegel zu
+    /// übergehen; je Täuschkörper einmal gewürfelt.
+    pub decoy_resistance: f64,
 }
 
 pub(super) const fn deg(d: f64) -> f64 {
@@ -131,13 +134,12 @@ const BOMB: WeaponSpec = WeaponSpec {
     launch_rad: 0.0,
     boost_s: 0.0,
     loft: 0.0,
-    // Alle Lenkwaffen mit voller Gefährlichkeit (Spielerwunsch v0.2.9).
-    lead: 1.0,
     max_range_m: 0.0,
     seeker_cone_rad: 0.0,
     lethal_radius_m: 30.0,
     frag_radius_m: 180.0,
     life_s: MAX_FALL_S,
+    decoy_resistance: 0.0,
 };
 
 /// Gemeinsame Grundwerte der Lenkwaffen.
@@ -159,12 +161,12 @@ const MISSILE: WeaponSpec = WeaponSpec {
     launch_rad: 0.0,
     boost_s: 0.0,
     loft: 0.0,
-    lead: 1.0,
     max_range_m: 16_000.0,
     seeker_cone_rad: deg(25.0),
     lethal_radius_m: 8.0,
     frag_radius_m: 90.0,
     life_s: 70.0,
+    decoy_resistance: 0.0,
 };
 
 /// Boden-Luft-Rakete mittlerer Reichweite (Vorbild SA-6): mittelschnell,
@@ -183,15 +185,17 @@ const SAM: WeaponSpec = WeaponSpec {
     boost_s: 1.5,
     loft: 0.1,
     max_range_m: 25_000.0,
-    // Suchkegel wie im Original
-    seeker_cone_rad: deg(22.0),
+    // Etwas breiter als im Original (22°): Querflug schüttelt sie meist,
+    // aber nicht immer ab.
+    seeker_cone_rad: deg(26.0),
     lethal_radius_m: 30.0,
     frag_radius_m: 0.0,
     life_s: 50.0,
+    decoy_resistance: 0.15,
     ..MISSILE
 };
 
-const SPECS: [WeaponSpec; 9] = [
+const SPECS: [WeaponSpec; 10] = [
     BOMB,
     WeaponSpec {
         kind: WeaponKind::Retarded,
@@ -265,27 +269,49 @@ const SPECS: [WeaponSpec; 9] = [
         max_range_m: 60_000.0,
         lethal_radius_m: 45.0,
         life_s: 150.0,
+        decoy_resistance: 0.05,
         ..SAM
     },
-    // Kurzstreckenrakete mit Infrarotsuchkopf (Vorbild SA-13): sehr schnell
-    // und wendig, startet ohne Boost direkt auf das Ziel. Sucht selbst (keine
-    // Beleuchtung durch die Stellung), braucht aber freie Sicht; Fackeln
-    // lenken sie ab.
+    // Kurzstreckenrakete mit Infrarotsuchkopf (Vorbild SA-13): wendig,
+    // startet ohne Boost direkt auf das Ziel. Sucht selbst (keine Beleuchtung
+    // durch die Stellung), braucht aber freie Sicht; Fackeln lenken sie ab,
+    // Querflug schüttelt sie ab.
     WeaponSpec {
         kind: WeaponKind::ShortRangeSam,
         label: "SA-13",
         name: "SA-13 GOPHER",
         seeker: Seeker::Optical,
         mass_kg: 130.0,
-        cruise_mps: 900.0,
+        cruise_mps: 650.0,
         accel_mps2: 400.0,
         turn_rate_rad: deg(60.0),
         launch_rad: 0.0,
         boost_s: 0.0,
         loft: 0.0,
         max_range_m: 10_000.0,
+        seeker_cone_rad: deg(22.0),
         lethal_radius_m: 18.0,
         life_s: 20.0,
+        decoy_resistance: 0.05,
+        ..SAM
+    },
+    // Moderne Rakete mittlerer Reichweite (Vorbild SA-11): schneller und
+    // wendiger als die SA-6, übergeht die Hälfte der Täuschkörper und lässt
+    // sich durch Querflug selten abschütteln – nur viele Düppel helfen.
+    WeaponSpec {
+        kind: WeaponKind::ModernSam,
+        label: "SA-11",
+        name: "SA-11 GADFLY",
+        mass_kg: 690.0,
+        cruise_mps: 800.0,
+        accel_mps2: 300.0,
+        turn_rate_rad: deg(50.0),
+        // Breiter Suchkegel: Querflug schüttelt sie selten ab.
+        seeker_cone_rad: deg(35.0),
+        boost_s: 1.0,
+        loft: 0.05,
+        life_s: 40.0,
+        decoy_resistance: 0.5,
         ..SAM
     },
 ];
@@ -330,6 +356,7 @@ impl WeaponKind {
             WeaponKind::MediumRangeSam => "sa6",
             WeaponKind::LongRangeSam => "sa5",
             WeaponKind::ShortRangeSam => "sa13",
+            WeaponKind::ModernSam => "sa11",
         }
     }
 

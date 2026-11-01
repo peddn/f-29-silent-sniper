@@ -437,7 +437,7 @@ impl Sim {
             .collect();
         for i in fire {
             let t = &self.targets[i];
-            let Some((_, kind)) = t.class.air_defense() else { continue };
+            let Some(kind) = targets::sam_of(&self.targets, i) else { continue };
             let from = DVec3::new(t.north, t.east, -t.elevation - t.class.height());
             self.stores.launch_sam(self.tick, kind, i, from, self.aircraft.position);
         }

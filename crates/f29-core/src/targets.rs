@@ -392,6 +392,14 @@ impl Placer<'_> {
     }
 }
 
+/// Rakete der Flugabwehrstellung `i` (M-021): jede dritte SAM-Stellung in
+/// der Reihenfolge der Ziele hat die moderne SA-11 statt der SA-6.
+pub fn sam_of(targets: &[Target], i: usize) -> Option<WeaponKind> {
+    let (_, kind) = targets[i].class.air_defense()?;
+    let nth = targets[..i].iter().filter(|t| t.class == TargetClass::AirDefense).count();
+    Some(if kind == WeaponKind::MediumRangeSam && nth % 3 == 2 { WeaponKind::ModernSam } else { kind })
+}
+
 /// Platziert die Ziele für eine Route. Deterministisch in Seed und Route:
 /// Primärziel am zweiten, Sekundärziel am ersten Wegpunkt, Flugabwehr
 /// entlang der Route, Schiffe vor der Küste, weitere Ziele verstreut.

@@ -198,8 +198,8 @@ fn jammers_break_their_kind_of_guidance_beyond_burn_through() {
 }
 
 /// Halbaktiv: Weit weg lenkt die Boden-Luft-Rakete nur, solange ihre
-/// Stellung das Flugzeug erfasst; nah mit eigenem Suchkopf. Außerhalb des
-/// Suchkegels lenkt sie nicht, weit hinter ihr gibt sie auf.
+/// Stellung das Flugzeug erfasst; nah mit eigenem Suchkopf. Fällt es aus dem
+/// Suchkegel, hat sie es verloren (Querflug schüttelt ab).
 #[test]
 fn sam_guidance_is_semi_active() {
     let terrain = Terrain::new(1);
@@ -212,11 +212,9 @@ fn sam_guidance_is_semi_active() {
     seek(&mut w, &air_view(&terrain, DVec3::new(3_000.0, 0.0, 0.0), false, &[]));
     assert!(w.tracking, "nah: eigener Suchkopf");
     seek(&mut w, &air_view(&terrain, DVec3::new(3_000.0, 3_000.0, 0.0), true, &[]));
-    assert!(!w.tracking && w.target.is_some(), "45° neben der Flugrichtung: außerhalb des Kegels");
-    seek(&mut w, &air_view(&terrain, DVec3::new(-3_000.0, 0.0, 0.0), true, &[]));
-    assert!(w.target.is_none(), "hinter ihr: aufgegeben");
+    assert!(!w.tracking && w.target.is_none(), "45° neben der Flugrichtung: verloren");
     seek(&mut w, &air_view(&terrain, far, true, &[]));
-    assert!(!w.tracking, "aufgegeben bleibt aufgegeben");
+    assert!(!w.tracking, "verloren bleibt verloren");
 }
 
 /// Täuschkörper wie im Original: Ein Düppel im Suchkegel lenkt die
@@ -227,13 +225,18 @@ fn decoys_lure_only_their_kind_of_seeker() {
     // Hoch über allem Gelände: freie Sicht
     let at = DVec3::new(8_000.0, 0.0, -9_000.0);
     let place = DVec3::new(4_000.0, 200.0, -9_000.0);
-    let chaff = [Decoy { id: 7, kind: DecoyKind::Chaff, position: place, age_s: 0.0 }];
-    let flare = [Decoy { id: 8, kind: DecoyKind::Flare, position: place, age_s: 0.0 }];
     let start = |kind| {
         let mut w = sam(kind);
         w.position = DVec3::new(0.0, 0.0, -9_000.0);
         w
     };
+    // Täuschkörper, dem diese Rakete nicht widersteht (Resistenz ausgeklammert).
+    let decoy = |id, kind, w: &Weapon| {
+        let d = Decoy { id, kind, owner: None, position: place, age_s: 0.0, salt: 0 };
+        (0..).map(|salt| Decoy { salt, ..d }).find(|d| d.lures(w) || d.salt > 1_000).unwrap()
+    };
+    let chaff = [decoy(7, DecoyKind::Chaff, &start(WeaponKind::MediumRangeSam))];
+    let flare = [decoy(8, DecoyKind::Flare, &start(WeaponKind::ShortRangeSam))];
     let mut radar = start(WeaponKind::MediumRangeSam);
     assert!(seek(&mut radar, &air_view(&terrain, at, true, &flare)).is_none());
     assert_eq!(radar.target, Some(Track::Aircraft));
@@ -263,9 +266,6 @@ fn intercept_leads_moving_targets_only() {
     // Ziel quer mit 200 m/s, Annäherung 700 m/s ⇒ 10 s ⇒ 2 km voraus
     let p = intercept(&w, aim, DVec3::new(0.0, 200.0, 0.0));
     assert!((p - DVec3::new(7_000.0, 2_000.0, 0.0)).length() < 1e-6, "{p:?}");
-    for k in WeaponKind::ALL {
-        assert_eq!(k.spec().lead, 1.0, "{k:?}: volle Gefährlichkeit");
-    }
     // Bogen: Die SA-5 zielt ein Viertel der Entfernung über das Ziel.
     let w = Weapon { kind: WeaponKind::LongRangeSam, ..w };
     assert_eq!(intercept(&w, aim, DVec3::ZERO), aim + DVec3::new(0.0, 0.0, -1_750.0));
@@ -310,4 +310,39 @@ fn retarded_bomb_falls_slower_than_free_fall() {
     // Freifall ohne Widerstand wäre 0,5·g·t² ≈ 123 m gefallen.
     let fell = a.position.z + 3_000.0;
     assert!(fell > 110.0 && fell < 125.0, "gefallen {fell:.1} m");
+}
+
+/// Resistenz: Je Paar aus Rakete und Täuschkörper fest gewürfelt, im Mittel
+/// so oft übergangen wie eingestellt; eigene Täuschkörper lenken eigene
+/// Waffen nie ab.
+#[test]
+fn decoy_resistance_matches_the_spec() {
+    for kind in [WeaponKind::ShortRangeSam, WeaponKind::MediumRangeSam, WeaponKind::ModernSam] {
+        let mut w = sam(kind);
+        let decoy = DecoyKind::Chaff;
+        let decoy = if w.kind.spec().seeker == Seeker::Optical { DecoyKind::Flare } else { decoy };
+        let mut resisted = 0;
+        for id in 0..2_000 {
+            w.id = id;
+            let d = Decoy {
+                id: 9_999,
+                kind: decoy,
+                owner: None,
+                position: DVec3::ZERO,
+                age_s: 0.0,
+                salt: id * 7,
+            };
+            resisted += usize::from(!d.lures(&w));
+        }
+        let rate = resisted as f64 / 2_000.0;
+        let want = kind.spec().decoy_resistance;
+        assert!((rate - want).abs() < 0.03, "{kind:?}: {rate:.3} statt {want}");
+    }
+    let own = Weapon::new(1, WeaponKind::AirToGround, DVec3::ZERO, DVec3::new(300.0, 0.0, 0.0));
+    let flare =
+        Decoy { id: 2, kind: DecoyKind::Flare, owner: None, position: DVec3::ZERO, age_s: 0.0, salt: 0 };
+    assert!(
+        !(0..100).any(|salt| Decoy { salt, ..flare }.lures(&own)),
+        "eigene Fackel lenkt eigene Maverick ab"
+    );
 }

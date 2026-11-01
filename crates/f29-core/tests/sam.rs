@@ -188,7 +188,13 @@ fn long_range_sam_climbs_and_lofts() {
 /// Wartet auf den Start, dann fliegt geradeaus und wirft `decoy`, sobald die
 /// Rakete näher als `at_m` ist. Liefert die Ereignisse danach.
 fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) -> Vec<WeaponEvent> {
-    let (mut sim, _) = toward_site_with(class, dist, height, true);
+    let (mut sim, site) = toward_site_with(class, dist, height, true);
+    // Nur diese Stellung schießt.
+    for k in 0..sim.targets().len() {
+        if k != site && sim.targets()[k].class.is_radar() {
+            sim.destroy_target(k);
+        }
+    }
     assert!(fly_until(&mut sim, 40.0, |s| launched(s).is_some()), "kein Start");
     let t0 = sim.flight_data().tick;
     let mut thrown = false;
@@ -246,11 +252,12 @@ fn flare_decoys_the_infrared_missile_but_chaff_does_not() {
 #[test]
 fn decoy_stock_is_limited() {
     let (mut sim, _) = toward_site(TargetClass::AirDefense, 30_000.0, 4_000.0);
+    // Jeder Tastendruck wirft einen aus, ohne Grenze in der Luft.
     for _ in 0..5 {
         step(&mut sim, 0, weapon_flags::FLARE);
     }
-    assert_eq!(sim.flight_data().decoys.len(), 3);
-    assert_eq!(sim.flight_data().stores.flares, 17);
+    assert_eq!(sim.flight_data().decoys.len(), 5);
+    assert_eq!(sim.flight_data().stores.flares, 15);
     for _ in 0..40 {
         step(&mut sim, 0, weapon_flags::FLARE);
         fly(&mut sim, 2.0, 0, 0);
@@ -290,51 +297,22 @@ fn jammers_switch_and_cost_stealth() {
     assert!(sim.flight_data().ir_jammer_s > 29.0, "wieder bereit");
 }
 
-/// Querab halten (die Rakete seitlich lassen), auf Wunsch kurz vor ihr hart
-/// auf sie zu drehen, schüttelt weder SA-6 noch SA-5 ab: Der Suchkegel liegt
-/// um den Treffpunkt mit Vorhalt, nicht um das Flugzeug (Spieltest v0.2.9).
+/// Gefährlichkeit (Prüfstand `sam_report`): Von vorn treffen alle; Querflug
+/// schüttelt SA-5 und SA-13 ab, die moderne SA-11 nicht (Spielerwunsch
+/// v0.2.9: „mit Querflug das meiste abschütteln“).
 #[test]
-fn beaming_does_not_shake_the_missiles() {
-    use f29_core::autopilot::Autopilot;
-    use f29_core::{DT, Status};
-    use std::f64::consts::{FRAC_PI_2, PI, TAU};
-    let run = |class: TargetClass, south: f64, west: f64, break_m: f64| {
-        let (_, t) = first_of(SEED, class).expect("Stellung");
-        let alt = t.elevation + 2_000.0;
-        let mut sim = Sim::new(SimConfig {
-            seed: SEED,
-            spawn: Spawn {
-                north: t.north - south,
-                east: t.east - west,
-                altitude: alt,
-                min_clearance: 300.0,
-                heading: FRAC_PI_2,
-                speed: 230.0,
-                throttle: 1.0,
-                visible: true,
-                ..Spawn::default()
-            },
-        });
-        let mut ap = Autopilot::new(alt, FRAC_PI_2, 300.0);
-        ap.max_bank = 1.25;
-        for _ in 0..ticks(160.0) {
-            let fd = sim.flight_data();
-            if let Some(m) = sim.weapons_in_flight().iter().find(|w| w.owner.is_some()) {
-                let to = m.position - fd.position;
-                let b = to.y.atan2(to.x);
-                let rel = (b - fd.heading + PI).rem_euclid(TAU) - PI;
-                ap.target_heading =
-                    if break_m > 0.0 && to.length() < break_m { b } else { b - FRAC_PI_2 * rel.signum() };
-            }
-            let c = ap.control(sim.spec(), &fd, DT);
-            sim.step(c);
-            if sim.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. })) {
-                return true;
-            }
-            assert_eq!(sim.status(), Status::Flying, "abgestürzt statt getroffen");
-        }
-        false
-    };
-    assert!(run(TargetClass::AirDefense, 10_000.0, 15_000.0, 0.0), "SA-6 querab abgeschüttelt");
-    assert!(run(TargetClass::EarlyWarning, 5_000.0, 15_000.0, 3_000.0), "SA-5 mit Ausbruch abgeschüttelt");
+fn beaming_shakes_off_all_but_the_modern_sam() {
+    use f29_core::sam_report::{Maneuver, engagement};
+    let hit = |kind, m| engagement(SEED, kind, 0.5, 0.6, m).expect("Start ohne Absturz");
+    for kind in [
+        WeaponKind::ShortRangeSam,
+        WeaponKind::LongRangeSam,
+        WeaponKind::MediumRangeSam,
+        WeaponKind::ModernSam,
+    ] {
+        assert!(hit(kind, Maneuver::Toward), "{kind:?} trifft von vorn nicht");
+    }
+    assert!(!hit(WeaponKind::LongRangeSam, Maneuver::Beam), "SA-5 querab nicht abgeschüttelt");
+    assert!(!hit(WeaponKind::ShortRangeSam, Maneuver::Beam), "SA-13 querab nicht abgeschüttelt");
+    assert!(hit(WeaponKind::ModernSam, Maneuver::Beam), "SA-11 querab abgeschüttelt");
 }

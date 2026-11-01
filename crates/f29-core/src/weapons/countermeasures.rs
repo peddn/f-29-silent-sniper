@@ -25,9 +25,34 @@ impl DecoyKind {
 pub struct Decoy {
     pub id: u32,
     pub kind: DecoyKind,
+    /// Wer ihn geworfen hat (wie [`Weapon::owner`]: `None` = das Flugzeug).
+    pub owner: Option<usize>,
     /// NED (m).
     pub position: DVec3,
     pub age_s: f64,
+    /// Zufallswert beim Abwurf: entscheidet mit der Raketennummer, ob eine
+    /// Rakete ihn übergeht ([`WeaponSpec::decoy_resistance`]).
+    pub salt: u32,
+}
+
+impl Decoy {
+    /// Lenkt dieser Täuschkörper die Rakete `w` ab? Nur Raketen gegen die
+    /// Seite, die ihn geworfen hat, mit passender Lenkart, und nur, wenn
+    /// sie ihm nicht widersteht – je Paar fest gewürfelt.
+    pub fn lures(&self, w: &Weapon) -> bool {
+        let s = w.kind.spec();
+        let against_owner = self.owner.is_none() == w.owner.is_some();
+        against_owner && s.seeker.lured_by(self.kind) && unit(self.salt, w.id) >= s.decoy_resistance
+    }
+}
+
+/// Gleichverteilter Wert in [0, 1) aus zwei Zahlen (SplitMix64-Mischung).
+fn unit(a: u32, b: u32) -> f64 {
+    let mut x = (u64::from(a) << 32 | u64::from(b)).wrapping_add(0x9E37_79B9_7F4A_7C15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
+    (x >> 11) as f64 / (1_u64 << 53) as f64
 }
 
 /// Selbstschutz: Täuschkörper und Störer.

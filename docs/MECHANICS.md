@@ -1249,30 +1249,45 @@ Format jedes Eintrags:
     der Luft hat und nicht schon vier feindliche fliegen. Die Rakete hebt 10°
     über der Linie zum Flugzeug ab (im Suchkegel) und lenkt nach 0,4 s ein.
     Meldung „MISSILE LAUNCH SA-6 - <Stellung>“.
-  - **Drei Typen** (Spielerentscheidung v0.2.9), je mit eigenem Startprofil:
+  - **Vier Typen** (Spielerentscheidungen v0.2.9), je mit eigenem Startprofil:
 
-    | | Kurzstrecke SA-13 Gopher (Infrarot) | Mittelstrecke SA-6 Gainful | Langstrecke SA-5 Gammon |
-    |---|---|---|---|
-    | Stellung | Kurzstrecken-Flugabwehr (neu, Fahrzeug, bewacht Zielgruppen) | SAM-Stellung | Frühwarnradar |
-    | Radar | Doppler 12 km, Umlauf 2,5 s | Doppler 30 km, 5 s | Impuls 60 km, 10 s |
-    | Reichweite | 10 km | 25 km | 60 km |
-    | Geschwindigkeit | 900 m/s | 650 m/s | 450 m/s |
-    | Drehrate | 60°/s | 45°/s | 30°/s |
-    | Start | direkt aufs Ziel | 45°, 1,5 s Boost | 85° (fast senkrecht wie im Original), 4 s Boost |
-    | Bogen | 0 | 0,1 | 0,25 |
-    | Wirkradius / Flugzeit | 18 m / 20 s | 30 m / 50 s | 45 m / 150 s |
+    | | Kurzstrecke SA-13 Gopher (Infrarot) | Mittelstrecke SA-6 Gainful | Modern SA-11 Gadfly | Langstrecke SA-5 Gammon |
+    |---|---|---|---|---|
+    | Stellung | Kurzstrecken-Flugabwehr (Fahrzeug, bewacht Zielgruppen) | SAM-Stellung | jede dritte SAM-Stellung | Frühwarnradar |
+    | Radar | Doppler 12 km, Umlauf 2,5 s | Doppler 30 km, 5 s | wie SA-6 | Impuls 60 km, 10 s |
+    | Reichweite | 10 km | 25 km | 25 km | 60 km |
+    | Geschwindigkeit | 650 m/s | 650 m/s | 800 m/s | 450 m/s |
+    | Drehrate | 60°/s | 45°/s | 50°/s | 30°/s |
+    | Suchkegel | ±22° | ±26° | ±35° | ±22° |
+    | Resistenz gegen Täuschkörper | 5 % | 15 % | 50 % | 5 % |
+    | Start | direkt aufs Ziel | 45°, 1,5 s Boost | 45°, 1 s Boost | 85° (fast senkrecht wie im Original), 4 s Boost |
+    | Bogen | 0 | 0,1 | 0,05 | 0,25 |
+    | Wirkradius / Flugzeit | 18 m / 20 s | 30 m / 50 s | 30 m / 40 s | 45 m / 150 s |
+
+  - **Gefährlichkeit** (Spielerwunsch v0.2.9: „mit Querflug das meiste
+    abschütteln, Täuschkörper mit einer gewissen Chance ergänzen“): Von vorn
+    treffen alle. Querflug schüttelt ab, weil eine Rakete mit Vorhalt auf
+    einen Treffpunkt vor dem Flugzeug zielt – liegt das Flugzeug dabei weiter
+    neben ihrer Nase als ihr Suchkegel, verliert sie es endgültig, fliegt ohne
+    Ziel weiter und zündet nicht. Der nötige Vorhaltwinkel wächst, je
+    langsamer die Rakete gegenüber dem Flugzeug ist; Fahrt und Suchkegel
+    machen so die Gefährlichkeit. SA-5 und SA-13 schüttelt man querab sicher
+    ab, die SA-6 meist, die SA-11 kaum – gegen sie helfen viele Düppel.
+    Messwerkzeug: `cargo run --release -p f29-core --example sam_report`
+    (Trefferquoten je Flugweise; vorn, hinten = Flucht, querab, ein bzw. drei
+    Täuschkörper). Ein Ausweichhaken im letzten Moment ist bewusst keine
+    Mechanik: Die F-29 baut im Ausbruch zu langsam Last auf, um sich in der
+    letzten Sekunde aus dem Wirkradius zu bewegen (Messungen v0.2.9).
 
     Die Kurzstrecke (bis v0.2.9 als SA-8, dann mit Infrarotsuchkopf als SA-13,
-    Spielerentscheidung) ist kaum auszukurven; sie sucht nach dem Start selbst
+    Spielerentscheidung) sucht nach dem Start selbst
     (keine Beleuchtung durch die Stellung, Stealth hilft dann nicht), braucht
     aber freie Sicht – Gelände und Fackeln schützen. Sie nutzt denselben
     optischen Suchkopf wie die Maverick (Kegel, Reichweite, Sichtlinie), die Mittelstrecke der Allrounder, die Langstrecke kommt über
     jeden Berg und aus großer Entfernung, ist aber lange unterwegs – Zeit für
-    Täuschkörper (Spielerwunsch). Suchkegel aller ±22° wie im Original –
-    gemessen um den Treffpunkt mit Vorhalt, auf den die Rakete zufliegt, nicht
-    um das Flugzeug: Ohne Vorhalt (Original) liegt beides auf der Nase; mit
-    Vorhalt fiel ein querab fliegendes Flugzeug sonst aus dem Kegel, und
-    die Rakete ließ sich abschütteln (Spieltest v0.2.9).
+    Täuschkörper (Spielerwunsch). Die moderne SA-11 ist schneller, sieht
+    breiter und übergeht die Hälfte der Täuschkörper. Suchkegel im Original
+    ±22° (dort ohne Vorhalt, das Ziel liegt immer auf der Nase).
   - **Startprofil:** Die Rakete startet im Startwinkel ihres Typs (mindestens
     10° über der Linie zum Flugzeug) und steigt im **Boost** ungelenkt. Danach
     lenkt sie mit **Bogen** wie im Original: Sie zielt um Bogenfaktor ×
@@ -1288,17 +1303,16 @@ Format jedes Eintrags:
     v0.2.9). Der Vorhalt gilt für **alle Lenkwaffen** (gemeinsamer Flug): Bei
     stehenden Zielen ergibt er die reine Verfolgung des Originals, bei
     bewegten (feindliche Flugzeuge, Schiffe, Kolonnen – später) den
-    Kollisionskurs. Ein **Vorhaltfaktor** je Waffe (0 = reine Verfolgung,
-    1 = voller Vorhalt) stellt die Gefährlichkeit ein – vorgesehen auch für
-    Schwierigkeitsgrade; vorerst haben alle Waffen 1 (Spielerwunsch). Eine „Pitbull“-Phase mit mehr Leistung im Endanflug gibt es im
+    Kollisionskurs. Eine „Pitbull“-Phase mit mehr Leistung im Endanflug gibt es im
     Original nicht; nur die Unabhängigkeit von der Stellung auf kurze
     Entfernung (unten). Weiter als
     5 km lenkt die Rakete nur, solange ihre Stellung das Flugzeug beim
     **letzten Antennenumlauf erfasst** hat (Ping-Treffer, „painted“) – Stealth
     wirkt also auch während des Anflugs: tief, waagerecht, Schacht zu, quer zum
     Dopplerradar. Näher lenkt ihr eigener Suchkopf. In jedem Fall nur, wenn das
-    Flugzeug im Suchkegel liegt; sonst fliegt sie geradeaus weiter. Liegt es
-    mehr als 135° hinter ihr, gibt sie auf.
+    Flugzeug im Suchkegel liegt; fällt es heraus, ist es verloren (siehe
+    Gefährlichkeit). Fehlende Beleuchtung und Störer wirken dagegen nur
+    vorübergehend.
   - **Treffer** geometrisch (Annäherungszünder) – Folgen **nur über die
     Bordsysteme** (M-015): Jeder Treffer trifft zwei zufällige, verschiedene
     Systeme; ein intaktes fällt auf halbe Leistung, ein eingeschränktes fällt
@@ -1323,7 +1337,7 @@ Format jedes Eintrags:
   - **Raketenwarnung:** Solange eine feindliche Rakete das Flugzeug verfolgt,
     blinkt „MISSILE“ im HUD und ein schneller Wechselton warnt. Auf der Karte
     erscheinen feindliche Raketen als Strich nach Lenkart – radargelenkt
-    (SA-6, SA-5) rot, optisch/infrarotgelenkt (SA-13) orange –, in der
+    (SA-6, SA-11, SA-5) rot, optisch/infrarotgelenkt (SA-13) orange –, in der
     3D-Ansicht mit Rauchspur.
   - **Ziele der Lenkwaffen** (v0.2.9): Eine Rakete verfolgt ein Bodenziel, das
     eigene Flugzeug oder einen Täuschkörper; jedes liefert Ort und
@@ -1343,16 +1357,21 @@ Format jedes Eintrags:
     ist bewusst weggelassen (Aufwand ohne großen Nutzen). Anzeige im HUD
     „ECM“ bzw. „IRJ 25“.
   - **Stärkere Raketen** (v0.2.9, damit sich Störer und Täuschkörper lohnen):
-    Wirkradius ×1,5 (SA-13 18 m, SA-6 30 m, SA-5 45 m), Drehrate SA-13
-    60°/s, SA-6 45°/s, SA-5 30°/s (dritte Anhebung nach Spieltest); Start
-    schon mit „RADAR ID“ statt beim nächsten Treffer. Reichweiten unverändert.
-  - **Täuschkörper** (wie im Original, v0.2.9): **Düppel** (Taste C) gegen
-    Radarlenkung (SA-6, SA-5), **Fackeln** (Taste T) gegen Infrarotlenkung
-    (SA-13). Je 20 Stück, höchstens drei gleichzeitig in der Luft, leer meldet
-    „CHAFF EMPTY“ bzw. „FLARES EMPTY“. Ein Täuschkörper bleibt am Abwurfort
-    stehen und brennt 5 s. Liegt er im Suchkegel (Peilung) und in Reichweite
-    einer Rakete der passenden Lenkart, lenkt sie auf ihn statt auf das
-    Flugzeug – kein Würfel – und zündet dort wirkungslos („SA-6 DECOYED“).
+    Wirkradius ×1,5, höhere Drehraten (Werte in der Tabelle); Start schon mit
+    „RADAR ID“ statt beim nächsten Treffer. Reichweiten unverändert.
+  - **Täuschkörper** (nach dem Original, v0.2.9): **Düppel** (Taste C) gegen
+    Radarlenkung (SA-6, SA-11, SA-5), **Fackeln** (Taste T) gegen
+    Infrarotlenkung (SA-13). Je 20 Stück; jeder Tastendruck wirft einen aus,
+    ohne Grenze für die Zahl in der Luft (Abweichung vom Original mit drei,
+    Spielerwunsch: viele opfern, um eine Rakete doch noch abzuschütteln);
+    leer meldet „CHAFF EMPTY“ bzw. „FLARES EMPTY“. Ein Täuschkörper bleibt am
+    Abwurfort stehen und brennt 5 s. Liegt er im Suchkegel (Peilung) und in
+    Reichweite einer Rakete der passenden Lenkart, lenkt sie auf ihn statt
+    auf das Flugzeug und zündet dort wirkungslos („SA-6 DECOYED“) – außer sie
+    **widersteht** ihm: einmal je Paar aus Rakete und Täuschkörper gewürfelt
+    mit der Resistenz ihres Typs (Tabelle). Täuschkörper gehören einer Seite
+    und lenken nur Raketen gegen diese Seite ab – unsere Fackeln also keine
+    eigene Maverick, später feindliche Fackeln unsere Luft-Luft-Raketen.
     Brennt er vorher aus, fliegt sie ohne Ziel weiter. Richtig werfen heißt:
     kurz vor dem Einschlag, dann abdrehen. Kein Einfluss auf das
     Stealth-Level (Spielerentscheidung). Anzeige: HUD „CH 20 FL 20“,

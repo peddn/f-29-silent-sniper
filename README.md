@@ -265,9 +265,11 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Bodenziel/Flugzeug/Täuschkörper (v0.2.9)
 - [x] Störer: ECM (M, ein/aus, sichtbarer) und Infrarotstörer (U, 30 s);
       stärkere SAMs, Start schon mit „RADAR ID“ (v0.2.9)
-- [x] SAMs nach Spieltest: Suchkegel um den Treffpunkt mit Vorhalt, damit
-      Querabfliegen sie nicht mehr abschüttelt; SA-5 dreht schneller; Karte
-      färbt feindliche Raketen nach Lenkart (v0.2.9)
+- [x] SAMs nach Spieltest: Gefährlichkeit über Fahrt, Suchkegel und Resistenz
+      gegen Täuschkörper – Querflug schüttelt die meisten ab, die neue moderne
+      SA-11 (jede dritte SAM-Stellung) kaum; Täuschkörper ohne Obergrenze in der
+      Luft, nur gegen Raketen gegen die eigene Seite; Prüfstand `sam_report`;
+      Karte färbt feindliche Raketen nach Lenkart (v0.2.9)
 - ~~Flak~~ (gestrichen, Spielerentscheidung v0.2.9)
 
 ### v0.3: Missionen
