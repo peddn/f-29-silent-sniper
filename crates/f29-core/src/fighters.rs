@@ -24,10 +24,10 @@
 //!
 //! **Abschuss** (wie im Original): Eine Rakete zerstört, die Kanone braucht
 //! je Typ einige Treffer ([`FighterSpec::hits`]). Der getroffene Jäger stürzt
-//! ab und bleibt als Wrack aus dem Spiel. Gegen jede anfliegende Rakete wirft
-//! er einen passenden Täuschkörper ([`DECOYS`] Stück); ob sie ihm folgt,
-//! entscheidet ihre Resistenz. Verfolgt ihn eine Rakete und ist sie nah,
-//! weicht er aus – je Typ mit eigenen Manövern ([`Evasion`]).
+//! ab und bleibt als Wrack aus dem Spiel. Verfolgt ihn eine Rakete und ist
+//! sie nah, weicht er aus – je Typ mit eigenen Manövern ([`Evasion`]) – und
+//! wirft dabei passende Täuschkörper ([`DECOYS`] Stück); ob sie ihnen
+//! folgt, entscheidet ihre Resistenz.
 
 use crate::atmosphere::G0;
 use crate::detmath;
@@ -35,7 +35,7 @@ use crate::events::EventLog;
 use crate::gun::Gun;
 use crate::math::DVec3;
 use crate::radar::{Exposure, RadarKind, RadarSpec};
-use crate::weapons::WeaponKind;
+use crate::weapons::{DecoyKind, WeaponKind};
 use f29_terrain::{AirfieldKind, Terrain};
 
 /// Jäger je feindlichem Platz.
@@ -58,10 +58,11 @@ pub const GUN_RANGE_M: f64 = 1_200.0;
 pub const GUN_CONE_RAD: f64 = 3.0 * std::f64::consts::PI / 180.0;
 /// Eigener Zufallsstrom je Kanone (plus Nummer des Jägers).
 const STREAM_GUNS: u64 = 0x4A47_554E;
-/// Täuschkörper je Jäger; gegen jede anfliegende Rakete wirft er einen,
-/// sobald sie so nah ist (m).
+/// Täuschkörper je Jäger; beim Ausweichen wirft er alle so viele Sekunden
+/// einen passenden, sobald die Rakete näher als so (m) ist.
 pub const DECOYS: u8 = 4;
-pub const DECOY_RANGE_M: f64 = 1_500.0;
+pub const DECOY_INTERVAL_S: f64 = 1.0;
+pub const DECOY_RANGE_M: f64 = 2_000.0;
 /// Abhebefahrt (m/s) und Beschleunigung beim Rollen (m/s²).
 const ROTATE_MPS: f64 = 90.0;
 const TAKEOFF_ACCEL: f64 = 12.0;
@@ -191,12 +192,12 @@ pub struct Fighter {
     pub contact_tick: Option<u64>,
     /// Erhaltene Kanonentreffer.
     pub hits: u8,
-    /// Restliche Täuschkörper und die Rakete, gegen die er zuletzt einen warf.
+    /// Restliche Täuschkörper und Tick des letzten Wurfs.
     pub decoys: u8,
-    pub decoyed: Option<u32>,
-    /// Nächste Rakete, die ihn verfolgt und nah ist (Ort, Nummer); vom Sim
-    /// vor jedem Schritt gesetzt.
-    pub threat: Option<(DVec3, u32)>,
+    pub decoy_tick: Option<u64>,
+    /// Nächste Rakete, die ihn verfolgt und nah ist (Ort, Nummer, passender
+    /// Täuschkörper); vom Sim zu Beginn jedes Ticks gesetzt.
+    pub threat: Option<(DVec3, u32, DecoyKind)>,
 }
 
 impl Fighter {
@@ -220,7 +221,7 @@ impl Fighter {
             contact_tick: None,
             hits: 0,
             decoys: DECOYS,
-            decoyed: None,
+            decoy_tick: None,
             threat: None,
         }
     }
@@ -277,7 +278,7 @@ impl Fighter {
             && err.abs() > std::f64::consts::FRAC_PI_2
             && DVec3::new(to.x, to.y, 0.0).length() < PATROL_LEG_M;
         // Ausweichen: auf den näheren der beiden Kurse querab zur Rakete.
-        if let Some((m, id)) = self.threat {
+        if let Some((m, id, _)) = self.threat {
             let away = self.position - m;
             let b = detmath::atan2(away.y, away.x);
             let side = |h: f64| detmath::wrap_pi(h - self.heading);

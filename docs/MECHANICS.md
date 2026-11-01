@@ -1530,9 +1530,9 @@ Format jedes Eintrags:
     Meldung „MIG-21 DESTROYED“. Eine Rauchspur fehlt noch.
   - **Kein Ausweichen:** Die Jäger fliegen weiter stur auf das Flugzeug zu
     (Ausweichen kommt mit ihren eigenen Waffen in Etappe 3).
-  - **Täuschkörper:** Je Jäger vier. Gegen jede eigene Rakete, die ihn
-    verfolgt und näher als 1,5 km ist, wirft er einen passenden – Fackel
-    gegen optische, Düppel gegen Radarsuchköpfe. Ob sie ihm folgt,
+  - **Täuschkörper:** Je Jäger vier. Beim Ausweichen (Etappe 3) wirft er,
+    sobald die Rakete näher als 2 km ist, jede Sekunde einen passenden –
+    Fackel gegen optische, Düppel gegen Radarsuchköpfe. Ob sie ihm folgt,
     entscheidet ihre Resistenz wie bei den SAMs (M-021).
   - **AIM-9 Sidewinder:** vier je Schacht; Suchkopf ist das optische System
     (im Spiel Infrarot) – nur ein optisch entdeckter Jäger wird übergeben,
@@ -1547,8 +1547,8 @@ Format jedes Eintrags:
   - **Unsere Werte:** AIM-9 850 m/s, 40°/s, Suchkopf 8 km und ±25°,
     Wirkradius 9 m, Resistenz 0,6; AIM-120 1000 m/s, 30°/s, 30 km und ±30°,
     12 m, Resistenz 0,7. Gemessen über 30 Anflüge von vorn: ohne
-    Täuschkörper trifft jede, mit ihnen die AIM-9 knapp jede zweite, die
-    AIM-120 etwa zwei von drei.
+    Täuschkörper trifft jede, mit ihnen (seit Etappe 3 im Querflug
+    geworfen) die AIM-9 etwa zwei von fünf, die AIM-120 gut jede zweite.
 - **Lesephase Etappe 3 (eigene Worte, keine Werte):** Referenz
   `updateObjects` (Kampfteil) und `fireAirThreat` in `src/egcombat.c`.
   - **Raketen der Jäger:** Jeder Jäger trägt einen Raketentyp aus derselben
@@ -1600,12 +1600,16 @@ Format jedes Eintrags:
     6 km, dreht er auf den näheren Kurs querab zu ihr. Die MiG-21 kennt nur
     diese Kurve, die MiG-29 wechselt je Rakete zwischen ihr und dem
     Abschwung (querab und in den Tiefflug, wo Gelände den optischen
-    Suchkopf abschatten kann). Die Manövertabelle des Originals entfällt.
+    Suchkopf abschatten kann). Dabei wirft er ab 2 km jede Sekunde einen
+    Täuschkörper, solange sein Vorrat reicht (Spielerwunsch). Die
+    Manövertabelle des Originals entfällt.
   - **Gemessen:** Gegen AIM-9 und AIM-120 bringt das Ausweichen bei
     Anflügen von vorn kaum etwas – die Raketen sind schnell genug, dass ihr
     Vorhaltwinkel im Suchkegel bleibt, und die Jäger drehen langsam. Härtere
     Kurven und engere Suchkegel wurden ausprobiert, machten die Täuschkörper
-    aber weniger wirksam; offen für Abstimmung.
+    aber weniger wirksam. Wirksam sind die im Querflug geworfenen
+    Täuschkörper: über 30 Anflüge trifft die AIM-9 12-mal, die AIM-120
+    16-mal (vorher 15 bzw. 20).
   - **Kein Radarwarner** (Spielerentscheidung).
 - **Status:** Etappe 1 umgesetzt (v0.2.9); Etappe 2 umgesetzt (v0.2.9):
   Abschuss, Kanone mit Vorhaltemarke, AIM-9, AIM-120, Täuschkörper der Jäger;

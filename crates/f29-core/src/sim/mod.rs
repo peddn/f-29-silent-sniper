@@ -422,12 +422,12 @@ impl Sim {
         }
         // Waffen im Flug fliegen auch nach einem Absturz weiter.
         self.step_weapons();
+        self.mark_threats();
         self.fighter_decoys();
         self.step_gun();
         if self.status != Status::Flying {
             self.gun.trigger(self.tick, false, DVec3::ZERO, DVec3::ZERO, DQuat::IDENTITY, DT);
             self.radar.step(self.tick, &self.targets, None);
-            self.mark_threats();
             self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), None);
             return;
         }
@@ -445,7 +445,6 @@ impl Sim {
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
         let exposure = self.exposure();
         self.radar.step(self.tick, &self.targets, Some(&exposure));
-        self.mark_threats();
         self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), Some(&exposure));
         self.launch_sams();
         self.launch_air();
@@ -621,40 +620,28 @@ impl Sim {
             if let Some(Track::Fighter(i)) = w.target {
                 let f = &mut self.fighters.list[i];
                 let d = (f.position - w.position).length();
-                if d < fighters::EVADE_RANGE_M && f.threat.is_none_or(|(p, _)| d < (f.position - p).length())
+                let optical = w.kind.spec().seeker == Seeker::Optical;
+                let kind = if optical { DecoyKind::Flare } else { DecoyKind::Chaff };
+                if d < fighters::EVADE_RANGE_M && f.threat.is_none_or(|(p, ..)| d < (f.position - p).length())
                 {
-                    f.threat = Some((w.position, w.id));
+                    f.threat = Some((w.position, w.id, kind));
                 }
             }
         }
     }
 
-    /// Jäger werfen gegen jede eigene Rakete, die sie verfolgt und nah ist,
-    /// einen passenden Täuschkörper (M-022).
+    /// Weicht ein Jäger aus, wirft er alle [`fighters::DECOY_INTERVAL_S`]
+    /// einen passenden Täuschkörper, solange sein Vorrat reicht (M-022).
     fn fighter_decoys(&mut self) {
-        let threats: Vec<(usize, u32, DecoyKind)> = self
-            .stores
-            .in_flight
-            .iter()
-            .filter_map(|w| match w.target {
-                Some(Track::Fighter(i)) if w.tracking && w.owner.is_none() => {
-                    let near =
-                        (self.fighters.list[i].position - w.position).length() < fighters::DECOY_RANGE_M;
-                    let kind = if w.kind.spec().seeker == Seeker::Optical {
-                        DecoyKind::Flare
-                    } else {
-                        DecoyKind::Chaff
-                    };
-                    near.then_some((i, w.id, kind))
-                }
-                _ => None,
-            })
-            .collect();
-        for (i, id, kind) in threats {
-            let f = &mut self.fighters.list[i];
-            if f.decoys > 0 && f.decoyed != Some(id) && f.airborne() {
+        let every = (fighters::DECOY_INTERVAL_S / DT) as u64;
+        for (i, f) in self.fighters.list.iter_mut().enumerate() {
+            let Some((m, _, kind)) = f.threat else { continue };
+            if (m - f.position).length() < fighters::DECOY_RANGE_M
+                && f.decoys > 0
+                && f.decoy_tick.is_none_or(|t| self.tick >= t + every)
+            {
                 f.decoys -= 1;
-                f.decoyed = Some(id);
+                f.decoy_tick = Some(self.tick);
                 self.stores.push_decoy(self.tick, kind, f.position, Some(Launcher::Fighter(i)));
             }
         }
