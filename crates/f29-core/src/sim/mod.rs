@@ -338,7 +338,7 @@ impl Sim {
             .max(0.0);
         let route = build_route(&terrain, config.seed, sp);
         let targets = targets::generate(&terrain, seed, &route);
-        let fighters = Fighters::new(&terrain);
+        let fighters = Fighters::new(&terrain, seed);
         let sensors = Sensors { night: sp.night, ..Sensors::default() };
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
@@ -447,6 +447,7 @@ impl Sim {
         self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), Some(&exposure));
         self.launch_sams();
         self.launch_air();
+        self.fighter_guns();
         // Neu gewählt: Abschusslage sofort, sonst im Takt der Bombenanzeige.
         let guided = self.stores.selected_weapon().is_some_and(|k| k.is_guided());
         let lock = self.ground_pick();
@@ -493,6 +494,34 @@ impl Sim {
             if f.airborne() && f.contact_tick == Some(self.tick) && ahead >= fighters::LAUNCH_CONE_RAD.cos() {
                 let kind = f.spec().missile;
                 self.stores.launch_air(self.tick, kind, f.id as usize, f.position, f.velocity(), a);
+            }
+        }
+    }
+
+    /// Kanonen der Jäger: Feuer, solange das Flugzeug nah und fast genau vor
+    /// der Nase eines verfolgenden Jägers liegt. Jeder Treffer kostet Schub
+    /// und verschlechtert mit 15 % ein zufälliges System (M-015).
+    fn fighter_guns(&mut self) {
+        let a = self.aircraft.position;
+        for i in 0..self.fighters.list.len() {
+            let f = self.fighters.list[i];
+            let to = a - f.position;
+            let nose = f.velocity().normalize_or_zero();
+            let fire = f.mode == fighters::Mode::Pursue
+                && to.length() < fighters::GUN_RANGE_M
+                && nose.dot(to.normalize_or_zero()) >= fighters::GUN_CONE_RAD.cos();
+            let gun = &mut self.fighters.guns[i];
+            gun.trigger(self.tick, fire, f.position, f.velocity(), f.attitude(), DT);
+            gun.step(self.tick, &self.terrain, &mut [], &[(0, a)], f.position, DT);
+            let hits =
+                gun.events.iter().filter(|&&(t, e)| t == self.tick && e == GunEvent::AirHit(0)).count();
+            for _ in 0..hits {
+                self.fighters.events.push(self.tick, FighterEvent::GunHit { kind: f.kind });
+                if !self.config.spawn.invulnerable {
+                    let system = self.stores.roll_gun_system();
+                    self.systems.gun_hit(system);
+                    self.apply_systems();
+                }
             }
         }
     }
@@ -617,7 +646,7 @@ impl Sim {
             self.fighters.list.iter().filter(|f| f.airborne()).map(|f| (f.id as usize, f.position)).collect();
         self.gun.step(self.tick, &self.terrain, &mut self.targets, &jets, self.aircraft.position, DT);
         for (_, e) in self.gun.events.iter().filter(|(t, _)| *t == self.tick) {
-            if let GunEvent::FighterHit(i) = *e {
+            if let GunEvent::AirHit(i) = *e {
                 self.fighters.hit(self.tick, i, false);
             }
         }

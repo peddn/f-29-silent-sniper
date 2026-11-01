@@ -871,6 +871,13 @@ impl Stores {
         }
     }
 
+    /// Kanonentreffer: mit [`crate::systems::GUN_SYSTEM_CHANCE`] ein
+    /// zufälliges Bordsystem, das schlechter wird.
+    pub fn roll_gun_system(&mut self) -> Option<System> {
+        let roll = self.rng.next_f64() < crate::systems::GUN_SYSTEM_CHANCE;
+        roll.then(|| System::ALL[self.rng.next_u32() as usize % System::ALL.len()])
+    }
+
     /// Zufällige, verschiedene Bordsysteme für einen Raketentreffer.
     fn pick_systems(&mut self) -> [System; HIT_SYSTEMS] {
         let mut pool = System::ALL.to_vec();

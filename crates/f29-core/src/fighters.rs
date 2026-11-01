@@ -31,6 +31,7 @@
 use crate::atmosphere::G0;
 use crate::detmath;
 use crate::events::EventLog;
+use crate::gun::Gun;
 use crate::math::DVec3;
 use crate::radar::{Exposure, RadarKind, RadarSpec};
 use crate::weapons::WeaponKind;
@@ -50,6 +51,12 @@ const ARRIVE_M: f64 = 3_000.0;
 const PATROL_LEG_M: f64 = 12_000.0;
 /// Rakete nur starten, wenn das Flugzeug so nah an der Nase liegt (rad).
 pub const LAUNCH_CONE_RAD: f64 = 30.0 * std::f64::consts::PI / 180.0;
+/// Kanone: feuert, wenn das Flugzeug näher als so (m) und so nah an der
+/// Nase (rad) liegt (wie im Original: sehr nah, fast genau voraus).
+pub const GUN_RANGE_M: f64 = 1_200.0;
+pub const GUN_CONE_RAD: f64 = 3.0 * std::f64::consts::PI / 180.0;
+/// Eigener Zufallsstrom je Kanone (plus Nummer des Jägers).
+const STREAM_GUNS: u64 = 0x4A47_554E;
 /// Täuschkörper je Jäger; gegen jede anfliegende Rakete wirft er einen,
 /// sobald sie so nah ist (m).
 pub const DECOYS: u8 = 4;
@@ -216,6 +223,11 @@ impl Fighter {
         DVec3::new(ch * cp, sh * cp, -sp) * self.speed
     }
 
+    /// Lage (Kurs, Nicklage, Querlage).
+    pub fn attitude(&self) -> crate::math::DQuat {
+        crate::math::DQuat::from_euler(self.heading, self.pitch, self.bank)
+    }
+
     /// Sein Radar hat das Flugzeug beim letzten Umlauf erfasst: Er
     /// beleuchtet es für seine Rakete.
     pub fn painting(&self, tick: u64, dt: f64) -> bool {
@@ -283,12 +295,18 @@ pub enum FighterEvent {
     Destroyed {
         kind: FighterKind,
     },
+    /// Seine Kanone hat das Flugzeug getroffen.
+    GunHit {
+        kind: FighterKind,
+    },
 }
 
 /// Alle feindlichen Jäger.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Fighters {
     pub list: Vec<Fighter>,
+    /// Kanone je Jäger (gleicher Index).
+    pub guns: Vec<Gun>,
     /// Letzter Radarkontakt eines Jägers (Ort, Tick).
     pub contact: Option<(DVec3, u64)>,
     pub events: EventLog<FighterEvent>,
@@ -297,7 +315,7 @@ pub struct Fighters {
 impl Fighters {
     /// [`PER_BASE`] Jäger auf jedem feindlichen Platz bereit: drei MiG-21,
     /// zwei MiG-29.
-    pub fn new(terrain: &Terrain) -> Self {
+    pub fn new(terrain: &Terrain, seed: u64) -> Self {
         let mut list = Vec::new();
         for (base, _) in terrain.runways().iter().enumerate().filter(|(_, r)| r.kind == AirfieldKind::Enemy) {
             for k in 0..PER_BASE {
@@ -305,7 +323,8 @@ impl Fighters {
                 list.push(Fighter::parked(list.len() as u32, kind, base, terrain));
             }
         }
-        Self { list, contact: None, events: EventLog::default() }
+        let guns = (0..list.len() as u64).map(|k| Gun::with_stream(seed, STREAM_GUNS + k)).collect();
+        Self { list, guns, contact: None, events: EventLog::default() }
     }
 
     /// Ein Tick. `alert` ist der jüngste Ping-Ort der Radarstellungen,
@@ -455,7 +474,7 @@ mod tests {
 
     fn setup() -> (Terrain, Fighters) {
         let terrain = Terrain::new(0x0F29);
-        let f = Fighters::new(&terrain);
+        let f = Fighters::new(&terrain, 1);
         (terrain, f)
     }
 

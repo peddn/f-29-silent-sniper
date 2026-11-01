@@ -113,19 +113,20 @@ impl Sim {
                 h.f64(p.z);
             }
         }
-        let g = &self.gun;
-        h.u64(u64::from(g.rounds) | u64::from(g.trigger) << 16);
-        h.f64(g.pending());
-        let (gs, gi) = g.rng_state();
-        h.u64(gs);
-        h.u64(gi);
-        for r in &g.in_flight {
-            for v in [r.position, r.velocity] {
-                h.f64(v.x);
-                h.f64(v.y);
-                h.f64(v.z);
+        for g in std::iter::once(&self.gun).chain(&self.fighters.guns) {
+            h.u64(u64::from(g.rounds) | u64::from(g.trigger) << 16);
+            h.f64(g.pending());
+            let (gs, gi) = g.rng_state();
+            h.u64(gs);
+            h.u64(gi);
+            for r in &g.in_flight {
+                for v in [r.position, r.velocity] {
+                    h.f64(v.x);
+                    h.f64(v.y);
+                    h.f64(v.z);
+                }
+                h.f64(r.age_s);
             }
-            h.f64(r.age_s);
         }
         h.u64(u64::from(self.sensors.radar_on) | u64::from(self.sensors.night) << 1);
         for t in &self.targets {

@@ -69,8 +69,9 @@ pub const FIGHTER_RADIUS_M: f64 = 7.0;
 pub enum GunEvent {
     /// Ziel durch Kanonentreffer zerstört.
     Destroyed(usize),
-    /// Treffer am Jäger (Index in `Fighters::list`).
-    FighterHit(usize),
+    /// Treffer an einem Flugzeug (Index in der übergebenen Liste: Jäger
+    /// für die eigene Kanone, das eigene Flugzeug für die der Jäger).
+    AirHit(usize),
     /// Abzug bei leerer Kanone.
     Empty,
 }
@@ -91,12 +92,17 @@ pub struct Gun {
 
 impl Gun {
     pub fn new(seed: u64) -> Self {
+        Self::with_stream(seed, STREAM_GUN)
+    }
+
+    /// Mit eigenem Zufallsstrom (die Kanonen der Jäger).
+    pub fn with_stream(seed: u64, stream: u64) -> Self {
         Self {
             rounds: ROUNDS,
             in_flight: Vec::new(),
             pending: 0.0,
             trigger: false,
-            rng: Pcg32::new(seed, STREAM_GUN),
+            rng: Pcg32::new(seed, stream),
             impacts: Vec::new(),
             events: EventLog::default(),
         }
@@ -156,8 +162,8 @@ impl Gun {
         }
     }
 
-    /// Patronen bewegen; Treffer an Zielen, Jägern (`fighters`: Index, Lage)
-    /// und Gelände auswerten.
+    /// Patronen bewegen; Treffer an Zielen, Flugzeugen (`fighters`: Index,
+    /// Lage) und Gelände auswerten.
     pub fn step(
         &mut self,
         tick: u64,
@@ -193,7 +199,7 @@ impl Gun {
                 ((c - at).length() < FIGHTER_RADIUS_M).then_some((i, at))
             });
             let outcome = if let Some((i, at)) = jet {
-                self.events.push(tick, GunEvent::FighterHit(i));
+                self.events.push(tick, GunEvent::AirHit(i));
                 Some((at, true))
             } else if let Some((i, at)) = hit {
                 let result = Stores::apply_damage(&mut targets[i], i, DAMAGE_PER_HIT);
@@ -392,7 +398,7 @@ mod tests {
                 jet += jet_vel * DT;
                 pos += vel * DT;
             }
-            gun.events.iter().filter(|(_, e)| *e == GunEvent::FighterHit(0)).count()
+            gun.events.iter().filter(|(_, e)| *e == GunEvent::AirHit(0)).count()
         };
         assert!(hits(true) >= 10, "mit Vorhalt nur {} Treffer", hits(true));
         assert_eq!(hits(false), 0, "ohne Vorhalt getroffen");

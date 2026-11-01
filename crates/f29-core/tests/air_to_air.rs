@@ -27,7 +27,7 @@ fn duel_with(kind: WeaponKind, jet: usize, ahead: f64, visible: bool) -> Sim {
         throttle: 0.8,
         loadout: Loadout([Some(kind), None, None, None]),
         visible,
-        invulnerable: true,
+        invulnerable: !visible,
         ..Spawn::default()
     };
     let mut sim = Sim::new(SimConfig { seed: SEED, spawn });
@@ -149,4 +149,19 @@ fn fighters_fire_their_missiles_in_range() {
 fn stealthy_aircraft_draws_no_fire() {
     let mut sim = duel_with(WeaponKind::Sidewinder, 3, 34_000.0, false);
     assert!(first_air_launch(&mut sim, 20.0).is_none());
+}
+
+/// Ein Jäger dicht hinter dem Flugzeug schießt mit der Kanone: Jeder Treffer
+/// kostet Höchstschub, mit Meldung.
+#[test]
+fn fighter_gun_costs_thrust() {
+    use f29_core::systems::System;
+    let mut sim = duel_with(WeaponKind::Sidewinder, 0, 1.0, true);
+    let a = sim.aircraft().position;
+    sim.fighters_mut().put_in_air(0, a - DVec3::new(900.0, 0.0, 0.0), 0.0);
+    fly(&mut sim, 15.0, 0, 0);
+    let s = sim.systems();
+    assert!(s.gun_hits > 0, "keine Kanonentreffer");
+    assert!(s.capability(System::Engine) < 1.0 - 0.019 * f64::from(s.gun_hits).min(10.0));
+    assert!(sim.flight_data().weapon_messages.iter().any(|m| m.text == "MIG-21 GUN HIT"));
 }

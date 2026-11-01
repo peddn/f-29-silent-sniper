@@ -141,7 +141,8 @@ fn setup(
     });
 }
 
-/// Leuchtspur: eine Entität je Patrone im Flug, in Flugrichtung gestreckt.
+/// Leuchtspur: eine Entität je Patrone im Flug (eigene Kanone und die der
+/// Jäger), in Flugrichtung gestreckt.
 fn sync_tracers(
     mut commands: Commands,
     state: Res<SimState>,
@@ -149,7 +150,8 @@ fn sync_tracers(
     mut visuals: ResMut<WeaponVisuals>,
     mut tracers: Query<(&mut Transform, &mut Visibility), With<Tracer>>,
 ) {
-    let rounds = &state.sim.gun().in_flight;
+    let guns = std::iter::once(state.sim.gun()).chain(&state.sim.fighters().guns);
+    let rounds: Vec<_> = guns.flat_map(|g| g.in_flight.iter()).collect();
     while visuals.tracers.len() < rounds.len() {
         let e = commands
             .spawn((

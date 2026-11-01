@@ -8,7 +8,7 @@
 //!
 //! | System | Wirkung |
 //! |---|---|
-//! | Triebwerk | Triebwerksstellung höchstens Leistung (auch bei Vollgas), ausgefallen = kein Schub; nach Raketentreffern 8 % je Treffer weniger |
+//! | Triebwerk | Triebwerksstellung höchstens Leistung (auch bei Vollgas), ausgefallen = kein Schub; nach Raketentreffern 8 % je Treffer weniger, je Kanonentreffer 2 % |
 //! | Treibstoff | Leck: bis [`FUEL_LEAK_MAX_KGPS`] zusätzlich |
 //! | Hydraulik | Klappen, Fahrwerk, Schachtklappen langsamer; ausgefallen = blockiert |
 //! | Flugsteuerung | Drehraten × Leistung, ausgefallen = Notsteuerung ([`CONTROL_BACKUP`]) |
@@ -28,6 +28,10 @@ pub const HIT_CAPABILITY: f64 = 0.5;
 /// Höchstschub je Treffer bei beschädigtem Triebwerk (Original 4 %, hier
 /// doppelt so viel, Spielerwunsch v0.2.9; ausfallen kann es nicht).
 pub const THRUST_LOSS_PER_HIT: f64 = 0.08;
+/// Jeder Kanonentreffer kostet so viel Höchstschub und verschlechtert mit
+/// [`GUN_SYSTEM_CHANCE`] ein zufälliges System (Spielerentscheidung v0.2.9).
+pub const GUN_THRUST_LOSS: f64 = 0.02;
+pub const GUN_SYSTEM_CHANCE: f64 = 0.15;
 
 /// Ein Bordsystem.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -122,8 +126,9 @@ impl Default for Health {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Systems {
     conditions: [Condition; 8],
-    /// Raketentreffer bisher.
+    /// Raketen- und Kanonentreffer bisher.
     pub hits: u32,
+    pub gun_hits: u32,
 }
 
 impl Systems {
@@ -146,16 +151,39 @@ impl Systems {
     pub fn missile_hit(&mut self, hit: &[System]) {
         self.hits += 1;
         for &s in hit {
-            let next = match self.get(s) {
-                _ if s == System::Engine => Condition::Degraded(1.0),
-                Condition::Ok => Condition::Degraded(HIT_CAPABILITY),
-                _ => Condition::Failed,
-            };
-            self.set(s, next);
+            self.worsen(s);
         }
+        self.update_thrust();
+    }
+
+    /// Ein Kanonentreffer: kostet Höchstschub ([`GUN_THRUST_LOSS`]) und
+    /// verschlechtert `system`, falls gewürfelt.
+    pub fn gun_hit(&mut self, system: Option<System>) {
+        self.gun_hits += 1;
+        self.worsen(System::Engine);
+        if let Some(s) = system {
+            self.worsen(s);
+        }
+        self.update_thrust();
+    }
+
+    /// Intakt → halbe Leistung, eingeschränkt → ausgefallen; das Triebwerk
+    /// nur „beschädigt“.
+    fn worsen(&mut self, s: System) {
+        let next = match self.get(s) {
+            _ if s == System::Engine => Condition::Degraded(1.0),
+            Condition::Ok => Condition::Degraded(HIT_CAPABILITY),
+            _ => Condition::Failed,
+        };
+        self.set(s, next);
+    }
+
+    /// Höchstschub des beschädigten Triebwerks aus allen Treffern.
+    fn update_thrust(&mut self) {
         if !self.get(System::Engine).is_ok() {
-            let thrust = (1.0 - THRUST_LOSS_PER_HIT * f64::from(self.hits)).max(0.0);
-            self.set(System::Engine, Condition::Degraded(thrust));
+            let loss =
+                THRUST_LOSS_PER_HIT * f64::from(self.hits) + GUN_THRUST_LOSS * f64::from(self.gun_hits);
+            self.set(System::Engine, Condition::Degraded((1.0 - loss).max(0.0)));
         }
     }
 
@@ -189,7 +217,7 @@ impl Systems {
                 Condition::Degraded(v) => (1, *v),
                 Condition::Failed => (2, 0.0),
             })
-            .chain(std::iter::once((3, f64::from(self.hits))))
+            .chain([(3, f64::from(self.hits)), (4, f64::from(self.gun_hits))])
     }
 }
 

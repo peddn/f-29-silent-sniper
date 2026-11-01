@@ -1020,7 +1020,7 @@ impl Sim {
                     }
                     GunEvent::Destroyed(i) => (format!("GUN {} DESTROYED", name(i)), false),
                     GunEvent::Empty => ("GUN EMPTY".to_string(), true),
-                    GunEvent::FighterHit(_) => return None,
+                    GunEvent::AirHit(_) => return None,
                 };
                 Some(message(tick, text))
             }))
@@ -1035,6 +1035,7 @@ impl Sim {
                         (format!("{} - {} LANDED", base(b), kind.spec().label), false)
                     }
                     FighterEvent::Destroyed { kind } => (format!("{} DESTROYED", kind.spec().label), false),
+                    FighterEvent::GunHit { kind } => (format!("{} GUN HIT", kind.spec().label), true),
                 };
                 message(tick, text)
             }))
