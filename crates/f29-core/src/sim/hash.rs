@@ -102,6 +102,7 @@ impl Sim {
                 h.f64(v);
             }
             h.u64(f.contact_tick.unwrap_or(u64::MAX) ^ u64::from(f.hits) << 56);
+            h.u64(u64::from(f.decoys) << 32 | u64::from(f.decoyed.unwrap_or(u32::MAX)));
         }
         for s in &self.radar.sites {
             h.u64(u64::from(s.alert));

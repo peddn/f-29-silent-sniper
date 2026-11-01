@@ -709,12 +709,18 @@ impl Stores {
             return;
         }
         *stock -= 1;
+        self.push_decoy(tick, kind, position, None);
+    }
+
+    /// Täuschkörper bei `position` in die Luft; `owner` wie
+    /// [`Decoy::owner`] (feindlich: der Jäger).
+    pub fn push_decoy(&mut self, tick: u64, kind: DecoyKind, position: DVec3, owner: Option<usize>) {
         let id = self.next_id;
         self.next_id += 1;
         // Zufall und Abwurfzeitpunkt: Der k-te Täuschkörper einer Mission
         // würfelt nicht immer gleich.
         let salt = self.rng.next_u32() ^ tick as u32;
-        cm.decoys.push(Decoy { id, kind, owner: None, position, age_s: 0.0, salt });
+        self.countermeasures.decoys.push(Decoy { id, kind, owner, position, age_s: 0.0, salt });
     }
 
     /// Alle Waffen im Flug einen Zeitschritt weiterbewegen; Zünder und

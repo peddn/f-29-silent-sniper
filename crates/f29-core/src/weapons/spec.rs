@@ -338,7 +338,9 @@ const SPECS: [WeaponSpec; 11] = [
         lethal_radius_m: 9.0,
         frag_radius_m: 0.0,
         life_s: 25.0,
-        decoy_resistance: 0.3,
+        // Jäger werfen gegen jede Rakete eine Fackel: etwa jede zweite
+        // bis dritte geht vorbei.
+        decoy_resistance: 0.6,
         anti_air: true,
         ..MISSILE
     },

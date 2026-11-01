@@ -47,6 +47,7 @@ fn shoot(sim: &mut Sim) -> bool {
 #[test]
 fn sidewinder_shoots_down_an_oncoming_fighter() {
     let mut sim = duel(WeaponKind::Sidewinder, 7_000.0);
+    sim.fighters_mut().list[0].decoys = 0;
     let t = sim.flight_data().air_target.expect("Jäger gewählt");
     assert!(t.locked, "nicht erfasst: {:.0} m", t.range);
     assert!(shoot(&mut sim), "kein Treffer");
@@ -62,4 +63,25 @@ fn sidewinder_does_not_lock_beyond_its_range() {
     let sim = duel(WeaponKind::Sidewinder, 14_000.0);
     let t = sim.flight_data().air_target.expect("Jäger gewählt");
     assert!(!t.locked, "auf {:.0} m erfasst", t.range);
+}
+
+/// Kill rate über 30 Abstände: ohne Täuschkörper trifft jede Rakete, mit
+/// ihnen (einer je Rakete) etwa jede zweite.
+fn kill_rate(kind: WeaponKind, decoys: bool, from: f64, step_m: f64) -> usize {
+    (0..30)
+        .filter(|&k| {
+            let mut sim = duel(kind, from + step_m * k as f64);
+            if !decoys {
+                sim.fighters_mut().list[0].decoys = 0;
+            }
+            sim.flight_data().air_target.is_some_and(|t| t.locked) && shoot(&mut sim)
+        })
+        .count()
+}
+
+#[test]
+fn fighter_flares_save_about_every_second_jet() {
+    assert_eq!(kill_rate(WeaponKind::Sidewinder, false, 4_000.0, 120.0), 30);
+    let kills = kill_rate(WeaponKind::Sidewinder, true, 4_000.0, 120.0);
+    assert!((9..=21).contains(&kills), "{kills}/30 Abschüsse");
 }

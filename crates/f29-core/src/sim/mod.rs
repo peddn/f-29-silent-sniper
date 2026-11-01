@@ -2,7 +2,7 @@
 
 use crate::controls::{ControlFrame, flags, weapon_flags};
 use crate::detmath;
-use crate::fighters::{FighterEvent, Fighters};
+use crate::fighters::{self, FighterEvent, Fighters};
 use crate::flight::{self, AeroData, AircraftState};
 use crate::gun::{self, Gun, GunEvent};
 use crate::math::{DQuat, DVec3};
@@ -13,7 +13,8 @@ use crate::sensors::{self, LookDir, Pick, Seen, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
 use crate::weapons::{
-    self, Bay, DecoyKind, ImpactResult, LaunchZone, Loadout, Stores, Track, Weapon, WeaponEvent, WeaponKind,
+    self, Bay, DecoyKind, ImpactResult, LaunchZone, Loadout, Seeker, Stores, Track, Weapon, WeaponEvent,
+    WeaponKind,
 };
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_terrain::{AirfieldKind, Terrain};
@@ -421,6 +422,7 @@ impl Sim {
         }
         // Waffen im Flug fliegen auch nach einem Absturz weiter.
         self.step_weapons();
+        self.fighter_decoys();
         self.step_gun();
         if self.status != Status::Flying {
             self.gun.trigger(self.tick, false, DVec3::ZERO, DVec3::ZERO, DQuat::IDENTITY, DT);
@@ -560,6 +562,37 @@ impl Sim {
             let launch = launch!(self);
             let dropped = if self.aircraft.on_ground { 0.0 } else { self.stores.release(&launch) };
             self.aircraft.stores_kg = (self.aircraft.stores_kg - dropped).max(0.0);
+        }
+    }
+
+    /// Jäger werfen gegen jede eigene Rakete, die sie verfolgt und nah ist,
+    /// einen passenden Täuschkörper (M-022).
+    fn fighter_decoys(&mut self) {
+        let threats: Vec<(usize, u32, DecoyKind)> = self
+            .stores
+            .in_flight
+            .iter()
+            .filter_map(|w| match w.target {
+                Some(Track::Fighter(i)) if w.tracking && w.owner.is_none() => {
+                    let near =
+                        (self.fighters.list[i].position - w.position).length() < fighters::DECOY_RANGE_M;
+                    let kind = if w.kind.spec().seeker == Seeker::Optical {
+                        DecoyKind::Flare
+                    } else {
+                        DecoyKind::Chaff
+                    };
+                    near.then_some((i, w.id, kind))
+                }
+                _ => None,
+            })
+            .collect();
+        for (i, id, kind) in threats {
+            let f = &mut self.fighters.list[i];
+            if f.decoys > 0 && f.decoyed != Some(id) && f.airborne() {
+                f.decoys -= 1;
+                f.decoyed = Some(id);
+                self.stores.push_decoy(self.tick, kind, f.position, Some(i));
+            }
         }
     }
 

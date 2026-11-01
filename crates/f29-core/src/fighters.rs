@@ -24,7 +24,9 @@
 //!
 //! **Abschuss** (wie im Original): Eine Rakete zerstört, die Kanone braucht
 //! je Typ einige Treffer ([`FighterSpec::hits`]). Der getroffene Jäger stürzt
-//! ab und bleibt als Wrack aus dem Spiel.
+//! ab und bleibt als Wrack aus dem Spiel. Gegen jede anfliegende Rakete wirft
+//! er einen passenden Täuschkörper ([`DECOYS`] Stück); ob sie ihm folgt,
+//! entscheidet ihre Resistenz.
 
 use crate::atmosphere::G0;
 use crate::detmath;
@@ -45,6 +47,10 @@ const MIN_AGL_M: f64 = 250.0;
 const ARRIVE_M: f64 = 3_000.0;
 /// Patrouille: so weit (m) fliegt er nach dem Überflug geradeaus weiter.
 const PATROL_LEG_M: f64 = 12_000.0;
+/// Täuschkörper je Jäger; gegen jede anfliegende Rakete wirft er einen,
+/// sobald sie so nah ist (m).
+pub const DECOYS: u8 = 4;
+pub const DECOY_RANGE_M: f64 = 1_500.0;
 /// Abhebefahrt (m/s) und Beschleunigung beim Rollen (m/s²).
 const ROTATE_MPS: f64 = 90.0;
 const TAKEOFF_ACCEL: f64 = 12.0;
@@ -152,6 +158,9 @@ pub struct Fighter {
     pub contact_tick: Option<u64>,
     /// Erhaltene Kanonentreffer.
     pub hits: u8,
+    /// Restliche Täuschkörper und die Rakete, gegen die er zuletzt einen warf.
+    pub decoys: u8,
+    pub decoyed: Option<u32>,
 }
 
 impl Fighter {
@@ -174,6 +183,8 @@ impl Fighter {
             goal: position,
             contact_tick: None,
             hits: 0,
+            decoys: DECOYS,
+            decoyed: None,
         }
     }
 
