@@ -9,8 +9,7 @@ use crate::math::{DQuat, DVec3};
 use crate::nav::{self, Steerpoint};
 use crate::radar::{Exposure, RadarEvent, RadarKind, RadarNet};
 use crate::rng::Pcg32;
-use crate::sensors::Pick;
-use crate::sensors::{self, LookDir, Sensors};
+use crate::sensors::{self, LookDir, Pick, Seen, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
 use crate::weapons::{
@@ -223,8 +222,8 @@ macro_rules! launch {
             position: $sim.aircraft.position,
             velocity: $sim.aircraft.velocity,
             attitude: $sim.aircraft.attitude,
-            lock: $sim.sensors.lock.map(|l| l.target),
-            lock_optical: $sim.sensors.lock.is_some_and(|l| l.optical),
+            lock: $sim.picks.ground.index,
+            lock_optical: $sim.picks.ground.seen.optical,
             targets: &$sim.targets,
             terrain: &$sim.terrain,
             bay_ok: !$sim.systems.get(System::WeaponBay).is_failed(),
@@ -257,9 +256,8 @@ pub struct Sim {
     /// Feindliche Radarstellungen mit Alarmstufen (M-020).
     radar: RadarNet,
     fighters: Fighters,
-    /// Gewählter Jäger bzw. gewählte Landebahn (M-013, M-022).
-    air: Pick,
-    runway: Pick,
+    /// Gewähltes Ziel je Zielart (M-013, M-022).
+    picks: Picks,
     systems: Systems,
     /// Aufschlag (Punkt, Flugzeit) einer jetzt abgefeuerten Patrone; abgeleitet.
     gun_prediction: Option<(DVec3, f64)>,
@@ -267,11 +265,22 @@ pub struct Sim {
     /// abgeleitet, nicht Teil des Zustandshashes.
     bomb_prediction: Option<(DVec3, f64)>,
     /// Vorausberechnete Abschusslage der gewählten Lenkwaffe: (Ziel, Zone).
-    launch_zone: Option<(sensors::Lock, weapons::LaunchZone)>,
-    /// Ziele, die die eigenen Sensoren erfassen (sonst nur AWACS-Datalink);
-    /// reihum aktualisiert, abgeleitet, nicht Teil des Zustandshashes.
-    own_contacts: Vec<bool>,
+    launch_zone: Option<((usize, Seen), weapons::LaunchZone)>,
+    /// Bodenziele und Jäger (nach Nummer), die die eigenen Sensoren
+    /// entdecken (sonst nur AWACS-Datalink); Bodenziele reihum aktualisiert.
+    /// Abgeleitet, nicht Teil des Zustandshashes.
+    ground_seen: Vec<Seen>,
+    fighter_seen: Vec<Seen>,
     contact_cursor: usize,
+}
+
+/// Gewähltes Ziel je Zielart; der HUD-Modus bestimmt, welche Auswahl die
+/// Richtungstasten bedienen.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Picks {
+    pub ground: Pick,
+    pub air: Pick,
+    pub runway: Pick,
 }
 
 impl Sim {
@@ -322,8 +331,7 @@ impl Sim {
         let route = build_route(&terrain, config.seed, sp);
         let targets = targets::generate(&terrain, seed, &route);
         let fighters = Fighters::new(&terrain);
-        let mut sensors = Sensors { night: sp.night, ..Sensors::default() };
-        sensors.update(&targets, &terrain, aircraft.position, aircraft.attitude.to_euler().0);
+        let sensors = Sensors { night: sp.night, ..Sensors::default() };
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
         let mut sim = Self {
@@ -346,16 +354,18 @@ impl Sim {
             gun: Gun::new(seed),
             radar: RadarNet::default(),
             fighters,
-            air: Pick::default(),
-            runway: Pick::default(),
+            picks: Picks::default(),
             systems: Systems::default(),
             gun_prediction: None,
             bomb_prediction: None,
             launch_zone: None,
-            own_contacts: Vec::new(),
+            ground_seen: Vec::new(),
+            fighter_seen: Vec::new(),
             contact_cursor: 0,
         };
-        sim.own_contacts = vec![false; sim.targets.len()];
+        sim.ground_seen = vec![Seen::default(); sim.targets.len()];
+        sim.fighter_seen = vec![Seen::default(); sim.fighters.list.len()];
+        sim.pick(MarkKind::Ground, None);
         sim.radar = RadarNet::new(&sim.targets);
         for _ in 0..sim.targets.len().div_ceil(CONTACTS_PER_UPDATE) {
             sim.update_contacts();
@@ -429,7 +439,7 @@ impl Sim {
         self.launch_sams();
         // Neu aufgeschaltet: Abschusslage sofort, sonst im Takt der Bombenanzeige.
         let guided = self.stores.selected_weapon().is_some_and(|k| k.is_guided());
-        let lock = self.sensors.lock.filter(|l| self.targets[l.target].is_intact());
+        let lock = self.ground_pick();
         let new_lock = guided && lock.is_some() && lock != self.launch_zone.map(|(l, _)| l);
         if self.tick.is_multiple_of(BOMB_AIM_TICKS) || new_lock {
             self.update_bomb_prediction();
@@ -499,11 +509,8 @@ impl Sim {
             }
             _ => None,
         };
-        let lock = self.sensors.lock.filter(|l| self.targets[l.target].is_intact());
-        self.launch_zone = match (kind, lock) {
-            (Some(k), Some(l)) if k.is_guided() => {
-                Some((l, weapons::launch_zone(k, &launch!(self), l.target)))
-            }
+        self.launch_zone = match (kind, self.ground_pick()) {
+            (Some(k), Some(l)) if k.is_guided() => Some((l, weapons::launch_zone(k, &launch!(self), l.0))),
             _ => None,
         };
     }
@@ -556,7 +563,7 @@ impl Sim {
             dt: DT,
             aircraft: self.aircraft.position,
             aircraft_velocity: self.aircraft.velocity,
-            designated: self.sensors.lock.filter(|l| l.optical).map(|l| l.target),
+            designated: self.picks.ground.index.filter(|_| self.picks.ground.seen.optical),
             flying: self.status == Status::Flying,
             painting: &painting,
         };
@@ -585,86 +592,106 @@ impl Sim {
     /// Bedienung der Zielerfassung und Aufschalten (M-013): Radar umschalten,
     /// Blickrichtung wählen (dieselbe Richtung noch einmal: nächstes Ziel).
     fn update_sensors(&mut self, controls: &ControlFrame) {
-        let (pos, heading) = (self.aircraft.position, self.aircraft.attitude.to_euler().0);
-        let mut done = false;
+        let mut refresh = self.tick.is_multiple_of(sensors::UPDATE_TICKS);
         if controls.has(flags::RADAR_TOGGLE) {
             // Ein ausgefallenes Radar lässt sich nicht einschalten.
             self.sensors.radar_on = !self.sensors.radar_on && !self.systems.get(System::Radar).is_failed();
-            self.sensors.update(&self.targets, &self.terrain, pos, heading);
-            done = true;
+            refresh = true;
         }
-        let pick_air = controls.has_weapon(weapon_flags::PICK_AIR);
-        if let Some(look) = LookDir::from_code(controls.look_code()).filter(|_| pick_air) {
-            let c = sensors::in_cone(self.sensed_fighters(), pos, heading, look, f64::MAX);
-            self.air.press(look, &c);
-            done = true;
-        } else if let Some(look) = LookDir::from_code(controls.look_code())
-            .filter(|_| controls.has_weapon(weapon_flags::PICK_RUNWAY))
-        {
-            let rw = self.terrain.runways().iter().enumerate();
-            let c = sensors::in_cone(rw.map(|(i, r)| (i, runway_point(r))), pos, heading, look, f64::MAX);
-            self.runway.press(look, &c);
-            done = true;
-        } else if let Some(look) = LookDir::from_code(controls.look_code()) {
-            // Erst die mitgeführte Blickrichtung auf den Stand bringen: Die
-            // Taste der Richtung, in der das Ziel gerade liegt, schaltet weiter.
-            if !done {
-                self.sensors.update(&self.targets, &self.terrain, pos, heading);
-            }
-            if look == self.sensors.look {
-                self.sensors.next_target(&self.targets, &self.terrain, pos, heading);
-            } else {
-                self.sensors.look_at(look, &self.targets, &self.terrain, pos, heading);
-            }
-            done = true;
-        }
-        if !done && self.tick.is_multiple_of(sensors::UPDATE_TICKS) {
-            self.sensors.update(&self.targets, &self.terrain, pos, heading);
-        }
+        let look = LookDir::from_code(controls.look_code());
+        let pressed = if controls.has_weapon(weapon_flags::PICK_AIR) {
+            MarkKind::Air
+        } else if controls.has_weapon(weapon_flags::PICK_RUNWAY) {
+            MarkKind::Runway
+        } else {
+            MarkKind::Ground
+        };
         if self.tick.is_multiple_of(sensors::UPDATE_TICKS) {
             self.update_contacts();
-            self.update_air_pick();
+        }
+        for kind in [MarkKind::Ground, MarkKind::Air, MarkKind::Runway] {
+            match look.filter(|_| kind == pressed) {
+                Some(l) => self.pick(kind, Some(l)),
+                None if refresh => self.pick(kind, None),
+                None => {}
+            }
         }
     }
 
-    /// Jäger, die die eigenen Sensoren erfassen (Radar oder Sicht):
-    /// (Nummer, Ort).
-    fn sensed_fighters(&self) -> impl Iterator<Item = (usize, DVec3)> + '_ {
-        let pos = self.aircraft.position;
-        self.fighters
-            .list
-            .iter()
-            .filter(move |f| f.airborne() && self.sensors.sees_aircraft(&self.terrain, pos, f.position))
-            .map(|f| (f.id as usize, f.position))
-    }
-
-    /// Der gewählte Jäger bleibt, solange ihn ein eigenes System erfasst;
-    /// sonst der nächste erfasste in seiner Blickrichtung (wie bei
-    /// Bodenzielen, M-013).
-    fn update_air_pick(&mut self) {
-        let (pos, heading) = (self.aircraft.position, self.aircraft.attitude.to_euler().0);
-        let kept = self.air.index.is_some_and(|i| self.sensed_fighters().any(|(k, _)| k == i));
-        if !kept {
-            let c = sensors::in_cone(self.sensed_fighters(), pos, heading, self.air.look, f64::MAX);
-            self.air.index = c.first().map(|&(_, i)| i);
-        }
-    }
-
-    /// Eigene Erfassung reihum für einige Ziele neu bestimmen (die Sichtlinie
-    /// ist teuer); das aufgeschaltete Ziel gilt immer als erfasst.
-    fn update_contacts(&mut self) {
-        let n = self.targets.len();
-        if n == 0 {
+    /// Richtungstaste `look` für die Zielart `kind`, ohne Taste die Prüfung
+    /// der Wahl ([`Pick`]). Ein zerstörtes Bodenziel bleibt gewählt, bis der
+    /// Spieler ein neues wählt (Wracks sind nicht anwählbar).
+    fn pick(&mut self, kind: MarkKind, look: Option<LookDir>) {
+        if look.is_none()
+            && kind == MarkKind::Ground
+            && self.ground_pick().is_none()
+            && self.picks.ground.index.is_some()
+        {
             return;
         }
+        let (pos, heading) = (self.aircraft.position, self.aircraft.attitude.to_euler().0);
+        let points: Vec<(usize, DVec3)> = match kind {
+            MarkKind::Ground => self
+                .targets
+                .iter()
+                .enumerate()
+                .filter(|(_, t)| t.is_intact())
+                .map(|(i, t)| (i, center(t)))
+                .collect(),
+            MarkKind::Air => self
+                .fighters
+                .list
+                .iter()
+                .filter(|f| f.airborne())
+                .map(|f| (f.id as usize, f.position))
+                .collect(),
+            MarkKind::Runway => self.terrain.runways().iter().map(runway_point).enumerate().collect(),
+        };
+        let (sensors, terrain) = (&self.sensors, &self.terrain);
+        // Landebahnen sind von der Karte bekannt.
+        let sees = |p| {
+            if kind == MarkKind::Runway {
+                Seen { radar: false, optical: true }
+            } else {
+                sensors.sees(terrain, pos, p)
+            }
+        };
+        let pick = match kind {
+            MarkKind::Ground => &mut self.picks.ground,
+            MarkKind::Air => &mut self.picks.air,
+            MarkKind::Runway => &mut self.picks.runway,
+        };
+        match look {
+            Some(l) => pick.press(l, &points, pos, heading, sees),
+            None => pick.update(&points, pos, heading, sees),
+        }
+    }
+
+    /// Gewähltes, intaktes Bodenziel und wie es entdeckt ist.
+    fn ground_pick(&self) -> Option<(usize, Seen)> {
+        let p = self.picks.ground;
+        p.index.filter(|&i| self.targets[i].is_intact()).map(|i| (i, p.seen))
+    }
+
+    /// Eigene Entdeckung: Jäger jedes Mal, Bodenziele reihum für einige (die
+    /// Sichtlinie ist teuer); das gewählte Bodenziel mit seinem Stand.
+    fn update_contacts(&mut self) {
         let pos = self.aircraft.position;
+        for f in &self.fighters.list {
+            self.fighter_seen[f.id as usize] = if f.airborne() {
+                self.sensors.sees(&self.terrain, pos, f.position)
+            } else {
+                Seen::default()
+            };
+        }
+        let n = self.targets.len();
         for _ in 0..CONTACTS_PER_UPDATE.min(n) {
             let i = self.contact_cursor % n;
             self.contact_cursor = (i + 1) % n;
-            self.own_contacts[i] = self.sensors.sees(&self.targets[i], &self.terrain, pos);
+            self.ground_seen[i] = self.sensors.sees(&self.terrain, pos, center(&self.targets[i]));
         }
-        if let Some(l) = self.sensors.lock {
-            self.own_contacts[l.target] = true;
+        if let Some(i) = self.picks.ground.index {
+            self.ground_seen[i] = self.picks.ground.seen;
         }
     }
 
@@ -840,6 +867,10 @@ impl Sim {
         &self.sensors
     }
 
+    pub fn picks(&self) -> &Picks {
+        &self.picks
+    }
+
     /// Waffenbestand, Schacht und Waffen im Flug (M-014).
     pub fn stores(&self) -> &Stores {
         &self.stores
@@ -863,6 +894,12 @@ impl Sim {
 
 /// Nicklage beim Aufsetzen, unter der das Bugrad zuerst aufschlägt (rad).
 const NOSE_FIRST_PITCH: f64 = -0.087;
+
+/// Mitte eines Bodenziels (NED).
+fn center(t: &Target) -> DVec3 {
+    let c = t.center_ned();
+    DVec3::new(c[0], c[1], c[2])
+}
 
 /// Bahnmitte (NED).
 fn runway_point(r: &f29_terrain::Runway) -> DVec3 {

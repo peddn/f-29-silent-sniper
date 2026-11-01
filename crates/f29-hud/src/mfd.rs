@@ -7,13 +7,13 @@
 //! Stealth- und Radarimpuls-Anzeige reserviert ist.
 
 use crate::canvas::{Align, DisplayList, Ink, Rect};
+use crate::hud::HudMode;
 use crate::map::{MapData, MapProjection};
 use crate::{ScreenLayout, heading_deg};
-use crate::hud::HudMode;
 use f29_core::FlightData;
-use f29_core::weapons::LaunchZone;
 use f29_core::targets::{TargetClass, TargetRole};
 use f29_core::terrain::AirfieldKind;
+use f29_core::weapons::LaunchZone;
 
 /// Kartenbereiche: Entfernung von der Mitte bis zum Rand in Seemeilen.
 /// Kartenbereiche (Mitte bis Rand) in km.
@@ -354,7 +354,8 @@ fn draw_map(
             }
             // Ziele
             let picked = fd.target.as_ref().map(|t| t.index);
-            let locked = fd.target.is_some_and(|t| matches!(t.zone, Some(LaunchZone::Locked | LaunchZone::Good)));
+            let locked =
+                fd.target.is_some_and(|t| matches!(t.zone, Some(LaunchZone::Locked | LaunchZone::Good)));
             for (k, t) in map.targets.iter().enumerate() {
                 // Zerstörte Ziele verschwinden von der Karte.
                 if !near(t.pos) || fd.destroyed_targets.binary_search(&k).is_ok() {

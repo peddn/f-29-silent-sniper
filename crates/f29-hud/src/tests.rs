@@ -352,7 +352,11 @@ fn picked_fighter_shows_on_map_and_target_page() {
     let mut chosen = picked.clone();
     chosen.air_target = picked.air_target.map(|t| f29_core::AirTargetInfo { in_circle: false, ..t });
     assert_eq!(count(&chosen, HudMode::AirToAir).0, map0 + 8, "gewählt, nicht aufgeschaltet: ohne Ecken");
-    assert_eq!(count(&picked, HudMode::AirToGround).0, count(&fd, HudMode::AirToGround).0, "nur die Modusart");
+    assert_eq!(
+        count(&picked, HudMode::AirToGround).0,
+        count(&fd, HudMode::AirToGround).0,
+        "nur die Modusart"
+    );
     assert!(page1 > page0 + 40, "Name und Angaben auf der TGT-Seite");
     assert_eq!(count(&picked, HudMode::AirToGround).1, count(&fd, HudMode::AirToGround).1);
 }

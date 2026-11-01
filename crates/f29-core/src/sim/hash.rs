@@ -85,8 +85,10 @@ impl Sim {
             h.u64(d.owner.map_or(u64::MAX, |o| o as u64));
             h.f64(d.age_s);
         }
-        for p in [self.air, self.runway] {
-            h.u64(p.index.map_or(u64::MAX, |i| i as u64) ^ u64::from(p.look.code()) << 56);
+        for p in [self.picks.ground, self.picks.air, self.picks.runway] {
+            h.u64(
+                p.index.map_or(u64::MAX, |i| i as u64) ^ u64::from(p.look.code()) << 56 ^ p.seen.bits() << 60,
+            );
         }
         for f in &self.fighters.list {
             h.u64(u64::from(f.id) | (f.mode as u64) << 32 | (f.base as u64) << 40);
@@ -124,11 +126,6 @@ impl Sim {
             h.f64(r.age_s);
         }
         h.u64(u64::from(self.sensors.radar_on) | u64::from(self.sensors.night) << 1);
-        h.u64(u64::from(self.sensors.look.code()));
-        if let Some(l) = self.sensors.lock {
-            h.u64(l.target as u64);
-            h.u64(u64::from(l.optical) | u64::from(l.radar) << 1);
-        }
         for t in &self.targets {
             h.u64(t.state as u64);
             h.f64(t.damage);

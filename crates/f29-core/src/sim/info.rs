@@ -518,28 +518,22 @@ impl Sim {
     fn marks(&self) -> Vec<Mark> {
         let a = &self.aircraft;
         let awacs = self.config.spawn.awacs;
+        let ground = self
+            .targets
+            .iter()
+            .enumerate()
+            .filter(|(i, t)| t.is_intact() && (awacs || self.ground_seen[*i].any()));
         let ground =
-            self.targets.iter().enumerate().filter(|(i, t)| {
-                t.is_intact() && (awacs || self.own_contacts.get(*i).copied().unwrap_or(false))
-            });
-        let ground = ground.map(|(i, t)| {
-            let c = t.center_ned();
-            (MarkKind::Ground, DVec3::new(c[0], c[1], c[2]), self.sensors.lock.is_some_and(|l| l.target == i))
-        });
+            ground.map(|(i, t)| (MarkKind::Ground, super::center(t), self.picks.ground.index == Some(i)));
         let air = self
             .fighters
             .list
             .iter()
-            .filter(|f| {
-                f.airborne() && (awacs || self.sensors.sees_aircraft(&self.terrain, a.position, f.position))
-            })
-            .map(|f| (MarkKind::Air, f.position, self.air.index == Some(f.id as usize)));
-        let runways = self
-            .terrain
-            .runways()
-            .iter()
-            .enumerate()
-            .map(|(i, r)| (MarkKind::Runway, runway_point(r), self.runway.index == Some(i)));
+            .filter(|f| f.airborne() && (awacs || self.fighter_seen[f.id as usize].any()));
+        let air = air.map(|f| (MarkKind::Air, f.position, self.picks.air.index == Some(f.id as usize)));
+        let runways = self.terrain.runways().iter().enumerate();
+        let runways =
+            runways.map(|(i, r)| (MarkKind::Runway, runway_point(r), self.picks.runway.index == Some(i)));
         ground
             .chain(air)
             .chain(runways)
@@ -567,18 +561,19 @@ impl Sim {
         let cm = &self.stores.countermeasures;
         let (ir_jammer_s, ir_cooldown_s) = cm.ir_left();
 
-        let target = self.sensors.lock.and_then(|lock| {
-            let t = self.targets.get(lock.target)?;
+        let target = self.picks.ground.index.and_then(|i| {
+            let seen = self.picks.ground.seen;
+            let t = self.targets.get(i)?;
             let c = t.center_ned();
             let to_center = DVec3::new(c[0] - a.position.x, c[1] - a.position.y, c[2] - a.position.z);
             Some(TargetInfo {
-                index: lock.target,
+                index: i,
                 name: t.name,
                 class: t.class,
                 civilian: t.civilian,
                 role: t.role,
-                optical: lock.optical,
-                radar: lock.radar,
+                optical: seen.optical,
+                radar: seen.radar,
                 range: to_center.length(),
                 bearing: detmath::wrap_two_pi(detmath::atan2(to_center.y, to_center.x)),
                 direction_body: a.attitude.inverse_rotate(to_center).normalize_or_zero(),
@@ -588,7 +583,7 @@ impl Sim {
                     -t.elevation - a.position.z,
                 ),
                 heading: t.heading,
-                zone: self.launch_zone.filter(|(l, _)| *l == lock).map(|(_, z)| z),
+                zone: self.launch_zone.filter(|(l, _)| *l == (i, seen)).map(|(_, z)| z),
                 damage: t.damage,
                 destroyed: !t.is_intact(),
             })
@@ -703,7 +698,7 @@ impl Sim {
             ecm: cm.ecm,
             ir_jammer_s,
             ir_cooldown_s,
-            look: self.sensors.look,
+            look: self.picks.ground.look,
             target,
             stores: StoresInfo {
                 bays: self.stores.bays,
@@ -719,9 +714,7 @@ impl Sim {
             systems: self.systems,
             awacs: self.config.spawn.awacs,
             own_contacts: (0..self.targets.len())
-                .filter(|&i| {
-                    self.own_contacts.get(i).copied().unwrap_or(false) && self.targets[i].is_intact()
-                })
+                .filter(|&i| self.ground_seen[i].any() && self.targets[i].is_intact())
                 .collect(),
             bomb_aim: self.bomb_aim(),
             gun: GunInfo {
@@ -751,8 +744,13 @@ impl Sim {
                 })
                 .collect(),
             decoys: cm.decoys.iter().map(|d| DecoyInfo { kind: d.kind, position: d.position }).collect(),
-            air_target: self.air.index.and_then(|i| self.fighters.list.get(i)).filter(|f| f.airborne()).map(
-                |f| {
+            air_target: self
+                .picks
+                .air
+                .index
+                .and_then(|i| self.fighters.list.get(i))
+                .filter(|f| f.airborne())
+                .map(|f| {
                     let to = f.position - a.position;
                     let range = to.length();
                     let direction_body = a.attitude.inverse_rotate(to / range.max(1.0));
@@ -764,13 +762,12 @@ impl Sim {
                         direction_body,
                         in_circle: detmath::acos(direction_body.x.clamp(-1.0, 1.0))
                             <= sensors::AIR_CIRCLE_RAD,
-                        optical: self.sensors.eye_sees_aircraft(&self.terrain, a.position, f.position),
-                        radar: self.sensors.radar_sees_aircraft(a.position, f.position),
+                        optical: self.picks.air.seen.optical,
+                        radar: self.picks.air.seen.radar,
                         bearing: detmath::wrap_two_pi(detmath::atan2(to.y, to.x)),
                     }
-                },
-            ),
-            runway_target: self.runway.index.map(|i| {
+                }),
+            runway_target: self.picks.runway.index.map(|i| {
                 let r = &self.terrain.runways()[i];
                 let position = runway_point(r);
                 let to = position - a.position;
@@ -852,8 +849,8 @@ impl Sim {
         let too_low = (later - impact).length() < kind.spec().frag_radius_m;
         let h = DVec3::new(a.velocity.x, a.velocity.y, 0.0).normalize_or_zero();
         let right = DVec3::new(-h.y, h.x, 0.0);
-        let target_offset = self.sensors.lock.and_then(|l| {
-            let t = self.targets.get(l.target).filter(|t| t.is_intact())?;
+        let target_offset = self.picks.ground.index.and_then(|i| {
+            let t = self.targets.get(i).filter(|t| t.is_intact())?;
             let d = DVec3::new(t.north - impact.x, t.east - impact.y, 0.0);
             Some((d.dot(h), d.dot(right)))
         });

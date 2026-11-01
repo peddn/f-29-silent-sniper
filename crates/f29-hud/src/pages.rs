@@ -645,7 +645,8 @@ fn ground_target(
         TargetRole::Secondary => "SECONDARY",
         TargetRole::None => "",
     };
-    let class = if t.civilian { ("CIVILIAN", "DO NOT ATTACK".into()) } else { ("CLASS", t.class.label().into()) };
+    let class =
+        if t.civilian { ("CIVILIAN", "DO NOT ATTACK".into()) } else { ("CLASS", t.class.label().into()) };
     let rows = [
         class,
         ("RANGE", format!("{:.1} KM", units::m_to_km(t.range))),

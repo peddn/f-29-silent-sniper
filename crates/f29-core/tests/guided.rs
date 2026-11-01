@@ -40,7 +40,7 @@ fn lined_up_at(
     step(&mut sim, ControlFrame::look_flags(LookDir::Right.code()), 0);
     step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()), 0);
     for _ in 0..40 {
-        if sim.sensors().lock.map(|l| l.target) == Some(i) {
+        if sim.picks().ground.index == Some(i) {
             return Some((sim, i));
         }
         step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()), 0);
@@ -298,7 +298,7 @@ fn lock_stays_on_the_wreck_until_a_new_target_is_chosen() {
     // Neues Ziel wählen: das Wrack ist nicht mehr dabei.
     for look in [LookDir::Forward, LookDir::Right, LookDir::Aft, LookDir::Left, LookDir::Forward] {
         step(&mut sim, ControlFrame::look_flags(look.code()), 0);
-        assert_ne!(sim.sensors().lock.map(|l| l.target), Some(target), "Wrack wieder gewählt");
+        assert_ne!(sim.picks().ground.index, Some(target), "Wrack wieder gewählt");
     }
 }
 

@@ -168,7 +168,8 @@ fn update(
                 let f = state.sim.fighters().list.get(t.id as usize)?;
                 let (aim, eye) = (place(f.position, origin.0), eye());
                 let range = (aim - eye).length();
-                let half = (crate::fighters::shown_length(range) * 0.5 / TARGET_FILL as f32).atan2(range.max(1.0));
+                let half =
+                    (crate::fighters::shown_length(range) * 0.5 / TARGET_FILL as f32).atan2(range.max(1.0));
                 Some((eye, aim, half, NEAR_M, 0.6 + 0.8 * (t.range / optical) as f32))
             })
         }

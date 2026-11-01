@@ -220,13 +220,13 @@ fn release_cue_puts_the_bomb_on_the_target_along_track() {
     sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, f29_core::controls::flags::RADAR_TOGGLE));
     // Bis zum gewünschten Ziel weiterschalten (Richtung voraus).
     for _ in 0..40 {
-        if sim.sensors().lock.map(|l| l.target) == Some(target) {
+        if sim.picks().ground.index == Some(target) {
             break;
         }
         let look = ControlFrame::look_flags(f29_core::sensors::LookDir::Forward.code());
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.7, look));
     }
-    assert_eq!(sim.sensors().lock.map(|l| l.target), Some(target));
+    assert_eq!(sim.picks().ground.index, Some(target));
     step(&mut sim, 0, weapon_flags::BAY_DOORS);
     let mut released = None;
     for _ in 0..ticks(40.0) {
