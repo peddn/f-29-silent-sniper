@@ -76,14 +76,14 @@ impl Sim {
                 Some(Track::Fighter(i)) => u64::MAX - 2 - i as u64,
             });
             h.u64(u64::from(w.tracking) | u64::from(w.searching) << 1 | u64::from(w.blinded) << 2);
-            h.u64(w.owner.map_or(u64::MAX, |o| o as u64));
+            h.u64(w.owner.map_or(u64::MAX, Launcher::code));
         }
         let cm = &st.countermeasures;
         h.u64(u64::from(cm.chaff) | u64::from(cm.flares) << 8 | u64::from(cm.ecm) << 16);
         h.f64(cm.ir_jammer_s);
         for d in &cm.decoys {
             h.u64(u64::from(d.id) | u64::from(d.salt) << 32);
-            h.u64(d.owner.map_or(u64::MAX, |o| o as u64));
+            h.u64(d.owner.map_or(u64::MAX, Launcher::code));
             h.f64(d.age_s);
         }
         for p in [self.picks.ground, self.picks.air, self.picks.runway] {

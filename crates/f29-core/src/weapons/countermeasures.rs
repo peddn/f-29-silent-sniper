@@ -25,9 +25,8 @@ impl DecoyKind {
 pub struct Decoy {
     pub id: u32,
     pub kind: DecoyKind,
-    /// Wer ihn geworfen hat: `None` das Flugzeug, sonst die Gegenseite
-    /// (Index der Stellung bzw. des Jägers).
-    pub owner: Option<usize>,
+    /// Wer ihn geworfen hat: `None` das Flugzeug, sonst die Gegenseite.
+    pub owner: Option<Launcher>,
     /// NED (m).
     pub position: DVec3,
     pub age_s: f64,

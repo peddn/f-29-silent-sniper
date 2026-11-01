@@ -105,6 +105,8 @@ const SAM_DIRECT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
 const MAX_LEAD_S: f64 = 10.0;
 /// Startgeschwindigkeit der Boden-Luft-Raketen (m/s).
 const SAM_LAUNCH_MPS: f64 = 60.0;
+/// Jäger starten ihre Rakete nicht näher als so (m).
+pub const AIR_MIN_RANGE_M: f64 = 1_000.0;
 /// Störer (ECM bzw. Infrarot): Raketen der gestörten Lenkart verlieren die
 /// Lenkung, solange sie weiter als so weg sind (m) – wie im Original.
 pub const BURN_THROUGH_M: f64 = 2_000.0;
@@ -232,6 +234,26 @@ pub struct Bay {
     pub count: u8,
 }
 
+/// Wer eine feindliche Rakete gestartet bzw. einen feindlichen
+/// Täuschkörper geworfen hat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Launcher {
+    /// Radarstellung (Index in `Sim::targets`).
+    Site(usize),
+    /// Jäger (Index in `Fighters::list`).
+    Fighter(usize),
+}
+
+impl Launcher {
+    /// Für den Zustandshash.
+    pub fn code(self) -> u64 {
+        match self {
+            Launcher::Site(i) => i as u64,
+            Launcher::Fighter(i) => 1 << 32 | i as u64,
+        }
+    }
+}
+
 /// Was eine Lenkwaffe verfolgt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Track {
@@ -264,9 +286,9 @@ pub struct Weapon {
     /// Richtung, in der die Rakete ohne Ziel weiterfliegt: die Abschusslage
     /// (Flugzeugnase).
     pub boresight: DVec3,
-    /// Feindliche Rakete: gestartet von der Radarstellung mit diesem Index in
-    /// `Sim::targets`; `None` = eigene Waffe.
-    pub owner: Option<usize>,
+    /// Feindliche Rakete: gestartet von dieser Stellung bzw. diesem Jäger;
+    /// `None` = eigene Waffe.
+    pub owner: Option<Launcher>,
     /// Ein Täuschkörper im Suchkegel blendet sie gerade.
     pub blinded: bool,
 }
@@ -436,6 +458,12 @@ pub enum WeaponEvent {
         id: u32,
         site: usize,
     },
+    /// Ein Jäger (Index in `Fighters::list`) hat eine Rakete gestartet.
+    AirLaunch {
+        kind: WeaponKind,
+        id: u32,
+        fighter: usize,
+    },
     /// Ein Täuschkörper blendet eine Rakete (sie fliegt geradeaus weiter).
     Decoyed {
         kind: WeaponKind,
@@ -494,9 +522,9 @@ pub struct World<'a> {
     pub designated: Option<usize>,
     /// Das Flugzeug fliegt (Ziel der feindlichen Raketen).
     pub flying: bool,
-    /// Radarstellungen (Index in `Sim::targets`), die das Flugzeug beim letzten
-    /// Umlauf erfasst haben: Sie beleuchten es für ihre Raketen.
-    pub painting: &'a [usize],
+    /// Stellungen und Jäger, deren Radar das Flugzeug beim letzten Umlauf
+    /// erfasst hat: Sie beleuchten es für ihre Raketen.
+    pub painting: &'a [Launcher],
     /// Jäger nach Index: Ort und Geschwindigkeit, solange sie kämpfen.
     pub fighters: &'a [Option<(DVec3, DVec3)>],
 }
@@ -690,11 +718,7 @@ impl Stores {
         aircraft: DVec3,
     ) -> bool {
         let to = aircraft - from;
-        let hostile = self.in_flight.iter().filter(|w| w.owner.is_some());
-        if to.length() > kind.spec().max_range_m
-            || hostile.clone().any(|w| w.owner == Some(site))
-            || hostile.count() >= MAX_HOSTILE
-        {
+        if to.length() > kind.spec().max_range_m || !self.hostile_slot_free(Launcher::Site(site)) {
             return false;
         }
         // Im Startwinkel des Typs, mindestens knapp über der Linie zum
@@ -706,10 +730,46 @@ impl Stores {
         let id = self.next_id;
         self.next_id += 1;
         let mut w = Weapon::new(id, kind, from, dir * SAM_LAUNCH_MPS);
-        w.owner = Some(site);
+        w.owner = Some(Launcher::Site(site));
         w.target = Some(Track::Aircraft);
         self.in_flight.push(w);
         self.events.push(tick, WeaponEvent::SamLaunch { kind, id, site });
+        true
+    }
+
+    /// Je Stellung bzw. Jäger eine Rakete in der Luft, insgesamt höchstens
+    /// [`MAX_HOSTILE`] (wie im Original).
+    fn hostile_slot_free(&self, by: Launcher) -> bool {
+        let hostile = self.in_flight.iter().filter(|w| w.owner.is_some());
+        !hostile.clone().any(|w| w.owner == Some(by)) && hostile.count() < MAX_HOSTILE
+    }
+
+    /// Startet die Luft-Luft-Rakete `kind` des Jägers `fighter` (bei `from`
+    /// mit `velocity`) auf das Flugzeug bei `aircraft` – wenn es in ihrer
+    /// Reichweite, aber nicht näher als [`AIR_MIN_RANGE_M`] ist und ein
+    /// Platz frei ist (wie im Original).
+    pub fn launch_air(
+        &mut self,
+        tick: u64,
+        kind: WeaponKind,
+        fighter: usize,
+        from: DVec3,
+        velocity: DVec3,
+        aircraft: DVec3,
+    ) -> bool {
+        let range = (aircraft - from).length();
+        if !(AIR_MIN_RANGE_M..=kind.spec().max_range_m).contains(&range)
+            || !self.hostile_slot_free(Launcher::Fighter(fighter))
+        {
+            return false;
+        }
+        let id = self.next_id;
+        self.next_id += 1;
+        let mut w = Weapon::new(id, kind, from, velocity);
+        w.owner = Some(Launcher::Fighter(fighter));
+        w.target = Some(Track::Aircraft);
+        self.in_flight.push(w);
+        self.events.push(tick, WeaponEvent::AirLaunch { kind, id, fighter });
         true
     }
 
@@ -731,7 +791,7 @@ impl Stores {
 
     /// Täuschkörper bei `position` in die Luft; `owner` wie
     /// [`Decoy::owner`] (feindlich: der Jäger).
-    pub fn push_decoy(&mut self, tick: u64, kind: DecoyKind, position: DVec3, owner: Option<usize>) {
+    pub fn push_decoy(&mut self, tick: u64, kind: DecoyKind, position: DVec3, owner: Option<Launcher>) {
         let id = self.next_id;
         self.next_id += 1;
         // Zufall und Abwurfzeitpunkt: Der k-te Täuschkörper einer Mission

@@ -33,6 +33,7 @@ use crate::detmath;
 use crate::events::EventLog;
 use crate::math::DVec3;
 use crate::radar::{Exposure, RadarKind, RadarSpec};
+use crate::weapons::WeaponKind;
 use f29_terrain::{AirfieldKind, Terrain};
 
 /// Jäger je feindlichem Platz.
@@ -47,6 +48,8 @@ const MIN_AGL_M: f64 = 250.0;
 const ARRIVE_M: f64 = 3_000.0;
 /// Patrouille: so weit (m) fliegt er nach dem Überflug geradeaus weiter.
 const PATROL_LEG_M: f64 = 12_000.0;
+/// Rakete nur starten, wenn das Flugzeug so nah an der Nase liegt (rad).
+pub const LAUNCH_CONE_RAD: f64 = 30.0 * std::f64::consts::PI / 180.0;
 /// Täuschkörper je Jäger; gegen jede anfliegende Rakete wirft er einen,
 /// sobald sie so nah ist (m).
 pub const DECOYS: u8 = 4;
@@ -83,6 +86,8 @@ pub struct FighterSpec {
     pub radar_cone_rad: f64,
     /// Kanonentreffer bis zum Abschuss (Spielerentscheidung v0.2.9).
     pub hits: u8,
+    /// Luft-Luft-Rakete (Vorrat unbegrenzt, eine in der Luft).
+    pub missile: WeaponKind,
 }
 
 const fn deg(d: f64) -> f64 {
@@ -100,6 +105,7 @@ const SPECS: [FighterSpec; 2] = [
         radar: RadarSpec { kind: RadarKind::Pulse, range_m: 15_000.0, sweep_s: 2.0 },
         radar_cone_rad: deg(30.0),
         hits: 5,
+        missile: WeaponKind::Aphid,
     },
     FighterSpec {
         label: "MIG-29",
@@ -111,6 +117,7 @@ const SPECS: [FighterSpec; 2] = [
         radar: RadarSpec { kind: RadarKind::Doppler, range_m: 35_000.0, sweep_s: 2.0 },
         radar_cone_rad: deg(60.0),
         hits: 8,
+        missile: WeaponKind::Alamo,
     },
 ];
 
@@ -207,6 +214,13 @@ impl Fighter {
         let (sh, ch) = detmath::sin_cos(self.heading);
         let (sp, cp) = detmath::sin_cos(self.pitch);
         DVec3::new(ch * cp, sh * cp, -sp) * self.speed
+    }
+
+    /// Sein Radar hat das Flugzeug beim letzten Umlauf erfasst: Er
+    /// beleuchtet es für seine Rakete.
+    pub fn painting(&self, tick: u64, dt: f64) -> bool {
+        let sweep = (self.spec().radar.sweep_s / dt) as u64;
+        self.airborne() && self.contact_tick.is_some_and(|t| tick.saturating_sub(t) <= sweep)
     }
 
     fn sees(&self, at: DVec3) -> bool {

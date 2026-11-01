@@ -160,7 +160,7 @@ fn unlocked_missile_flies_on_in_launch_attitude() {
 /// Feindliche Rakete auf das Flugzeug bei `at`, nach dem Start.
 fn sam(kind: WeaponKind) -> Weapon {
     let mut w = Weapon::new(0, kind, DVec3::ZERO, DVec3::new(700.0, 0.0, -1.0));
-    w.owner = Some(0);
+    w.owner = Some(Launcher::Site(0));
     w.target = Some(Track::Aircraft);
     w.age_s = 10.0;
     w

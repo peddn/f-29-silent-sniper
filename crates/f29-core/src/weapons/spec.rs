@@ -32,6 +32,12 @@ pub enum WeaponKind {
     Sidewinder,
     /// Luft-Luft-Rakete großer Reichweite mit eigenem Radar.
     Amraam,
+    /// Feindliche Luft-Luft-Rakete kurzer Reichweite mit Infrarotsuchkopf
+    /// (MiG-21).
+    Aphid,
+    /// Feindliche radargelenkte Luft-Luft-Rakete mittlerer Reichweite
+    /// (MiG-29), weit weg halbaktiv.
+    Alamo,
 }
 
 /// Suchkopf einer gelenkten Waffe.
@@ -213,7 +219,7 @@ const SAM: WeaponSpec = WeaponSpec {
     ..MISSILE
 };
 
-const SPECS: [WeaponSpec; 12] = [
+const SPECS: [WeaponSpec; 14] = [
     BOMB,
     WeaponSpec {
         kind: WeaponKind::Retarded,
@@ -376,6 +382,46 @@ const SPECS: [WeaponSpec; 12] = [
         anti_air: true,
         ..MISSILE
     },
+    // AA-8 Aphid der MiG-21: wendig, kurze Reichweite, Fackeln helfen.
+    WeaponSpec {
+        kind: WeaponKind::Aphid,
+        label: "AA-8",
+        name: "AA-8 APHID",
+        mass_kg: 65.0,
+        per_bay: 0,
+        seeker: Seeker::Optical,
+        cruise_mps: 750.0,
+        accel_mps2: 400.0,
+        turn_rate_rad: deg(40.0),
+        max_range_m: 7_000.0,
+        seeker_cone_rad: deg(22.0),
+        lethal_radius_m: 12.0,
+        frag_radius_m: 0.0,
+        life_s: 20.0,
+        decoy_resistance: 0.1,
+        ..MISSILE
+    },
+    // AA-10 Alamo der MiG-29: halbaktiv wie die SAMs – weit weg nur, solange
+    // ihr Jäger das Flugzeug mit seinem Radar hält; Düppel helfen.
+    WeaponSpec {
+        kind: WeaponKind::Alamo,
+        label: "AA-10",
+        name: "AA-10 ALAMO",
+        mass_kg: 250.0,
+        per_bay: 0,
+        seeker: Seeker::Radar,
+        illuminated_beyond_m: 5_000.0,
+        cruise_mps: 850.0,
+        accel_mps2: 300.0,
+        turn_rate_rad: deg(30.0),
+        max_range_m: 25_000.0,
+        seeker_cone_rad: deg(25.0),
+        lethal_radius_m: 15.0,
+        frag_radius_m: 0.0,
+        life_s: 45.0,
+        decoy_resistance: 0.15,
+        ..MISSILE
+    },
 ];
 
 impl WeaponKind {
@@ -430,6 +476,8 @@ impl WeaponKind {
             WeaponKind::ModernSam => "sa11",
             WeaponKind::Sidewinder => "aim9",
             WeaponKind::Amraam => "aim120",
+            WeaponKind::Aphid => "aa8",
+            WeaponKind::Alamo => "aa10",
         }
     }
 
@@ -445,7 +493,16 @@ impl WeaponKind {
         use WeaponKind as W;
         let steep = impact_rad >= HARDENED_MIN_IMPACT_RAD;
         match (self, class) {
-            (W::MediumRangeSam | W::LongRangeSam | W::ShortRangeSam | W::Sidewinder | W::Amraam, _) => 0.0,
+            (
+                W::MediumRangeSam
+                | W::LongRangeSam
+                | W::ShortRangeSam
+                | W::Sidewinder
+                | W::Amraam
+                | W::Aphid
+                | W::Alamo,
+                _,
+            ) => 0.0,
             (W::AntiRadar, C::AirDefense | C::EarlyWarning | C::ShortRangeSam) => 1.0,
             (W::AntiRadar, _) => 0.0,
             (W::AntiShip, C::ShipSmall) => 1.0,

@@ -13,8 +13,8 @@ use crate::sensors::{self, LookDir, Pick, Seen, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
 use crate::weapons::{
-    self, Bay, DecoyKind, ImpactResult, LaunchZone, Loadout, Seeker, Stores, Track, Weapon, WeaponEvent,
-    WeaponKind,
+    self, Bay, DecoyKind, ImpactResult, LaunchZone, Launcher, Loadout, Seeker, Stores, Track, Weapon,
+    WeaponEvent, WeaponKind,
 };
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_terrain::{AirfieldKind, Terrain};
@@ -446,6 +446,7 @@ impl Sim {
         self.radar.step(self.tick, &self.targets, Some(&exposure));
         self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), Some(&exposure));
         self.launch_sams();
+        self.launch_air();
         // Neu gewählt: Abschusslage sofort, sonst im Takt der Bombenanzeige.
         let guided = self.stores.selected_weapon().is_some_and(|k| k.is_guided());
         let lock = self.ground_pick();
@@ -479,6 +480,20 @@ impl Sim {
             let Some(kind) = targets::sam_of(&self.targets, i) else { continue };
             let from = DVec3::new(t.north, t.east, -t.elevation - t.class.height());
             self.stores.launch_sam(self.tick, kind, i, from, self.aircraft.position);
+        }
+    }
+
+    /// Jäger, deren Radar das Flugzeug gerade erfasst hat und es vor der Nase
+    /// haben, starten ihre Luft-Luft-Rakete (M-022, wie im Original).
+    fn launch_air(&mut self) {
+        let a = self.aircraft.position;
+        for f in &self.fighters.list {
+            let to = a - f.position;
+            let ahead = f.velocity().normalize_or_zero().dot(to.normalize_or_zero());
+            if f.airborne() && f.contact_tick == Some(self.tick) && ahead >= fighters::LAUNCH_CONE_RAD.cos() {
+                let kind = f.spec().missile;
+                self.stores.launch_air(self.tick, kind, f.id as usize, f.position, f.velocity(), a);
+            }
         }
     }
 
@@ -591,7 +606,7 @@ impl Sim {
             if f.decoys > 0 && f.decoyed != Some(id) && f.airborne() {
                 f.decoys -= 1;
                 f.decoyed = Some(id);
-                self.stores.push_decoy(self.tick, kind, f.position, Some(i));
+                self.stores.push_decoy(self.tick, kind, f.position, Some(Launcher::Fighter(i)));
             }
         }
     }
@@ -612,7 +627,9 @@ impl Sim {
         if self.stores.in_flight.is_empty() && self.stores.countermeasures.decoys.is_empty() {
             return;
         }
-        let painting: Vec<usize> = self.radar.sites.iter().filter(|s| s.painted).map(|s| s.target).collect();
+        let sites = self.radar.sites.iter().filter(|s| s.painted).map(|s| Launcher::Site(s.target));
+        let jets = self.fighters.list.iter().filter(|f| f.painting(self.tick, DT));
+        let painting: Vec<Launcher> = sites.chain(jets.map(|f| Launcher::Fighter(f.id as usize))).collect();
         let fighters: Vec<_> =
             self.fighters.list.iter().map(|f| f.airborne().then(|| (f.position, f.velocity()))).collect();
         let mut world = weapons::World {

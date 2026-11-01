@@ -971,6 +971,10 @@ impl Sim {
                     WeaponEvent::SamLaunch { kind, site, .. } => {
                         (format!("MISSILE LAUNCH {} - {}", kind.label(), name(site)), true)
                     }
+                    WeaponEvent::AirLaunch { kind, fighter, .. } => {
+                        let by = self.fighters.list[fighter].spec().label;
+                        (format!("MISSILE LAUNCH {} - {by}", kind.label()), true)
+                    }
                     WeaponEvent::AircraftHit { kind, .. } => (format!("{} HIT", kind.label()), true),
                     WeaponEvent::FighterHit { kind, .. } => (format!("{} HIT", kind.label()), false),
                     WeaponEvent::Decoyed { kind, .. } => (format!("{} DECOYED", kind.label()), false),
