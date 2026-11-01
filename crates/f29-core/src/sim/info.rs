@@ -218,6 +218,8 @@ pub struct FlightData {
     pub decoys: Vec<DecoyInfo>,
     /// Feindliche Jäger in der Luft.
     pub fighters: Vec<FighterInfo>,
+    /// Aufgeschalteter Jäger.
+    pub air_target: Option<AirTargetInfo>,
     /// Bild der jüngsten eigenen Waffe mit Fernsehsuchkopf in der Luft.
     pub weapon_cam: Option<WeaponCam>,
     /// Jüngste Detonation (Klang).
@@ -340,6 +342,18 @@ pub struct MunitionInfo {
     pub hostile: bool,
     /// Optischer bzw. Infrarot-Suchkopf statt Radarlenkung.
     pub optical: bool,
+}
+
+/// Vom eigenen Radar aufgeschalteter Jäger (HUD im AA-Modus).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AirTargetInfo {
+    pub id: u32,
+    pub label: &'static str,
+    /// Schrägentfernung (m) und Annäherung (m/s, positiv = kommt näher).
+    pub range: f64,
+    pub closure_mps: f64,
+    /// Richtung zum Jäger in Körperachsen, normiert.
+    pub direction_body: DVec3,
 }
 
 /// Ein feindlicher Jäger in der Luft (Karte, 3D, HUD).
@@ -642,6 +656,17 @@ impl Sim {
                 })
                 .collect(),
             decoys: cm.decoys.iter().map(|d| DecoyInfo { kind: d.kind, position: d.position }).collect(),
+            air_target: self.air_lock.and_then(|id| self.fighters.list.get(id as usize)).map(|f| {
+                let to = f.position - a.position;
+                let range = to.length();
+                AirTargetInfo {
+                    id: f.id,
+                    label: f.spec().label,
+                    range,
+                    closure_mps: -(f.velocity() - a.velocity).dot(to / range.max(1.0)),
+                    direction_body: a.attitude.inverse_rotate(to / range.max(1.0)),
+                }
+            }),
             fighters: self
                 .fighters
                 .list

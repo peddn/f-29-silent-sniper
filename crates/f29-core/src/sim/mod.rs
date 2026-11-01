@@ -252,6 +252,8 @@ pub struct Sim {
     /// Feindliche Radarstellungen mit Alarmstufen (M-020).
     radar: RadarNet,
     fighters: Fighters,
+    /// Vom eigenen Radar aufgeschalteter Jäger (Nummer).
+    air_lock: Option<u32>,
     systems: Systems,
     /// Aufschlag (Punkt, Flugzeit) einer jetzt abgefeuerten Patrone; abgeleitet.
     gun_prediction: Option<(DVec3, f64)>,
@@ -338,6 +340,7 @@ impl Sim {
             gun: Gun::new(seed),
             radar: RadarNet::default(),
             fighters,
+            air_lock: None,
             systems: Systems::default(),
             gun_prediction: None,
             bomb_prediction: None,
@@ -601,7 +604,33 @@ impl Sim {
         }
         if self.tick.is_multiple_of(sensors::UPDATE_TICKS) {
             self.update_contacts();
+            self.update_air_lock();
         }
+    }
+
+    /// Radar-Aufschaltung auf Luftziele (M-022): bleibt, solange der Jäger
+    /// fliegt und in Radarreichweite ist; sonst der nächste fliegende im
+    /// Kegel voraus. Ohne Radar keine.
+    fn update_air_lock(&mut self) {
+        let (pos, heading) = (self.aircraft.position, self.aircraft.attitude.to_euler().0);
+        let range = self.sensors.radar_range();
+        let list = &self.fighters.list;
+        let in_range = |f: &&crate::fighters::Fighter| f.airborne() && (f.position - pos).length() <= range;
+        let kept = self.air_lock.and_then(|id| list.get(id as usize)).filter(|f| in_range(f));
+        self.air_lock = if !self.sensors.radar_on {
+            None
+        } else if let Some(f) = kept {
+            Some(f.id)
+        } else {
+            list.iter()
+                .filter(in_range)
+                .filter(|f| {
+                    let to = f.position - pos;
+                    detmath::wrap_pi(detmath::atan2(to.y, to.x) - heading).abs() <= sensors::CONE_HALF_RAD
+                })
+                .min_by(|a, b| (a.position - pos).length().total_cmp(&(b.position - pos).length()))
+                .map(|f| f.id)
+        };
     }
 
     /// Eigene Erfassung reihum für einige Ziele neu bestimmen (die Sichtlinie

@@ -663,6 +663,20 @@ fn hud_modes_show_their_symbology() {
     land.on_ground = false;
     let gained = |mode: HudMode| draw(&land, mode).len() as i64 - draw(&fd, mode).len() as i64;
     assert!(gained(HudMode::Nav) > gained(HudMode::AirToGround) + 5);
+    // Aufgeschalteter Jäger: Raute nur im AA-Modus.
+    let mut air = fd.clone();
+    air.air_target = Some(f29_core::AirTargetInfo {
+        id: 0,
+        label: "MIG-21",
+        range: 4_000.0,
+        closure_mps: 150.0,
+        direction_body: f29_core::DVec3::new(1.0, 0.05, -0.02).normalize_or_zero(),
+    });
+    let blue = |fd: &f29_core::FlightData, mode: HudMode| {
+        draw(fd, mode).iter().filter(|l| l.ink == Ink::HudWarning).count() as i64
+    };
+    assert!(blue(&air, HudMode::AirToAir) >= blue(&fd, HudMode::AirToAir) + 4, "Raute fehlt");
+    assert_eq!(blue(&air, HudMode::AirToGround), blue(&fd, HudMode::AirToGround));
     // Reihenfolge der Modi
     assert_eq!(HudMode::default(), HudMode::Nav);
     assert_eq!(HudMode::Nav.next().next().next(), HudMode::Nav);

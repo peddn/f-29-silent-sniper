@@ -85,6 +85,7 @@ impl Sim {
             h.u64(d.owner.map_or(u64::MAX, |o| o as u64));
             h.f64(d.age_s);
         }
+        h.u64(self.air_lock.map_or(u64::MAX, u64::from));
         for f in &self.fighters.list {
             h.u64(u64::from(f.id) | (f.mode as u64) << 32 | (f.base as u64) << 40);
             for v in [f.position, f.goal] {

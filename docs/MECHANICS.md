@@ -1458,9 +1458,15 @@ Format jedes Eintrags:
   - **Eigenes Radar:** pingt wie eine Radarstellung gegen dasselbe
     Stealth-Level (M-020), nur im Kegel um die Nase.
   - **Anzeige:** Karte (roter Pfeil in Flugrichtung, Kreis, solange sein
-    Radar das Flugzeug sieht).
-- **Status:** Etappe 1 Kern und Karte umgesetzt (v0.2.9); 3D-Modell und
-  Aufschaltung auf Luftziele folgen
+    Radar das Flugzeug sieht); 3D-Modell (eigener Low-Poly-Deltajäger, in
+    der Ferne mit Mindestgröße).
+  - **Aufschaltung auf Luftziele:** Das eigene Radar (eingeschaltet) schaltet
+    automatisch den nächsten fliegenden Jäger im Kegel voraus auf und hält
+    ihn, solange er in Radarreichweite fliegt. Im AA-Modus zeigt das HUD ihn
+    als blaue Raute mit Typ, Entfernung (km) und Annäherung (m/s); außerhalb
+    des Glases ein Pfeil zum Rand. Waffen dagegen folgen mit Etappe 2
+    (Kanone mit Vorhaltemarke, AIM-9).
+- **Status:** Etappe 1 umgesetzt (v0.2.9)
 
 ### M-031 Einsatzgebiete und Missionsgenerator
 

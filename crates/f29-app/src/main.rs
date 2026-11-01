@@ -17,6 +17,7 @@
 
 mod airfield;
 mod capture;
+mod fighters;
 mod hud;
 mod input;
 mod joystick;
@@ -104,6 +105,7 @@ fn main() {
         sim::SimPlugin { config },
         airfield::AirfieldPlugin,
         targets::TargetsPlugin,
+        fighters::FightersPlugin,
         weapons::WeaponsPlugin,
         input::InputPlugin,
         joystick::JoystickPlugin { settings: joystick },

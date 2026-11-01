@@ -118,6 +118,34 @@ fn cuboid(m: &mut MeshData, lo: [f32; 3], hi: [f32; 3], col: [f32; 3]) {
     }
 }
 
+/// Feindlicher Jäger (eigener Low-Poly-Entwurf, Deltaflügel mit Seitenflosse),
+/// Modellachsen wie [`aircraft`]: Nase in −z, rechts +x, oben +y. Länge 14 m.
+pub fn fighter() -> MeshData {
+    let hull = palette::mix(13, 6, 0.25);
+    let dark = palette::mix(13, 0, 0.4);
+    let mut m = MeshData::with_capacity(24);
+    // Rumpf: Rhombus im Querschnitt, von der Nase zum Heck
+    let (nose, tail) = ([0.0, 0.0, -7.0], [0.0, 0.0, 7.0]);
+    let ring = [[0.0, 0.7, 0.0], [0.7, 0.0, 0.0], [0.0, -0.7, 0.0], [-0.7, 0.0, 0.0]];
+    for k in 0..4 {
+        let (a, b) = (ring[k], ring[(k + 1) % 4]);
+        let col = if a[1] < 0.0 || b[1] < 0.0 { dark } else { hull };
+        m.push_lit(nose, a, b, col);
+        m.push_lit(tail, b, a, col);
+    }
+    // Flächen, Seitenflosse und Höhenleitwerk von beiden Seiten sichtbar
+    let mut both = |a: [f32; 3], b: [f32; 3], c: [f32; 3], col: [f32; 3]| {
+        m.push_lit(a, b, c, col);
+        m.push_lit(a, c, b, col);
+    };
+    for s in [-1.0_f32, 1.0] {
+        both([0.6 * s, 0.0, -2.0], [4.0 * s, 0.0, 3.5], [0.6 * s, 0.0, 4.0], hull);
+        both([0.5 * s, 0.0, 5.0], [2.2 * s, 0.0, 6.8], [0.5 * s, 0.0, 6.8], hull);
+    }
+    both([0.0, 0.6, 2.5], [0.0, 3.0, 6.2], [0.0, 0.5, 6.8], hull);
+    m
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -155,6 +183,17 @@ mod tests {
         // Die ersten 5 Dreiecke je Seite sind Oberseite
         for t in (0..5).chain(9..14) {
             assert!(m.normals[t * 3][1] > 0.0, "Oberseiten-Dreieck {t} zeigt nach unten");
+        }
+    }
+
+    #[test]
+    fn fighter_hull_faces_point_outward() {
+        let m = fighter();
+        for t in 0..8 {
+            let [a, b, c] = [m.positions[3 * t], m.positions[3 * t + 1], m.positions[3 * t + 2]];
+            let centroid =
+                [(a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0, (a[2] + b[2] + c[2]) / 3.0];
+            assert!(dot(face_normal(a, b, c), centroid) > 0.0, "Rumpfdreieck {t} zeigt nach innen");
         }
     }
 }

@@ -85,6 +85,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
         HudMode::AirToAir => {
             let r = layout.focal() * AA_CIRCLE_DEG.to_radians().tan();
             dl.circle(c, r, 48, Ink::Hud);
+            air_target_marker(dl, fd, layout, &glass, vh);
         }
     }
     heading_tape(dl, fd, &glass);
@@ -394,6 +395,27 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
                 ];
                 dl.text_mid(back, TXT_SMALL * 0.8, Align::Center, "TGT", ink);
             }
+        }
+    }
+}
+
+/// Aufgeschalteter Jäger (AA-Modus): Raute mit Typ, darunter Entfernung in
+/// km und Annäherung; außerhalb des Glases ein Pfeil zum Rand.
+fn air_target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glass: &Rect, vh: f32) {
+    let Some(t) = &fd.air_target else {
+        return;
+    };
+    let s = vh * 0.022;
+    match layout.project_body(t.direction_body.to_array()) {
+        Some(p) if glass.contains(p) => {
+            let pts = [[p[0], p[1] + s], [p[0] + s, p[1]], [p[0], p[1] - s], [p[0] - s, p[1]]];
+            dl.polyline(&pts, true, Ink::HudWarning);
+            dl.text_mid([p[0], p[1] + s * 2.0], TXT_SMALL * 0.8, Align::Center, t.label, Ink::HudWarning);
+            let info = format!("{:.1} {:+.0}", t.range / 1_000.0, t.closure_mps);
+            dl.text_mid([p[0], p[1] - s * 2.0], TXT_SMALL * 0.8, Align::Center, &info, Ink::HudWarning);
+        }
+        _ => {
+            edge_arrow(dl, t.direction_body, glass, s * 0.8, Ink::HudWarning);
         }
     }
 }

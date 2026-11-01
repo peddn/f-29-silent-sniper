@@ -290,7 +290,10 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Etappe 1a: zwei feindliche Fliegerhorste, je fünf Jäger (MiG-21, MiG-29),
       Start bei Alarm, Abfangen, Patrouille, Verfolgen mit eigenem Radar,
       Rückflug und Landung; Karte (v0.2.9)
-- [ ] Etappe 1b: Jäger in 3D, Radar-Aufschaltung auf Luftziele, Zielrahmen im AA-Modus
+- [x] Etappe 1b: Jäger in 3D, Radar-Aufschaltung auf Luftziele, Zielrahmen im
+      AA-Modus (v0.2.9)
+- [ ] Etappe 2: Kanone gegen Luftziele mit Vorhaltemarke, AIM-9 Sidewinder,
+      feindliche Fackeln, Schaden an Jägern
 - [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
 - [ ] Luft-Luft-Raketen, Bordkanone gegen Luftziele
 - [ ] Feindliche Jäger und Abfangjäger mit KI (aufbauend auf dem Autopiloten)
