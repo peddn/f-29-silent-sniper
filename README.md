@@ -311,9 +311,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       und schießen mit der Kanone (Treffer kosten Schub, mit 15 % ein
       System); sie weichen Raketen querab bzw. mit Abschwung aus (v0.2.9)
 - [ ] Weitwinkelsicht ohne MFDs für den Luftkampf (Taste C)
-- [ ] Luft-Luft-Raketen, Bordkanone gegen Luftziele
-- [ ] Feindliche Jäger und Abfangjäger mit KI (aufbauend auf dem Autopiloten)
-- [ ] Radarwarnempfänger
+- ~~Radarwarnempfänger~~ (gestrichen, Spielerentscheidung v0.2.9)
 
 ### v0.5: Karriere
 - [ ] Pilot mit Laufbahn: Missionsfolge, Punkte, Ränge, Orden (eigene Namen)
