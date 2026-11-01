@@ -10,10 +10,9 @@ use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::hud::HudMode;
 use crate::map::{MapData, MapProjection};
 use crate::{ScreenLayout, heading_deg};
-use f29_core::FlightData;
 use f29_core::targets::{TargetClass, TargetRole};
 use f29_core::terrain::AirfieldKind;
-use f29_core::weapons::LaunchZone;
+use f29_core::{FlightData, Mark, Stage};
 
 /// Kartenbereiche: Entfernung von der Mitte bis zum Rand in Seemeilen.
 /// Kartenbereiche (Mitte bis Rand) in km.
@@ -241,16 +240,20 @@ pub(crate) fn draw(
 }
 
 /// Viereck um ein Ziel der Art des HUD-Modus auf der Karte (halbe Breite
-/// `b`), wie im HUD: gedämpft; gewählt doppelt und hell; aufgeschaltet mit
-/// Ecken.
-fn frame(dl: &mut DisplayList, p: [f32; 2], b: f32, picked: bool, locked: bool) {
-    let ink = if picked { Ink::Hud } else { Ink::MfdDim };
-    dl.rect(Rect::from_center(p, [b, b]), ink);
-    if picked {
+/// `b`), wie im HUD: gemeldet gestrichelt, entdeckt gedämpft, gewählt
+/// doppelt und hell, erfasst mit Ecken.
+fn frame(dl: &mut DisplayList, p: [f32; 2], b: f32, m: &Mark) {
+    let ink = if m.selected { Ink::Hud } else { Ink::MfdDim };
+    let r = Rect::from_center(p, [b, b]);
+    match m.stage {
+        Stage::Reported if !m.selected => dl.dashed_rect(r, ink),
+        _ => dl.rect(r, ink),
+    }
+    if m.selected {
         let i = b * crate::hud::INNER;
         dl.rect(Rect::from_center(p, [i, i]), ink);
     }
-    if locked {
+    if m.locked {
         let (o, c) = (b * 1.4, b * 0.6);
         for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
             let corner = [p[0] + sx * o, p[1] + sy * o];
@@ -346,16 +349,9 @@ fn draw_map(
                 };
                 dl.polyline(&pts, true, ink);
                 let pc = proj.to_screen(rw.center);
-                if mode == HudMode::Nav {
-                    let picked = fd.runway_target.is_some_and(|r| r.name == rw.name);
-                    frame(dl, pc, txt * SYMBOL * 1.35, picked, false);
-                }
                 dl.text_mid([pc[0] + txt * 0.8, pc[1] - txt * 1.4], txt * 0.8, Align::Left, rw.name, ink);
             }
             // Ziele
-            let picked = fd.target.as_ref().map(|t| t.index);
-            let locked =
-                fd.target.is_some_and(|t| matches!(t.zone, Some(LaunchZone::Locked | LaunchZone::Good)));
             for (k, t) in map.targets.iter().enumerate() {
                 // Zerstörte Ziele verschwinden von der Karte.
                 if !near(t.pos) || fd.destroyed_targets.binary_search(&k).is_ok() {
@@ -386,10 +382,6 @@ fn draw_map(
                 if let Some(tag) = tag {
                     dl.circle(p, s * 1.6, 12, Ink::Warning);
                     dl.text_mid([p[0] + s * 1.9, p[1] + s * 1.2], txt * 0.8, Align::Left, tag, Ink::Warning);
-                }
-                if mode == HudMode::AirToGround {
-                    let picked = Some(k) == picked;
-                    frame(dl, p, s * 1.35, picked, picked && locked);
                 }
             }
             // Radarstellungen, die das Flugzeug entdeckt haben (M-020):
@@ -508,9 +500,12 @@ fn draw_map(
         if f.pursuing {
             dl.circle(p, k * 2.0, 10, Ink::Warning);
         }
-        if mode == HudMode::AirToAir {
-            let picked = fd.air_target.filter(|t| t.id == f.id);
-            frame(dl, p, txt * SYMBOL * 1.35, picked.is_some(), picked.is_some_and(|t| t.in_circle));
+    }
+    // Vierecke um die bekannten Ziele der Modusart, wie im HUD.
+    for m in fd.marks.iter().filter(|m| m.kind == mode.kind()) {
+        let pos = [m.position.x, m.position.y];
+        if near(pos) {
+            frame(dl, proj.to_screen(pos), txt * SYMBOL * 1.35, m);
         }
     }
 

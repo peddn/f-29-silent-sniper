@@ -404,14 +404,28 @@ pub enum MarkKind {
     Runway,
 }
 
-/// Ein bekanntes Ziel vor dem Flugzeug (HUD-Viereck): eigene Sensoren oder
-/// AWACS; Landebahnen immer.
+/// Stufe eines bekannten Ziels; dazu kommen „gewählt“ und „erfasst“.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    /// Nur vom AWACS gemeldet: sichtbar, nicht wählbar.
+    Reported,
+    /// Von eigenem Radar oder optischem System entdeckt: wählbar.
+    Detected,
+}
+
+/// Ein bekanntes Ziel (Viereck in HUD und Karte).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Mark {
     pub kind: MarkKind,
+    /// NED (m) und Richtung in Körperachsen (normiert).
+    pub position: DVec3,
     pub direction_body: DVec3,
-    /// Das gewählte Ziel seiner Art (das HUD zeichnet es eigens).
+    pub stage: Stage,
+    pub seen: Seen,
+    /// Das gewählte Ziel seiner Art; erfasst von der Waffe (Bodenziel in
+    /// Reichweite, Jäger im Erfassungskreis).
     pub selected: bool,
+    pub locked: bool,
 }
 
 /// Ein feindlicher Jäger in der Luft (Karte, 3D, HUD).
@@ -513,33 +527,41 @@ impl Sim {
         }
     }
 
-    /// Bekannte Ziele vor dem Flugzeug für die HUD-Vierecke: Bodenziele der
-    /// eigenen Sensoren oder des AWACS, Jäger ebenso, alle Landebahnen.
+    /// Alle bekannten Ziele für die Vierecke in HUD und Karte: Bodenziele
+    /// und Jäger, die die eigenen Sensoren entdecken oder das AWACS meldet;
+    /// Landebahnen immer (von der Karte).
     fn marks(&self) -> Vec<Mark> {
         let a = &self.aircraft;
         let awacs = self.config.spawn.awacs;
-        let ground = self
-            .targets
-            .iter()
-            .enumerate()
-            .filter(|(i, t)| t.is_intact() && (awacs || self.ground_seen[*i].any()));
-        let ground =
-            ground.map(|(i, t)| (MarkKind::Ground, super::center(t), self.picks.ground.index == Some(i)));
-        let air = self
-            .fighters
-            .list
-            .iter()
-            .filter(|f| f.airborne() && (awacs || self.fighter_seen[f.id as usize].any()));
-        let air = air.map(|f| (MarkKind::Air, f.position, self.picks.air.index == Some(f.id as usize)));
+        let p = &self.picks;
+        let zone_locked = matches!(self.launch_zone, Some((_, LaunchZone::Locked | LaunchZone::Good)));
+        let ground = self.targets.iter().enumerate().filter(|(_, t)| t.is_intact());
+        let ground = ground.map(|(i, t)| {
+            let selected = p.ground.index == Some(i);
+            (MarkKind::Ground, super::center(t), self.ground_seen[i], selected, selected && zone_locked)
+        });
+        let air = self.fighters.list.iter().filter(|f| f.airborne()).map(|f| {
+            let selected = p.air.index == Some(f.id as usize);
+            let to = a.attitude.inverse_rotate((f.position - a.position).normalize_or_zero());
+            let in_circle = detmath::acos(to.x.clamp(-1.0, 1.0)) <= sensors::AIR_CIRCLE_RAD;
+            (MarkKind::Air, f.position, self.fighter_seen[f.id as usize], selected, selected && in_circle)
+        });
+        let known = Seen { radar: false, optical: true };
         let runways = self.terrain.runways().iter().enumerate();
-        let runways =
-            runways.map(|(i, r)| (MarkKind::Runway, runway_point(r), self.picks.runway.index == Some(i)));
+        let runways = runways
+            .map(|(i, r)| (MarkKind::Runway, runway_point(r), known, p.runway.index == Some(i), false));
         ground
             .chain(air)
+            .filter(|m| awacs || m.2.any())
             .chain(runways)
-            .filter_map(|(kind, p, selected)| {
-                let direction_body = a.attitude.inverse_rotate((p - a.position).normalize_or_zero());
-                (direction_body.x > 0.0).then_some(Mark { kind, direction_body, selected })
+            .map(|(kind, position, seen, selected, locked)| Mark {
+                kind,
+                position,
+                direction_body: a.attitude.inverse_rotate((position - a.position).normalize_or_zero()),
+                stage: if seen.any() { Stage::Detected } else { Stage::Reported },
+                seen,
+                selected,
+                locked,
             })
             .collect()
     }
@@ -788,7 +810,9 @@ impl Sim {
                 .fighters
                 .list
                 .iter()
-                .filter(|f| f.airborne())
+                .filter(|f| {
+                    f.airborne() && (self.config.spawn.awacs || self.fighter_seen[f.id as usize].any())
+                })
                 .map(|f| FighterInfo {
                     id: f.id,
                     label: f.spec().label,

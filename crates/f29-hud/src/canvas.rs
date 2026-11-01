@@ -153,6 +153,19 @@ impl DisplayList {
         self.polyline(&[[x0, y0], [x1, y0], [x1, y1], [x0, y1]], true, ink);
     }
 
+    /// Rechteck aus Strichen (drei je Seite).
+    pub fn dashed_rect(&mut self, r: Rect, ink: Ink) {
+        let corners = [r.min, [r.max[0], r.min[1]], r.max, [r.min[0], r.max[1]]];
+        for k in 0..4 {
+            let (a, b) = (corners[k], corners[(k + 1) % 4]);
+            for d in 0..3 {
+                let t0 = (d as f32 * 2.0) / 5.0;
+                let at = |t: f32| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+                self.line(at(t0), at(t0 + 0.2), ink);
+            }
+        }
+    }
+
     /// Kreis(bogen) als Polygonzug. Winkel in rad, mathematisch positiv, 0 = rechts.
     pub fn arc(&mut self, c: [f32; 2], r: f32, from: f32, to: f32, segments: u32, ink: Ink) {
         let n = segments.max(1);

@@ -325,6 +325,16 @@ fn picked_fighter_shows_on_map_and_target_page() {
         bank: 0.0,
         pursuing: false,
     }];
+    let mark = |selected, locked| f29_core::Mark {
+        kind: f29_core::MarkKind::Air,
+        position: ahead,
+        direction_body: f29_core::DVec3::X,
+        stage: f29_core::Stage::Detected,
+        seen: f29_core::sensors::Seen { radar: false, optical: true },
+        selected,
+        locked,
+    };
+    fd.marks.push(mark(false, false));
     let count = |fd: &f29_core::FlightData, mode: HudMode| {
         let mfd = MfdState { right_page: RightPage::Target, ..MfdState::default() };
         let opts = HudOptions { show_hud: false, hud_mode: mode, mfd, ..HudOptions::default() };
@@ -346,11 +356,12 @@ fn picked_fighter_shows_on_map_and_target_page() {
         radar: false,
         bearing: fd.heading,
     });
+    *picked.marks.last_mut().unwrap() = mark(true, true);
     let (map0, page0) = count(&fd, HudMode::AirToAir);
     let (map1, page1) = count(&picked, HudMode::AirToAir);
     assert_eq!(map1, map0 + 16, "doppelter Rahmen und Ecken auf der Karte");
     let mut chosen = picked.clone();
-    chosen.air_target = picked.air_target.map(|t| f29_core::AirTargetInfo { in_circle: false, ..t });
+    *chosen.marks.last_mut().unwrap() = mark(true, false);
     assert_eq!(count(&chosen, HudMode::AirToAir).0, map0 + 8, "gewählt, nicht aufgeschaltet: ohne Ecken");
     assert_eq!(
         count(&picked, HudMode::AirToGround).0,
@@ -600,24 +611,34 @@ fn one_circle_per_mode() {
 #[test]
 fn modes_filter_the_target_marks() {
     use crate::HudMode;
-    use f29_core::{Mark, MarkKind};
+    use f29_core::{Mark, MarkKind, Stage};
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
     let mut fd = sample();
     let ahead = |y: f64| f29_core::DVec3::new(1.0, y, 0.02).normalize_or_zero();
+    let mark = |kind, y, stage, radar| Mark {
+        kind,
+        position: f29_core::DVec3::ZERO,
+        direction_body: ahead(y),
+        stage,
+        seen: f29_core::sensors::Seen { radar, optical: false },
+        selected: false,
+        locked: false,
+    };
     fd.marks = vec![
-        Mark { kind: MarkKind::Ground, direction_body: ahead(-0.1), selected: false },
-        Mark { kind: MarkKind::Air, direction_body: ahead(0.0), selected: false },
-        Mark { kind: MarkKind::Air, direction_body: ahead(0.05), selected: false },
-        Mark { kind: MarkKind::Runway, direction_body: ahead(0.1), selected: false },
+        mark(MarkKind::Ground, -0.1, Stage::Reported, false),
+        mark(MarkKind::Air, 0.0, Stage::Reported, false),
+        mark(MarkKind::Air, 0.05, Stage::Detected, true),
+        mark(MarkKind::Runway, 0.1, Stage::Detected, false),
     ];
     let dim = |fd: &f29_core::FlightData, mode: HudMode| {
         let opts = HudOptions { show_panel: false, hud_mode: mode, ..HudOptions::default() };
         build(fd, &layout, &opts, None).lines.iter().filter(|l| l.ink == Ink::HudDim).count()
     };
     let empty = f29_core::FlightData { marks: Vec::new(), ..fd.clone() };
-    assert_eq!(dim(&fd, HudMode::AirToAir) - dim(&empty, HudMode::AirToAir), 8, "zwei Jäger");
-    assert_eq!(dim(&fd, HudMode::AirToGround) - dim(&empty, HudMode::AirToGround), 4, "ein Bodenziel");
-    assert_eq!(dim(&fd, HudMode::Nav) - dim(&empty, HudMode::Nav), 4, "eine Landebahn");
+    let added = |mode| dim(&fd, mode) - dim(&empty, mode);
+    assert_eq!(added(HudMode::AirToGround), 12, "gemeldet: gestrichelt");
+    assert_eq!(added(HudMode::Nav), 4, "Landebahn ohne Kürzel");
+    assert!(added(HudMode::AirToAir) > 12 + 4, "entdeckt: Viereck mit Kürzel");
 }
 
 /// Feuersignal: „SHOOT“ (blau), wenn die Vorausberechnung trifft, sonst nur

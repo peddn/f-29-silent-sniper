@@ -5,7 +5,7 @@ use crate::{ScreenLayout, heading_deg};
 use f29_core::sensors;
 use f29_core::units;
 use f29_core::weapons::LaunchZone;
-use f29_core::{FlightData, MarkKind, Side};
+use f29_core::{FlightData, MarkKind, Side, Stage};
 
 /// Zeichenhöhe der HUD-Schrift (Bildschirmeinheiten).
 const TXT: f32 = 0.020;
@@ -34,6 +34,14 @@ pub enum HudMode {
 }
 
 impl HudMode {
+    /// Zielart, die der Modus zeigt und wählt.
+    pub fn kind(self) -> MarkKind {
+        match self {
+            HudMode::Nav => MarkKind::Runway,
+            HudMode::AirToGround => MarkKind::Ground,
+            HudMode::AirToAir => MarkKind::Air,
+        }
+    }
     pub fn next(self) -> Self {
         match self {
             HudMode::Nav => HudMode::AirToGround,
@@ -349,8 +357,8 @@ fn target_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
             };
             let inner = Rect::from_center(p, [s * INNER, s * INNER]);
             if zone == Some(LaunchZone::NoEffect) {
-                dashed_rect(dl, r, ink);
-                dashed_rect(dl, inner, ink);
+                dl.dashed_rect(r, ink);
+                dl.dashed_rect(inner, ink);
             } else {
                 dl.rect(r, ink);
                 dl.rect(inner, ink);
@@ -408,7 +416,8 @@ fn corners(dl: &mut DisplayList, p: [f32; 2], s: f32, ink: Ink) {
 }
 
 /// Schlichte Vierecke um alle bekannten Ziele der Art `kind` im Glas (das
-/// gewählte zeichnet sein eigener Rahmen).
+/// gewählte zeichnet sein eigener Rahmen): gemeldet gestrichelt, entdeckt
+/// durchgezogen mit Kürzel des Sensors (R Radar, O optisch).
 fn marks(
     dl: &mut DisplayList,
     fd: &FlightData,
@@ -419,8 +428,22 @@ fn marks(
 ) {
     let s = vh * MARK_SIZE;
     for m in fd.marks.iter().filter(|m| m.kind == kind && !m.selected) {
-        if let Some(p) = layout.project_body(m.direction_body.to_array()).filter(|p| glass.contains(*p)) {
-            dl.rect(Rect::from_center(p, [s, s]), Ink::HudDim);
+        let Some(p) = layout.project_body(m.direction_body.to_array()).filter(|p| glass.contains(*p)) else {
+            continue;
+        };
+        let r = Rect::from_center(p, [s, s]);
+        if m.stage == Stage::Reported {
+            dl.dashed_rect(r, Ink::HudDim);
+            continue;
+        }
+        dl.rect(r, Ink::HudDim);
+        if kind != MarkKind::Runway {
+            let tag = match (m.seen.radar, m.seen.optical) {
+                (true, true) => "RO",
+                (true, false) => "R",
+                _ => "O",
+            };
+            dl.text_mid([r.max[0] + s * 0.4, r.min[1]], TXT_SMALL * 0.6, Align::Left, tag, Ink::HudDim);
         }
     }
 }
@@ -479,20 +502,6 @@ fn runway_marker(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, g
     };
     let info = format!("{} {:.1}", r.side.label(), r.range / 1_000.0);
     picked_marker(dl, layout, glass, vh, r.direction_body, r.name, &info, ink, false);
-}
-
-/// Rechteck aus Strichen (drei je Seite).
-fn dashed_rect(dl: &mut DisplayList, r: Rect, ink: Ink) {
-    let corners = [r.min, [r.max[0], r.min[1]], r.max, [r.min[0], r.max[1]]];
-    for k in 0..4 {
-        let (a, b) = (corners[k], corners[(k + 1) % 4]);
-        for d in 0..3 {
-            let t0 = (d as f32 * 2.0) / 5.0;
-            let t1 = t0 + 1.0 / 5.0;
-            let at = |t: f32| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-            dl.line(at(t0), at(t1), ink);
-        }
-    }
 }
 
 /// Kursband oben im HUD.

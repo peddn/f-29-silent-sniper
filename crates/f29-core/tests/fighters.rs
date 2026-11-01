@@ -111,3 +111,35 @@ fn runways_are_picked_with_their_side() {
     assert_eq!(side_of(&mut sim, AirfieldKind::Home), f29_core::Side::Friendly);
     assert_eq!(side_of(&mut sim, AirfieldKind::Enemy), f29_core::Side::Hostile);
 }
+
+/// Stufen: Mit AWACS sind alle Jäger bekannt, entdeckt nur die in Reichweite
+/// der eigenen Sensoren (nachts, Radar aus: optisch 20 km); ohne AWACS
+/// kennen HUD und Karte nur die entdeckten.
+#[test]
+fn awacs_reports_what_own_sensors_do_not_detect() {
+    use f29_core::{MarkKind, Stage};
+    let start = |awacs: bool| {
+        let spawn = Spawn { visible: true, night: true, awacs, invulnerable: true, ..Spawn::default() };
+        approach(SEED, TargetClass::AirDefense, 15_000.0, 0.0, 3_000.0, spawn).expect("Stellung").0
+    };
+    let (mut with, mut without) = (start(true), start(false));
+    let range = f29_core::sensors::OPTICAL_RANGE_M * f29_core::sensors::NIGHT_OPTICAL_FACTOR;
+    let mut stages = [false; 2];
+    for _ in 0..ticks(300.0) {
+        step(&mut with, 0, 0);
+        step(&mut without, 0, 0);
+        let fd = with.flight_data();
+        let air: Vec<_> = fd.marks.iter().filter(|m| m.kind == MarkKind::Air).collect();
+        assert_eq!(air.len(), fd.fighters.len(), "AWACS meldet alle Jäger");
+        for m in &air {
+            let far = (m.position - fd.position).length() > range;
+            assert!(!far || m.stage == Stage::Reported, "zu weit für die Optik und doch entdeckt");
+            stages[usize::from(m.stage == Stage::Detected)] = true;
+        }
+        let detected = air.iter().filter(|m| m.stage == Stage::Detected).count();
+        let fd = without.flight_data();
+        assert_eq!(fd.fighters.len(), detected, "Karte ohne AWACS: nur entdeckte");
+        assert!(fd.marks.iter().filter(|m| m.kind == MarkKind::Air).all(|m| m.stage == Stage::Detected));
+    }
+    assert_eq!(stages, [true; 2], "gemeldete und entdeckte Jäger kamen nicht beide vor");
+}
