@@ -1549,8 +1549,42 @@ Format jedes Eintrags:
     12 m, Resistenz 0,7. Gemessen über 30 Anflüge von vorn: ohne
     Täuschkörper trifft jede, mit ihnen die AIM-9 knapp jede zweite, die
     AIM-120 etwa zwei von drei.
+- **Lesephase Etappe 3 (eigene Worte, keine Werte):** Referenz
+  `updateObjects` (Kampfteil) und `fireAirThreat` in `src/egcombat.c`.
+  - **Raketen der Jäger:** Jeder Jäger trägt einen Raketentyp aus derselben
+    Tabelle wie die SAMs (u. a. AA-2, AA-8, AA-10, AA-7). Gestartet wird im
+    Takt seines Radarumlaufs, wenn alles zutrifft: sein Radar hat das
+    Flugzeug erfasst, es liegt ungefähr vor seiner Nase (ein Kegel von gut
+    dreißig Grad), es ist innerhalb der Erfassungsreichweite der Rakete und
+    nicht zu nah (die Mindestentfernung sinkt mit der Konfliktstufe), sein
+    eigener Raketenplatz ist frei (eine Rakete je Jäger in der Luft) und es
+    laufen nicht schon zu viele Bedrohungen (abhängig von der
+    Konfliktstufe). Meldung „<Rakete> abgefeuert von <Typ>“. Einen Vorrat
+    gibt es nicht.
+  - **Lenkung:** dieselbe wie bei den SAMs. Weit weg lenkt die Rakete nur,
+    solange ihr Jäger das Flugzeug mit seinem Radar hält – Stealth wirkt
+    also auch hier während des Anflugs; nah sucht sie selbst.
+  - **Kanone:** im Nahkampf, wenn das Flugzeug sehr nah und fast genau vor
+    seiner Nase liegt (Kurs und Nicklage stimmen eng überein) und der Alarm
+    schon eine Weile läuft; dann schießt er in kurzen Abständen Patronen in
+    Nasenrichtung.
+  - **Manöver im Nahkampf:** Ist der Jäger nah dran, wählt er sein Manöver
+    aus einer Tabelle nach Aggressivität (aus Konfliktstufe und Nummer des
+    Jägers), der Lage des Flugzeugs vor ihm (acht Sektoren) und dem
+    Kurswinkel zueinander (acht Sektoren): eine Kurve bestimmter Stärke,
+    Hochziehen mit pendelnder Querlage oder ein Abschwung, nicht unter eine
+    Mindesthöhe. Weiter weg kurvt er einfach auf das Ziel zu. Laufen schon
+    viele Bedrohungen, dreht er ab. Im Nahkampf fliegt er schneller.
+  - **Ausweichen:** Kommt ihm eine Rakete nah, fliegt er eine harte Kurve
+    zur Seite.
+  - **Radarwarner (Bedrohungsanzeige):** Das Cockpit zeigt die stärkste
+    Radarbedrohung: einen Balken für die Stärke, einen Bogen in ihrer
+    Richtung (bei Radaren mit Kegel um ihre Blickrichtung, bei einer
+    verfolgenden Bedrohung um ihre Peilung) und einen Warnton, der lauter
+    wird, sobald sie das Flugzeug erfasst; daneben der Name der Bedrohung.
 - **Status:** Etappe 1 umgesetzt (v0.2.9); Etappe 2 umgesetzt (v0.2.9):
-  Abschuss, Kanone mit Vorhaltemarke, AIM-9, AIM-120, Täuschkörper der Jäger
+  Abschuss, Kanone mit Vorhaltemarke, AIM-9, AIM-120, Täuschkörper der Jäger;
+  Etappe 3 gelesen
 
 ### M-031 Einsatzgebiete und Missionsgenerator
 
