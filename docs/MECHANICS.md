@@ -1217,6 +1217,24 @@ Format jedes Eintrags:
     kürzer). Liegt er im Suchkegel einer Rakete der passenden Lenkart, lenkt
     sie auf ihn statt auf das Flugzeug – kein Würfeln. Leerer Vorrat meldet
     „erschöpft“.
+  - **Genauer nachgelesen (Spielerhinweis: „Düppel halfen nicht immer“):**
+    Der Täuschkörper fängt die Rakete nicht ein, er bricht nur ihre
+    Aufschaltung, solange er in ihrem Suchkegel liegt – sie fliegt dann
+    geradeaus. Verlässt er den Kegel und liegt das Flugzeug noch darin,
+    schaltet sie wieder auf. Die Raketen sind in Lenkart-Generationen
+    eingeteilt: Infrarot (Fackeln wirken immer, wenn im Kegel), ältere
+    Radarlenkung (Düppel wirken immer; der Störsender bricht die Aufschaltung
+    auf jede Entfernung), mittlere Radarlenkung (Düppel wirken immer; der
+    Störsender nur außerhalb einer Durchbrenn-Entfernung) und moderne
+    Radarlenkung, bei der **Düppel nur wirken, wenn das Flugzeug ungefähr
+    quer zur Rakete fliegt** (Doppler-Kerbe). Das zulässige Fenster um die
+    Querlage wird mit steigender Konfliktstufe enger, ebenso wird die
+    Durchbrenn-Entfernung des Störsenders größer und die Brenndauer des
+    Täuschkörpers kürzer. Auf niedrigen Stufen drehen die feindlichen Raketen
+    zudem langsamer (eine Obergrenze der Drehung je Bild, die mit der Stufe
+    wächst). Wird bei drei Täuschkörpern in der Luft ein weiterer
+    angefordert, zählt der Vorrat trotzdem herunter, ohne dass einer
+    ausgeworfen wird.
   - **Störsender:** begrenzt, läuft deutlich länger als ein Täuschkörper;
     radargelenkte Raketen verlieren außerhalb kurzer Entfernung die
     Aufschaltung, und die Alarmstufen der Stellungen steigen nur halb so
