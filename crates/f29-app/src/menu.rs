@@ -1,8 +1,9 @@
 //! Menüführung vor dem Flug (M-036), Ablauf wie im Original: Erkennung
-//! (Platzhalter) → Auftrag (annehmen oder der Reihe nach ändern: Gebiet,
-//! Konfliktlage, Missionsart, Gegnerqualität, Flugverhalten) → Briefing →
-//! Schlussauswahl (neue Mission, Briefing, Bewaffnung, Start). Nach der
-//! Nachbesprechung geht es mit einer neuen Mission zurück zum Auftrag.
+//! (Platzhalter) → Dienstplan (Platzhalter) → Auftrag (annehmen oder der
+//! Reihe nach ändern: Gebiet, Konfliktlage, Missionsart, Gegnerqualität,
+//! Flugverhalten) → Briefing → Schlussauswahl (neue Mission, Briefing,
+//! Bewaffnung, Start). Eine neue Mission und das Ende der Nachbesprechung
+//! führen zurück zum Dienstplan.
 //!
 //! Die Simulation steht still, solange ein Menü offen ist; sie trägt aber
 //! schon die Mission, die das Briefing beschreibt.
@@ -35,6 +36,7 @@ impl Plugin for MenuPlugin {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Identification,
+    Roster,
     Assignment,
     Region,
     Conflict,
@@ -56,6 +58,11 @@ pub fn page(state: &SimState) -> Page {
         Screen::Identification => (
             "AIRCRAFT IDENTIFICATION",
             list(&["PLACEHOLDER - THE IDENTIFICATION", "QUIZ FOLLOWS IN A LATER VERSION."]),
+            list(&["CONTINUE"]),
+        ),
+        Screen::Roster => (
+            "DUTY ROSTER",
+            list(&["PLACEHOLDER - PILOT SELECTION", "FOLLOWS IN A LATER VERSION."]),
             list(&["CONTINUE"]),
         ),
         Screen::Assignment => (
@@ -128,7 +135,8 @@ fn new_mission(state: &mut SimState) {
 fn choose(state: &mut SimState, choice: usize) {
     let mut config = state.sim.config().clone();
     let next = match state.menu {
-        Some(Screen::Identification) => Some(Screen::Assignment),
+        Some(Screen::Identification) => Some(Screen::Roster),
+        Some(Screen::Roster) => Some(Screen::Assignment),
         Some(Screen::Assignment) => Some(if choice == 0 { Screen::Briefing } else { Screen::Region }),
         Some(Screen::Region) => Some(Screen::Conflict),
         Some(Screen::Conflict) => {
@@ -151,7 +159,7 @@ fn choose(state: &mut SimState, choice: usize) {
         Some(Screen::Final) => match choice {
             0 => {
                 new_mission(state);
-                Some(Screen::Briefing)
+                Some(Screen::Roster)
             }
             1 => Some(Screen::Briefing),
             2 => Some(Screen::Arming),
@@ -168,7 +176,7 @@ fn choose(state: &mut SimState, choice: usize) {
 /// Bedienung: Pfeile bzw. W/S oder Blick vorn/hinten am Joystick wählen,
 /// Leertaste, Enter bzw. Auslöser bestätigen. Alle anderen Aktionen ruhen
 /// im Menü (nur Escape beendet). Am Ende der Nachbesprechung öffnet sich der
-/// Auftrag mit einer neuen Mission.
+/// Dienstplan mit einer neuen Mission.
 fn menu_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut actions: ResMut<Actions>,
@@ -182,7 +190,7 @@ fn menu_input(
         if done {
             view.debrief = 0;
             new_mission(&mut state);
-            open(&mut state, Screen::Assignment);
+            open(&mut state, Screen::Roster);
             *pilot = PilotInput::matching(&state.sim);
         }
         return;
