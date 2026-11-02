@@ -11,11 +11,11 @@ use crate::debrief::{TXT, footer};
 
 /// Einträge je Spalte der Liste.
 pub const ROWS: usize = 6;
-const ROW: f32 = 0.029;
+const ROW: f32 = 0.04;
 /// Bildbereich (Fensterhöhe = 1) und Maßstab (Bildschirm je Meter): Die
-/// Schächte füllen die halbe Höhe.
-const PICTURE: [f32; 2] = [-0.225, 0.43];
-const SCALE: f32 = 0.5 / (2.0 * (BAY_CENTER[0] + BAY_HALF[0]));
+/// Schächte füllen 40 % der Höhe, darunter Platz für die Liste.
+const PICTURE: [f32; 2] = [-0.13, 0.43];
+const SCALE: f32 = 0.4 / (2.0 * (BAY_CENTER[0] + BAY_HALF[0]));
 /// Grundriss der F-29 (rechte Hälfte, x quer, z längs, Nase in −z, Meter)
 /// wie in `f29_render::model::aircraft`.
 const OUTLINE: [[f32; 2]; 5] = [[0.0, -9.0], [6.5, 4.0], [3.0, 5.0], [2.2, 7.5], [0.0, 6.2]];
@@ -118,13 +118,13 @@ pub fn draw(layout: &ScreenLayout, a: &Arming) -> DisplayList {
     // Liste in zwei Spalten
     for (k, item) in a.items.iter().enumerate() {
         let x = if k < ROWS { -0.62 } else { 0.08 };
-        let y = PICTURE[0] - 0.03 - (k % ROWS) as f32 * ROW;
+        let y = PICTURE[0] - 0.04 - (k % ROWS) as f32 * ROW;
         let ink = match (k == a.cursor, a.bay) {
             (true, None) => blink,
             (true, Some(_)) => Ink::Hud,
             _ => Ink::HudDim,
         };
-        dl.text_mid([x, y], TXT * 0.85, Align::Left, item, ink);
+        dl.text_mid([x, y], TXT, Align::Left, item, ink);
     }
     let hint =
         if a.bay.is_some() { "ARROWS - BAY    SPACE - LOAD" } else { "ARROWS - SELECT    SPACE - TAKE" };

@@ -2090,7 +2090,7 @@ Format jedes Eintrags:
   „FUEL REQUIRED / CARRIED“ (Warnfarbe bei Mangel), in der Mitte die
   Unterseite der F-29 als Liniengrafik nach dem Grundriss des 3D-Modells,
   Nase nach links, mit den vier Schächten (2×2: vorn Schacht 1 oben und 2
-  unten, hinten 3 und 4; zusammen die halbe Höhe, der Umriss ragt über den
+  unten, hinten 3 und 4; zusammen 40 % der Höhe, der Umriss ragt über den
   Rand), darin die Grafik der Ausrüstung und darunter die Stückzahl
   (`crates/f29-app/assets/stores/<code>.svg`, Code wie bei `--loadout`,
   etwa 2:1, Nase links, Text als Pfade; beim Start mit resvg gerastert;
