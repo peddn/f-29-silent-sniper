@@ -176,7 +176,16 @@ fn update(
                 Some((eye, aim, half, NEAR_M, 0.6 + 0.8 * (t.range / optical) as f32))
             })
         }
-        RightPage::Target if settings.hud_mode == f29_hud::HudMode::Nav => None,
+        // Navigation: die gewählte Landebahn, wenn sie in Sicht ist.
+        RightPage::Target if settings.hud_mode == f29_hud::HudMode::Nav => {
+            fd.runway_target.filter(|t| t.seen.optical && on).and_then(|t| {
+                let rw = state.sim.terrain().runways().get(t.index)?;
+                let at = f29_core::DVec3::new(rw.center[0], rw.center[1], -rw.elevation_m);
+                let (aim, eye) = (place(at, origin.0), eye());
+                let half = ((rw.length_m * 0.5 / TARGET_FILL) as f32).atan2((aim - eye).length().max(1.0));
+                Some((eye, aim, half, NEAR_M, 0.6 + 0.8 * (t.range / optical) as f32))
+            })
+        }
         // Aufklärungskamera gewählt: ihr Bild entlang der geneigten
         // Sichtlinie, Bildhöhe = Fotokreis (M-032).
         // Nur bei offenem Schacht und in der Luft.

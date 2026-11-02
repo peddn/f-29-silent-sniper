@@ -204,6 +204,21 @@ pub fn render_all(dir: &Path) -> Result<Vec<String>, String> {
                 }),
             ),
             (
+                "07e_ausloesen",
+                render(6.0, Mix::WITHOUT_ENGINE, |t| {
+                    // Rakete, Bombe, zwei Fotos
+                    use f29_audio::ReleaseSound as R;
+                    let cues = [(0.5, R::Missile), (3.0, R::Bomb), (4.2, R::Shutter), (5.0, R::Shutter)];
+                    let release = cues
+                        .iter()
+                        .enumerate()
+                        .rev()
+                        .find(|(_, (at, _))| t >= *at)
+                        .map(|(k, &(_, sound))| f29_audio::ReleaseCue { id: k as u64 + 1, sound });
+                    AudioInput { release, ..cruise(0.0, 200.0) }
+                }),
+            ),
+            (
                 "07d_ansagen",
                 render(5.0, Mix::WITHOUT_ENGINE, |t| AudioInput {
                     pull_up_warning: t < 2.0,

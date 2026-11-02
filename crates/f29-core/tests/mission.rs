@@ -91,7 +91,7 @@ fn close_photo_of_the_recon_target_counts() {
         // Auslösen, sobald das Ziel nah genug ist (alle halbe Sekunde ein Foto).
         let t = &sim.targets()[i];
         let a = sim.aircraft().position;
-        let near = (t.north - a.x).hypot(t.east - a.y) < 1_800.0;
+        let near = (t.north - a.x).hypot(t.east - a.y) < 1_400.0;
         let w = if near && sim.tick().is_multiple_of(60) { weapon_flags::RELEASE } else { 0 };
         let framed = sim.flight_data().camera.expect("Kamera gewählt").in_frame;
         step(&mut sim, 0, w);

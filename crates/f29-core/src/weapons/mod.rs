@@ -560,7 +560,7 @@ pub struct Launch<'a> {
 /// Frühestens nach so vielen Sekunden das nächste Foto (Spielerwunsch v0.3).
 pub const PHOTO_INTERVAL_S: f64 = 0.8;
 /// Ein Foto zählt bis zu dieser Entfernung zum Ziel (m; Spielerwunsch v0.3).
-pub const PHOTO_RANGE_M: f64 = 2_000.0;
+pub const PHOTO_RANGE_M: f64 = 1_500.0;
 /// … und so weit (rad) um die Sichtlinie der Kamera (Spielerwunsch v0.3).
 pub const PHOTO_CONE_RAD: f64 = 5.0 * std::f64::consts::PI / 180.0;
 /// Die Kamera blickt so weit (rad) unter die Rumpflängsachse.

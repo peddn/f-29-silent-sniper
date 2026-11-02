@@ -1783,7 +1783,7 @@ Format jedes Eintrags:
     Sie blickt 10° unter die
     Rumpflängsachse; ihre Sichtlinie mit einem Bildkreis von 5° ist im
     AG-HUD das Zielinstrument. Ein Foto zählt, wenn das gewählte Ziel
-    steht, optisch entdeckt ist, höchstens 2 km entfernt und im Bildkreis
+    steht, optisch entdeckt ist, höchstens 1,5 km entfernt und im Bildkreis
     liegt; ist es das Aufklärungsziel, „PRIMARY/SECONDARY PHOTOGRAPHED“.
     Die TGT-Seite zeigt im AG-Modus das Kamerabild selbst (fest unter dem
     Rumpf, Bildhöhe = Fotokreis: was im Kreis liegt, kommt aufs Foto; nur bei
@@ -1795,6 +1795,8 @@ Format jedes Eintrags:
     Maverick.
   - Mit einem Aufklärungsziel fliegt die Mission bei Tag.
   - MSN-Seite: Auftrag (ATK/RCN) und erledigt je Ziel.
+  - Klang beim Auslösen: Rakete (Zündknall, Fauchen), Bombe (Ausklinken),
+    Kamera (Verschluss).
 - **Status:** Auftragsarten, Kamera, Beladung umgesetzt (v0.3); Flugprotokoll,
   Ausgang und Wertung folgen
 

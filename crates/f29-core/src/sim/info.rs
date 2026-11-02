@@ -227,6 +227,8 @@ pub struct FlightData {
     pub objectives: [Option<(Task, bool)>; 2],
     /// Verletzungen der Einsatzregeln bisher.
     pub roe_violations: u32,
+    /// Jüngstes Auslösen (Tick, Art; die Kamera für ein Foto) – für den Klang.
+    pub last_release: Option<(u64, WeaponKind)>,
     /// Kamera gewählt (M-032): Fotos bisher und ob das gewählte Ziel jetzt
     /// gültig im Bild wäre.
     pub camera: Option<CameraInfo>,
@@ -603,8 +605,19 @@ impl Sim {
             closure_mps: -(velocity - a.velocity).dot(dir),
             bearing: detmath::wrap_two_pi(detmath::atan2(to.y, to.x)),
             direction_body,
-            // Landebahnen sind nur von der Karte bekannt.
-            seen: if kind == MarkKind::Air { self.picks.air.seen } else { Seen::default() },
+            // Landebahnen sind von der Karte bekannt; optisch sichtbar, wenn
+            // in Reichweite mit freier Sicht (Bild der TGT-Seite).
+            seen: match kind {
+                MarkKind::Air => self.picks.air.seen,
+                MarkKind::Runway => Seen {
+                    radar: false,
+                    optical: self
+                        .sensors
+                        .sees(&self.terrain, a.position, position - DVec3::new(0.0, 0.0, 5.0))
+                        .optical,
+                },
+                MarkKind::Ground => Seen::default(),
+            },
             locked: if kind == MarkKind::Air {
                 self.air_locked(position)
             } else {
@@ -806,6 +819,11 @@ impl Sim {
                     .map(|_| (self.mission.tasks[k], self.objective_done(k)))
             }),
             roe_violations: self.roe_violations,
+            last_release: self.stores.events.iter().rev().find_map(|&(tick, e)| match e {
+                WeaponEvent::Released { kind, .. } => Some((tick, kind)),
+                WeaponEvent::Photo { .. } => Some((tick, WeaponKind::Camera)),
+                _ => None,
+            }),
             camera: (self.stores.selected_weapon() == Some(WeaponKind::Camera)).then(|| {
                 let active = self.stores.door_open() && !a.on_ground;
                 CameraInfo {

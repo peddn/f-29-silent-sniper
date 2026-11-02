@@ -31,6 +31,7 @@ pub mod wav;
 
 use dsp::{Noise, OnePole, Phase, pulse, saw, sine, triangle};
 pub use f29_core::BlastKind;
+use f29_core::weapons::WeaponKind;
 use f29_core::{FlightData, Status};
 use std::sync::Arc;
 
@@ -75,6 +76,25 @@ pub struct BlastCue {
     pub gain: f32,
 }
 
+/// Klang beim Auslösen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReleaseSound {
+    /// Raketenmotor zündet und faucht davon.
+    Missile,
+    /// Bombe klinkt aus.
+    Bomb,
+    /// Kameraverschluss.
+    Shutter,
+}
+
+/// Ein Auslösen, das einen Klang auslöst.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReleaseCue {
+    /// Eindeutige Kennung (Tick) – dasselbe Auslösen klingt nur einmal.
+    pub id: u64,
+    pub sound: ReleaseSound,
+}
+
 /// Entfernung (m), in der eine Detonation nur noch halb so laut ist.
 const BLAST_HALF_M: f64 = 1_500.0;
 /// Leiser als so klingt eine ferne Detonation nicht.
@@ -106,6 +126,8 @@ pub struct AudioInput {
     pub missile_warning: bool,
     /// Jüngste Detonation.
     pub blast: Option<BlastCue>,
+    /// Jüngstes Auslösen einer eigenen Waffe bzw. Foto.
+    pub release: Option<ReleaseCue>,
     pub crashed: bool,
     /// Pause: alles verstummt weich.
     pub paused: bool,
@@ -134,6 +156,16 @@ impl AudioInput {
                     1.0
                 } else {
                     ((1.0 / (1.0 + b.distance_m / BLAST_HALF_M)) as f32).max(BLAST_MIN_GAIN)
+                },
+            }),
+            release: fd.last_release.map(|(tick, kind)| ReleaseCue {
+                id: tick,
+                sound: if kind == WeaponKind::Camera {
+                    ReleaseSound::Shutter
+                } else if kind.spec().cruise_mps > 0.0 {
+                    ReleaseSound::Missile
+                } else {
+                    ReleaseSound::Bomb
                 },
             }),
             crashed: matches!(fd.status, Status::Crashed { .. }),
@@ -187,6 +219,10 @@ enum OneShot {
     /// Knistern; `ring` > 0 gibt einen metallischen Klang dazu (Treffer am
     /// eigenen Flugzeug).
     Boom { t: f32, gain: f32, decay: f32, cutoff: f32, ring: f32, lp: OnePole, lp2: OnePole, bass: Phase },
+    /// Raketenstart: Zündknall, dann ein sich entfernendes Fauchen.
+    Rocket { t: f32, lp: OnePole },
+    /// Kameraverschluss: zwei kurze mechanische Klicks mit hellem Anteil.
+    Shutter { t: f32 },
 }
 
 /// Der Synthesizer. Ein Exemplar pro Datenstrom.
@@ -223,6 +259,7 @@ pub struct Synth {
     last_touchdown: Option<u64>,
     last_ping: Option<u64>,
     last_blast: Option<u64>,
+    last_release: Option<u64>,
     crashed: bool,
     pull_up_timer: f32,
     missile_timer: f32,
@@ -270,6 +307,7 @@ impl Synth {
             last_touchdown: None,
             last_ping: None,
             last_blast: None,
+            last_release: None,
             crashed: false,
             pull_up_timer: 0.0,
             missile_timer: 0.0,
@@ -381,6 +419,24 @@ impl Synth {
                     BlastKind::Miss => boom(0.7 * g, 0.45, 350.0, 0.0),
                     BlastKind::AircraftHit => boom(1.3, 0.8, 1_500.0, 640.0),
                 });
+            }
+        }
+        // Auslösen: Rakete faucht, Bombe klinkt aus, Kamera klickt.
+        if let Some(r) = input.release
+            && self.last_release != Some(r.id)
+        {
+            self.last_release = Some(r.id);
+            if !first {
+                match r.sound {
+                    ReleaseSound::Missile => {
+                        self.shots.push(OneShot::Rocket { t: 0.0, lp: OnePole::default() })
+                    }
+                    ReleaseSound::Bomb => {
+                        self.shots.push(OneShot::Thump { t: 0.0, freq: 45.0, gain: 0.5, decay: 0.08 });
+                        self.shots.push(OneShot::Click { t: 0.0, gain: 0.35 });
+                    }
+                    ReleaseSound::Shutter => self.shots.push(OneShot::Shutter { t: 0.0 }),
+                }
             }
         }
         if input.crashed && !self.crashed && !first {
@@ -564,6 +620,28 @@ impl Synth {
                         *t += dt;
                         v
                     }
+                    OneShot::Rocket { t, lp } => {
+                        // Zündung: kurzer Knall; danach Fauchen, das dunkler
+                        // und leiser wird, je weiter die Rakete wegfliegt.
+                        let bang = n * (-*t / 0.02).exp() * 0.8 + sine(*t * 70.0) * (-*t / 0.06).exp() * 0.5;
+                        let cutoff = 3_000.0 * (-*t / 0.9).exp() + 300.0;
+                        let roar = lp.process(n, OnePole::coeff(cutoff, sr));
+                        let env = (*t / 0.04).min(1.0) * (-*t / 0.6).exp();
+                        *t += dt;
+                        bang + roar * env * 1.4
+                    }
+                    OneShot::Shutter { t } => {
+                        let click = |x: f32| {
+                            if x >= 0.0 {
+                                (n * 0.7 + sine(x * 3_200.0) * 0.5) * (-x / 0.006).exp()
+                            } else {
+                                0.0
+                            }
+                        };
+                        let v = (click(*t) + 0.7 * click(*t - 0.07)) * 0.35;
+                        *t += dt;
+                        v
+                    }
                     OneShot::Sample { data, pos, gain } => {
                         let v = data.get(*pos).copied().unwrap_or(0.0) * *gain * mix.voice;
                         *pos += 1;
@@ -601,6 +679,8 @@ fn shot_finished(s: &OneShot) -> bool {
         OneShot::Boom { t, decay, .. } => *t > *decay * 7.0,
         OneShot::Sample { data, pos, .. } => *pos >= data.len(),
         OneShot::Beep { t, dur, .. } => *t >= *dur,
+        OneShot::Rocket { t, .. } => *t > 2.5,
+        OneShot::Shutter { t } => *t > 0.15,
     }
 }
 
