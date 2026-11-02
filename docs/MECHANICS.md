@@ -2066,4 +2066,19 @@ Format jedes Eintrags:
     und wird ohne Öffnen der Klappen „verbraucht“: Sein Inhalt fließt in die
     Haupttanks, was nicht passt, geht verloren; der Schacht ist danach
     leer.
-- **Status:** gelesen (v0.3); Umsetzung offen
+- **Umgesetzt S1 (v0.3):** Die App beginnt mit den Menüs (`--fly`,
+  `--start` oder `--screenshot` überspringen sie; dann fester Seed, sonst
+  zufällig). Bildschirme: Erkennung (Platzhalter) → Auftrag (Gebiet,
+  Konfliktlage, Missionsart, Gegnerqualität, Flugverhalten; annehmen oder
+  der Reihe nach ändern) → Briefing (`Sim::briefing`: Aufträge mit
+  Entfernung, Gesamtstrecke, Kamera nötig, Regeln, Tageszeit) →
+  Schlussauswahl (neue Mission = nächster Seed, Briefing, Bewaffnung als
+  Übersicht der vorgeschlagenen Beladung, Start). Pfeile bzw. W/S oder
+  Blick vorn/hinten am Joystick wählen, Leertaste/Enter/Auslöser
+  bestätigt. Die Simulation steht im Menü still und trägt schon die
+  Mission. Nach der Nachbesprechung geht es mit einer neuen Mission zurück
+  zum Auftrag. Gegnerqualität und Flugverhalten wirken (M-022, M-005) und
+  stehen im Replay (Format 12); „leicht“ = Landegrenzen ×1,5 (gut bis
+  6 m/s, Bruch ab 10,5 m/s, 22,5° Querlage, −7,5° Nase).
+- **Status:** S1 umgesetzt (v0.3); S2 Bewaffnung mit Zusatztank, S3
+  Lagebesprechungskarte, S4 Dienstplan folgen

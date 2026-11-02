@@ -8,10 +8,10 @@ use crate::ScreenLayout;
 use crate::canvas::{Align, DisplayList, Ink};
 use f29_core::{FlightData, Score, Side, Status};
 
-const TITLE: f32 = 0.045;
-const TXT: f32 = 0.028;
+pub(crate) const TITLE: f32 = 0.045;
+pub(crate) const TXT: f32 = 0.028;
 /// Zeilenabstand der Listen (Anteil der Fensterhöhe).
-const ROW: f32 = 0.042;
+pub(crate) const ROW: f32 = 0.042;
 /// So viele Ereignisse je Bildschirm.
 pub const EVENTS_PER_SCREEN: usize = 14;
 
@@ -35,8 +35,7 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
     let Some(score) = &fd.debrief else { return };
     let all = screens(score);
     let screen = all[index.min(all.len() - 1)];
-    // Spalte in der Fenstermitte, höchstens so breit wie hoch.
-    let half = (layout.aspect * 0.5).min(0.65) * 0.9;
+    let half = half_width(layout);
     let (left, right) = (-half, half);
     match screen {
         Screen::Outcome => {
@@ -92,12 +91,23 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
         }
     }
     let last = index + 1 >= all.len();
-    let hint = if last { "R - RESTART    ESC - QUIT" } else { "SPACE - NEXT    R - RESTART" };
+    let hint = if last { "SPACE - CONTINUE    R - RESTART" } else { "SPACE - NEXT    R - RESTART" };
+    footer(dl, hint);
+}
+
+/// Halbe Breite der Textspalte in der Fenstermitte (höchstens so breit wie
+/// hoch).
+pub(crate) fn half_width(layout: &ScreenLayout) -> f32 {
+    (layout.aspect * 0.5).min(0.65) * 0.9
+}
+
+/// Bedienhinweis unten.
+pub(crate) fn footer(dl: &mut DisplayList, hint: &str) {
     dl.text_mid([0.0, -0.44], TXT, Align::Center, hint, Ink::HudDim);
 }
 
 /// Überschrift oben; liefert die Höhe der ersten Zeile darunter.
-fn title(dl: &mut DisplayList, text: &str) -> f32 {
+pub(crate) fn title(dl: &mut DisplayList, text: &str) -> f32 {
     let y = 0.40;
     dl.text_mid([0.0, y], TITLE, Align::Center, text, Ink::Hud);
     y - TITLE * 2.2

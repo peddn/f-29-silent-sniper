@@ -39,14 +39,16 @@ impl Plugin for MfdPlugin {
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct MfdView(pub MfdState);
 
-/// Kartendaten des aktuellen Seeds; `None`, solange sie berechnet werden.
+/// Kartendaten der Mission (Route, Ziele) und Kartenraster des Geländes
+/// (`None`, solange sie berechnet werden).
 #[derive(Resource, Default)]
 pub struct MapAssets {
+    /// Mission (Seed, Konfliktlage) bzw. Gelände, zu denen die Daten gehören.
+    mission: Option<(u64, f29_core::rules::Conflict)>,
     seed: Option<u64>,
     pub map: Option<Arc<MapData>>,
     /// Kartenraster je Modus: Höhenbild (Gitter), Satellitenbild.
     rasters: [Option<Arc<MapRaster>>; 2],
-    map_task: Option<Task<MapData>>,
     raster_tasks: [Option<Task<MapRaster>>; 2],
     map_image: Handle<Image>,
 }
@@ -90,28 +92,25 @@ fn setup(mut commands: Commands, mut assets: ResMut<MapAssets>, mut images: ResM
     ));
 }
 
-/// Startet bei neuem Seed die Hintergrundberechnung und übernimmt fertige Ergebnisse.
+/// Baut bei neuer Mission die Kartendaten neu; startet bei neuem Gelände
+/// die Berechnung der Raster im Hintergrund und übernimmt fertige.
 fn load_maps(mut assets: ResMut<MapAssets>, state: Res<SimState>) {
-    let terrain = state.sim.terrain();
+    let (sim, terrain) = (&state.sim, state.sim.terrain());
+    let mission = (sim.config().seed, sim.config().spawn.conflict);
+    if assets.mission != Some(mission) {
+        assets.mission = Some(mission);
+        assets.map = Some(Arc::new(MapData::for_terrain(terrain, sim.route(), sim.targets())));
+    }
     if assets.seed != Some(terrain.seed()) {
         assets.seed = Some(terrain.seed());
-        assets.map = None;
         assets.rasters = [None, None];
         let pool = AsyncComputeTaskPool::get();
-        let (t, route, targets) = (terrain.clone(), state.sim.route().to_vec(), state.sim.targets().to_vec());
-        assets.map_task = Some(pool.spawn(async move { MapData::for_terrain(&t, &route, &targets) }));
         for (k, style) in [MapStyle::Height, MapStyle::Satellite].into_iter().enumerate() {
             let t = terrain.clone();
             assets.raster_tasks[k] = Some(pool.spawn(async move {
                 MapRaster::build(&t, [0.0, 0.0], map_half_extent(&t), SAT_RASTER_N, style)
             }));
         }
-    }
-    if let Some(task) = assets.map_task.as_mut()
-        && let Some(map) = check_ready(task)
-    {
-        assets.map = Some(Arc::new(map));
-        assets.map_task = None;
     }
     for k in 0..2 {
         if let Some(task) = assets.raster_tasks[k].as_mut()
@@ -145,7 +144,7 @@ fn place_screens(
     let layout = layout_for(&window, &settings);
     let fd = state.sim.flight_data();
     // Nach dem Missionsende deckt die Nachbesprechung das Brett.
-    let mfd = layout.mfd_layout().filter(|_| !fd.mission_over);
+    let mfd = layout.mfd_layout().filter(|_| !state.covered());
     let raster = match view.0.map_mode {
         MapMode::Grid => &assets.rasters[0],
         MapMode::Satellite => &assets.rasters[1],

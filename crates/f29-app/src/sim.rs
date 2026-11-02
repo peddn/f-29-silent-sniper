@@ -12,11 +12,14 @@ const MAX_STEPS_PER_FRAME: u32 = 24;
 
 pub struct SimPlugin {
     pub config: SimConfig,
+    /// Mit der Menüführung beginnen (sonst gleich fliegen).
+    pub menu: bool,
 }
 
 impl Plugin for SimPlugin {
     fn build(&self, app: &mut App) {
-        let state = SimState::new(self.config.clone());
+        let mut state = SimState::new(self.config.clone());
+        state.menu = self.menu.then_some(crate::menu::Screen::Identification);
         let pilot = PilotInput::matching(&state.sim);
         app.insert_resource(state)
             .insert_resource(pilot)
@@ -76,6 +79,9 @@ pub struct SimState {
     prev: Pose,
     curr: Pose,
     recorder: Replay,
+    /// Offener Menübildschirm vor dem Flug (M-036) und Cursor darin.
+    pub menu: Option<crate::menu::Screen>,
+    pub cursor: usize,
 }
 
 impl SimState {
@@ -83,7 +89,17 @@ impl SimState {
         let sim = Sim::new(config);
         let pose = Pose::of(&sim);
         let recorder = Replay::new(sim.config().clone());
-        Self { sim, paused: false, time_scale: 1, accumulator: 0.0, prev: pose, curr: pose, recorder }
+        Self {
+            sim,
+            paused: false,
+            time_scale: 1,
+            accumulator: 0.0,
+            prev: pose,
+            curr: pose,
+            recorder,
+            menu: None,
+            cursor: 0,
+        }
     }
 
     /// Zeitraffer weiterschalten: 1× → 2× → 4× → 1×; nicht, solange ein
@@ -104,8 +120,20 @@ impl SimState {
     /// Neustart mit derselben Konfiguration; der bisherige Flug wird als
     /// Replay gesichert.
     pub fn restart(&mut self) {
+        self.reset(self.sim.config().clone());
+    }
+
+    /// Neue Simulation mit `config`; das Menü bleibt, wo es ist.
+    pub fn reset(&mut self, config: SimConfig) {
         self.save_replay();
-        *self = Self::new(self.sim.config().clone());
+        let (menu, cursor) = (self.menu, self.cursor);
+        *self = Self::new(config);
+        (self.menu, self.cursor) = (menu, cursor);
+    }
+
+    /// Deckt ein Bildschirm (Menü oder Nachbesprechung) die Ansicht zu?
+    pub fn covered(&self) -> bool {
+        self.menu.is_some() || self.sim.mission_over()
     }
 
     /// Schreibt den bisherigen Flug nach `replays/last.replay`.
@@ -136,7 +164,7 @@ fn step_simulation(
     mut pilot: ResMut<PilotInput>,
     view: Res<crate::view::ViewSettings>,
 ) {
-    if state.paused {
+    if state.paused || state.menu.is_some() {
         return;
     }
     let state = &mut *state;

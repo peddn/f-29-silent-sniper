@@ -11,6 +11,7 @@ pub mod debrief;
 pub mod font;
 mod hud;
 pub mod map;
+mod menu;
 pub mod mfd;
 mod pages;
 pub mod svg;
@@ -21,6 +22,7 @@ use f29_core::FlightData;
 use f29_core::systems::{Condition, System};
 pub use hud::HudMode;
 pub use map::MapData;
+pub use menu::{Page, draw as draw_menu};
 pub use mfd::{MapMode, MfdLayout, MfdState, RightPage};
 pub use pages::target_image_rect;
 

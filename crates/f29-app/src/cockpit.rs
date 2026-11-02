@@ -169,7 +169,7 @@ fn show_frames(
     mut frames: Query<(&Frame, &mut Transform, &mut Visibility)>,
 ) {
     let scale = Vec3::new(window.width() * 0.5, window.height() * 0.5, 1.0);
-    let cockpit = view.mode == ViewMode::Cockpit && !view.ejected && !state.sim.mission_over();
+    let cockpit = view.mode == ViewMode::Cockpit && !view.ejected && !state.covered();
     for (frame, mut t, mut vis) in &mut frames {
         let want = if cockpit && frame.0 == view.look { Visibility::Inherited } else { Visibility::Hidden };
         if *vis != want {

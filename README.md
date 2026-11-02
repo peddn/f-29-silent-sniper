@@ -27,8 +27,13 @@ Schadensmodell, Täuschkörper und Störer. Als Nächstes: v0.3 (Missionen).
 Voraussetzung: aktuelles stabiles Rust (≥ 1.97).
 
 ```sh
-# Spiel starten (beim ersten Mal dauert der Build einige Minuten)
+# Spiel starten (beim ersten Mal dauert der Build einige Minuten): Menüs wie
+# im Original – Auftrag, Briefing, Schlussauswahl mit „Select New Mission“;
+# Pfeile wählen, Leertaste bestätigt
 cargo run --release -p f29-app
+
+# ohne Menü gleich fliegen (auch mit --start oder --screenshot)
+cargo run --release -p f29-app -- --fly
 
 # anderer Seed = anderes Gelände, Start in der Verfolgeransicht
 cargo run --release -p f29-app -- --seed 1234 --view chase

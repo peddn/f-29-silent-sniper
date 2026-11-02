@@ -89,7 +89,7 @@ const KEYS: [(KeyCode, Mod, Action); 34] = [
 ];
 
 /// Tastatur → Aktionen.
-fn keyboard_actions(
+pub fn keyboard_actions(
     keys: Res<ButtonInput<KeyCode>>,
     logical: Res<ButtonInput<Key>>,
     mut actions: ResMut<Actions>,

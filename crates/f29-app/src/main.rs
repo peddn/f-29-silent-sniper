@@ -25,6 +25,7 @@ mod hud;
 mod input;
 mod joystick;
 mod joystick_config;
+mod menu;
 mod mfd;
 mod retro;
 mod sim;
@@ -43,7 +44,17 @@ pub const HUD_LAYER: usize = 1;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let seed = arg(&args, "--seed").and_then(|v| parse_u64(&v)).unwrap_or(sim::DEFAULT_SEED);
+    // Menüführung (M-036), außer mit `--fly`, `--start` oder `--screenshot`
+    // (gleich fliegen, für Tests). Im Menü ist die erste Mission zufällig.
+    let menu = !["--fly", "--start", "--screenshot"].iter().any(|o| args.iter().any(|a| a == o));
+    let random = || {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos() as u64 >> 1)
+    };
+    let seed = arg(&args, "--seed")
+        .and_then(|v| parse_u64(&v))
+        .unwrap_or_else(|| if menu { random() } else { sim::DEFAULT_SEED });
     // Standard: Start auf der Bahn der Heimatbasis; `--start air` für den Luftstart.
     let mut config = if arg(&args, "--start").as_deref() == Some("air") {
         f29_core::SimConfig::new(seed)
@@ -113,9 +124,9 @@ fn main() {
         // Ohne Klang wird auch kein Audiogerät geöffnet.
         app.add_plugins(DefaultPlugins.set(window).disable::<bevy::audio::AudioPlugin>());
     }
-    app.add_plugins(actions::ActionsPlugin);
+    app.add_plugins((actions::ActionsPlugin, menu::MenuPlugin));
     app.add_plugins((
-        sim::SimPlugin { config },
+        sim::SimPlugin { config, menu },
         airfield::AirfieldPlugin,
         targets::TargetsPlugin,
         fighters::FightersPlugin,

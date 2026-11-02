@@ -87,10 +87,11 @@ fn draw_hud(
     let fd = state.sim.flight_data();
     // Hintergrund des Instrumentenbretts; nach dem Missionsende deckt er als
     // Grund der Nachbesprechung das ganze Fenster (später ein Bild).
-    let panel_h = if fd.mission_over { h } else { layout.panel_fraction * h };
+    let covered = state.covered();
+    let panel_h = if covered { h } else { layout.panel_fraction * h };
     let (transform, sprite) = &mut *panel;
     sprite.custom_size = Some(Vec2::new(w, panel_h));
-    let [r, g, b] = if fd.mission_over { palette::mix(0, 13, 0.08) } else { palette::mix(0, 13, 0.18) };
+    let [r, g, b] = if covered { palette::mix(0, 13, 0.08) } else { palette::mix(0, 13, 0.18) };
     sprite.color = Color::srgb(r, g, b);
     transform.translation = Vec3::new(0.0, -h * 0.5 + panel_h * 0.5, -10.0);
 
@@ -105,7 +106,11 @@ fn draw_hud(
         camera_feed: true,
         debrief_screen: view.debrief,
     };
-    let list = f29_hud::build(&fd, &layout, &opts, maps.map.as_deref());
+    let list = if state.menu.is_some() {
+        f29_hud::draw_menu(&layout, &crate::menu::page(&state))
+    } else {
+        f29_hud::build(&fd, &layout, &opts, maps.map.as_deref())
+    };
     for line in &list.lines {
         gizmos.line_2d(
             Vec2::new(line.a[0], line.a[1]) * h,
