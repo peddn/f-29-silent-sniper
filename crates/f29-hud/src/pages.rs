@@ -629,8 +629,17 @@ fn recon_camera(dl: &mut DisplayList, fd: &FlightData, cam: CameraInfo, screen: 
         let a = [c[0] + dx * half * 0.1, c[1] + dy * half * 0.1];
         dl.line(a, [c[0] + dx * half * 0.35, c[1] + dy * half * 0.35], Ink::Mfd);
     }
-    if !camera_feed {
-        dl.text_mid([c[0], c[1] - half * 0.55], f.txt * 0.85, Align::Center, "NO VIDEO", Ink::MfdDim);
+    let off = if fd.on_ground {
+        Some("ON GROUND")
+    } else if !cam.active {
+        Some("BAY CLOSED")
+    } else if !camera_feed {
+        Some("NO VIDEO")
+    } else {
+        None
+    };
+    if let Some(text) = off {
+        dl.text_mid([c[0], c[1] - half * 0.55], f.txt * 0.85, Align::Center, text, Ink::MfdDim);
     }
     if cam.in_frame {
         dl.boxed_text([c[0], img.min[1] + f.txt * 1.2], f.txt, Align::Center, "IN FRAME", Ink::Warning);

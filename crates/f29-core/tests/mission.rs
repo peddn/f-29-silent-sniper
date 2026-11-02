@@ -139,3 +139,21 @@ fn cold_war_attack_on_an_undetecting_target_breaks_the_rules() {
     assert!(hit(Conflict::ColdWar) >= 1);
     assert_eq!(hit(Conflict::War), 0);
 }
+
+/// Kamerabild nur bei offenem Schacht und in der Luft.
+#[test]
+fn camera_needs_open_bay_and_flight() {
+    let cam = Some(Loadout([Some(WeaponKind::Camera), None, None, None]));
+    let mut on_runway = SimConfig::runway(1);
+    on_runway.spawn.loadout = cam;
+    let mut ground = Sim::new(on_runway);
+    let mut air = Sim::new(SimConfig::with(1, Spawn { loadout: cam, ..Spawn::default() }));
+    for sim in [&mut ground, &mut air] {
+        step(sim, 0, weapon_flags::NEXT_BAY);
+        assert!(!sim.flight_data().camera.expect("gewählt").active, "Schacht zu");
+        step(sim, 0, weapon_flags::BAY_DOORS);
+        fly(sim, 2.0, 0, 0);
+    }
+    assert!(air.flight_data().camera.unwrap().active);
+    assert!(!ground.flight_data().camera.unwrap().active, "am Boden");
+}

@@ -179,7 +179,8 @@ fn update(
         RightPage::Target if settings.hud_mode == f29_hud::HudMode::Nav => None,
         // Aufklärungskamera gewählt: ihr Bild entlang der geneigten
         // Sichtlinie, Bildhöhe = Fotokreis (M-032).
-        RightPage::Target if fd.camera.is_some() => on.then(|| {
+        // Nur bei offenem Schacht und in der Luft.
+        RightPage::Target if fd.camera.is_some() => (on && fd.camera.is_some_and(|c| c.active)).then(|| {
             let look = state.render_pose().attitude.rotate(f29_core::weapons::camera_axis());
             let eye = eye();
             let aim = eye + place(look * 100.0, f29_core::DVec3::ZERO);

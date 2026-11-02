@@ -1785,7 +1785,8 @@ Format jedes Eintrags:
     steht, optisch entdeckt ist, höchstens 2 km entfernt und im Bildkreis
     liegt; ist es das Aufklärungsziel, „PRIMARY/SECONDARY PHOTOGRAPHED“.
     Die TGT-Seite zeigt im AG-Modus das Kamerabild selbst (fest unter dem
-    Rumpf, Bildhöhe = Fotokreis: was im Kreis liegt, kommt aufs Foto), dazu
+    Rumpf, Bildhöhe = Fotokreis: was im Kreis liegt, kommt aufs Foto; nur bei
+    offenem Schacht und in der Luft), dazu
     Fotozahl, gewähltes Ziel mit Entfernung und „IN FRAME“, wenn ein Foto
     jetzt zählen würde.
   - **Vorgeschlagene Beladung** (ohne `--loadout`): AIM-9, HARM, je Ziel

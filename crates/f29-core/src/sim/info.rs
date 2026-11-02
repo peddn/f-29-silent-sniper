@@ -128,6 +128,8 @@ pub struct SteerpointInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CameraInfo {
     pub photos: u32,
+    /// Bild nur bei offenem Schacht und in der Luft.
+    pub active: bool,
     pub in_frame: bool,
 }
 
@@ -804,14 +806,19 @@ impl Sim {
                     .map(|_| (self.mission.tasks[k], self.objective_done(k)))
             }),
             roe_violations: self.roe_violations,
-            camera: (self.stores.selected_weapon() == Some(WeaponKind::Camera)).then(|| CameraInfo {
-                photos: self.stores.photos,
-                in_frame: self
-                    .picks
-                    .ground
-                    .index
-                    .filter(|_| self.picks.ground.seen.optical)
-                    .is_some_and(|i| weapons::in_photo(a.position, a.attitude, &self.targets[i])),
+            camera: (self.stores.selected_weapon() == Some(WeaponKind::Camera)).then(|| {
+                let active = self.stores.door_open() && !a.on_ground;
+                CameraInfo {
+                    photos: self.stores.photos,
+                    active,
+                    in_frame: active
+                        && self
+                            .picks
+                            .ground
+                            .index
+                            .filter(|_| self.picks.ground.seen.optical)
+                            .is_some_and(|i| weapons::in_photo(a.position, a.attitude, &self.targets[i])),
+                }
             }),
             own_contacts: (0..self.targets.len())
                 .filter(|&i| self.ground_seen[i].any() && self.targets[i].is_intact())
