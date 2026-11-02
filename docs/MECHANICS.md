@@ -1633,8 +1633,8 @@ Format jedes Eintrags:
     Können aus Nummer des Jägers und Missionsstand (drei Stufen) und wählt
     nur das Manöver aus der Manövertabelle, die wir nicht haben. Bei uns
     würfelt jeder Jäger beim Missionsstart Anfänger, Erfahren oder Ass
-    (gleich verteilt), das Regelset verschiebt um eine Stufe (Kalter Krieg
-    schwächer, offener Krieg stärker). Es bestimmt:
+    (gleich verteilt), die Gegnerqualität verschiebt (Green −1, Regular 0,
+    Veteran +1, Elite +2 Stufen; M-036). Es bestimmt:
 
     | | Feuerstoß | Täuschkörper ab | Rakete bis |
     |---|---|---|---|
@@ -2052,10 +2052,10 @@ Format jedes Eintrags:
     nur noch Einsatzregeln und Bedrohungsdichte.
   - **Flugverhalten:** bezieht sich auf die Landung; über die
     Landegrenzwerte umsetzen (M-005). Realistisch = heutige Werte
-    (anspruchsvoll, aber gut machbar). Leicht etwa das Anderthalbfache
-    (das Doppelte des Originals wäre bei unseren schon gelockerten Werten
-    ein Aufprall): gut bis 6 m/s, Bruch ab 10 m/s, Querlage bis 25°, Nase
-    nicht unter −8°, ohne Fahrwerk weiter Bruch. Kein Absturz: Aufsetzen
+    (anspruchsvoll, aber gut machbar). Leicht das Anderthalbfache aller
+    Grenzen (das Doppelte des Originals wäre bei unseren schon gelockerten
+    Werten ein Aufprall): gut bis 6 m/s, Bruch ab 10,5 m/s, Querlage bis
+    22,5°, Nase nicht unter −7,5°, ohne Fahrwerk weiter Bruch. Kein Absturz: Aufsetzen
     auf der Bahn zerstört nie (auch ohne Fahrwerk), kein Wackeln in
     Bodennähe. Wertung ×1 / ×0,9 / ×0,75.
   - **Wertungsfaktor Gegnerqualität:** Green ×0,75, Regular ×1, Veteran
