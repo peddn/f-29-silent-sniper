@@ -2051,7 +2051,16 @@ Format jedes Eintrags:
     und ersetzt die Verschiebung durch das Regelset; das Regelset bestimmt
     nur noch Einsatzregeln und Bedrohungsdichte.
   - **Flugverhalten:** bezieht sich auf die Landung; über die
-    Landegrenzwerte umsetzen (M-005).
+    Landegrenzwerte umsetzen (M-005). Realistisch = heutige Werte
+    (anspruchsvoll, aber gut machbar). Leicht etwa das Anderthalbfache
+    (das Doppelte des Originals wäre bei unseren schon gelockerten Werten
+    ein Aufprall): gut bis 6 m/s, Bruch ab 10 m/s, Querlage bis 25°, Nase
+    nicht unter −8°, ohne Fahrwerk weiter Bruch. Kein Absturz: Aufsetzen
+    auf der Bahn zerstört nie (auch ohne Fahrwerk), kein Wackeln in
+    Bodennähe. Wertung ×1 / ×0,9 / ×0,75.
+  - **Wertungsfaktor Gegnerqualität:** Green ×0,75, Regular ×1, Veteran
+    ×1,25, Elite ×1,5 (Verschiebung des Könnens −1 / 0 / +1 / +2);
+    zusätzlich zum Faktor des Regelsets.
   - **Zusatztank:** wird wie eine Waffe einem Schacht zugewiesen, ein Tank
     je Schacht, also höchstens vier. Im NAV-Modus erscheint er als „Waffe“
     und wird ohne Öffnen der Klappen „verbraucht“: Sein Inhalt fließt in die
