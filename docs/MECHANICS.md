@@ -2032,7 +2032,11 @@ Format jedes Eintrags:
   5. **Bewaffnung:** Waffe wählen und einem Schacht zuweisen; angezeigt
      wird benötigter gegen mitgeführten Treibstoff. Vorschlag: je ein
      Schacht für Primär- und Sekundärziel, Zusatztreibstoff in einem der
-     anderen.
+     anderen. Dargestellt als Bild der Flugzeugunterseite mit den vier
+     Stationen und je einem Waffensymbol darin. Der Treibstoffbedarf ist
+     eine Schätzung allein aus der Länge der Route (im Briefing „Fuel
+     Estimate“); ab einer bestimmten Länge schlägt der Generator den
+     Zusatztank vor.
   6. **Schlussauswahl:** neue Mission, Lagebesprechung, Bewaffnung, Start.
      „Neue Mission“ kostet nichts (gilt nur als „unpatriotisch“) – damit
      lässt sich eine ungünstige Mission (weite Strecke, Kamera belegt
