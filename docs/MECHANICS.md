@@ -1767,7 +1767,31 @@ Format jedes Eintrags:
     der Ereignisse, Ausgangstext (Primär-/Sekundärziel erreicht oder nicht,
     Landung, Ausstieg, Tod, Zwischenfall), Punkte; danach Beförderung und
     Orden (M-030).
-- **Status:** gelesen (v0.3)
+- **Lesephase 2 (Generator):** Je Ziel wählt der Generator aus einer Tabelle
+  eine Auftragsart; die Tabelle hängt von der Zielart, dem Gebiet und der
+  Konfliktstufe ab (die Werte liegen der Rekonstruktion nicht bei). Für
+  Fotoaufträge gibt es nie eine Nachtmission.
+- **Unser Design (v0.3, Spielerentscheidungen):** `f29_core::mission`.
+  - Auftragsarten **Angriff** (zerstören) und **Aufklärung** (fotografieren)
+    je Primär- und Sekundärziel. Zuerst wird die Art gewürfelt, dann ein
+    passendes Ziel. Fotografierbar: Gebäude, Bunker, Brücken, abgestellte
+    Flugzeuge – Radarstellungen nicht (zu gefährlich). Anteil Aufklärung:
+    Kalter Krieg alles, begrenzter Konflikt etwa die Hälfte, offener Krieg
+    etwa ein Fünftel.
+  - **Kamera** (`cam`): bleibt im Schacht, Klappen müssen offen sein, der
+    Auslöser macht ein Foto („PHOTO n“), unbegrenzt. Sie blickt 10° unter die
+    Rumpflängsachse; ihre Sichtlinie mit einem Bildkreis von 10° ist im
+    AG-HUD das Zielinstrument. Ein Foto zählt, wenn das gewählte Ziel
+    steht, optisch entdeckt ist, höchstens 2 km entfernt und im Bildkreis
+    liegt; ist es das Aufklärungsziel, „PRIMARY/SECONDARY PHOTOGRAPHED“.
+    Die TGT-Seite zeigt wie bisher das Zielbild.
+  - **Vorgeschlagene Beladung** (ohne `--loadout`): AIM-9, HARM, je Ziel
+    Kamera (einmal) bzw. GBU-12 gegen Gebäude/Bunker/Brücken, sonst
+    Maverick.
+  - Mit einem Aufklärungsziel fliegt die Mission bei Tag.
+  - MSN-Seite: Auftrag (ATK/RCN) und erledigt je Ziel.
+- **Status:** Auftragsarten, Kamera, Beladung umgesetzt (v0.3); Flugprotokoll,
+  Ausgang und Wertung folgen
 
 ### M-033 Regelsets (Konfliktlage)
 
@@ -1788,6 +1812,10 @@ Format jedes Eintrags:
     zugleich, sechs Jäger, 1 km; Entdeckung kostet nichts.
   - **Feindliches Gebiet** kommt aus dem Gebietsraster (M-031). Die
     MSN-Seite zeigt das Regelset und „FRIENDLY“/„NEUTRAL“/„HOSTILE“.
+  - **Kalter Krieg: Angriff nur auf Ziele, die uns entdeckt haben** –
+    Radarstellungen mit Alarm, Jäger mit Radarkontakt. Jeder Treffer auf
+    anderes ist eine Verletzung der Einsatzregeln („ROE VIOLATION“, gezählt
+    für die Wertung). Missionsaufträge sind dort nur Aufklärung.
   - Die Entdeckungskosten nutzt die Wertung (M-032); weitere Werte
     (Alarmanstieg, Zivil- und Eigenbeschuss) kommen mit ihr.
 - **Status:** umgesetzt (v0.3)

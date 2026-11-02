@@ -78,7 +78,7 @@ fn position_models(
     mut q: Query<(&FighterModel, &mut Transform, &mut Visibility)>,
 ) {
     let list = &state.sim.fighters().list;
-    let sight = if state.sim.config().spawn.night { SIGHT_NIGHT_M } else { SIGHT_DAY_M };
+    let sight = if state.sim.night() { SIGHT_NIGHT_M } else { SIGHT_DAY_M };
     for (m, mut t, mut vis) in &mut q {
         let at = list.get(m.0 as usize).filter(|f| f.in_air()).map(|f| (f, place(f.position, origin.0)));
         let Some((f, at)) = at.filter(|(_, at)| at.length() <= sight) else {

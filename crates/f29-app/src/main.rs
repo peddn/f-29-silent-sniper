@@ -10,7 +10,7 @@
 //! ```text
 //! f29-silent-sniper [--seed N] [--view cockpit|chase] [--start runway|air]
 //!                   [--volume 0..100] [--no-sound]
-//!                   [--loadout fall,chute,lgb,agm] [--night] [--no-awacs] [--no-stealth] [--no-damage]
+//!                   [--loadout fall,chute,lgb,agm (ohne: Vorschlag des Auftrags)] [--night] [--no-awacs] [--no-stealth] [--no-damage]
 //!                   [--rules cold|limited|war]
 //!                   [--joystick DATEI] [--joystick-debug]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
@@ -54,15 +54,14 @@ fn main() {
     config.spawn.awacs = !args.iter().any(|a| a == "--no-awacs");
     config.spawn.visible = args.iter().any(|a| a == "--no-stealth");
     config.spawn.invulnerable = args.iter().any(|a| a == "--no-damage");
-    // Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship oder `-`.
+    // Beladung der vier Schächte; ohne Angabe der Vorschlag des Auftrags.
+    config.spawn.loadout = None;
     if let Some(text) = arg(&args, "--loadout") {
         match f29_core::weapons::Loadout::parse(&text) {
-            Some(l) => config.spawn.loadout = l,
-            None => {
-                eprintln!(
-                    "--loadout: vier Einträge aus fall, chute, lgb, agm, arm, ship, aim9, aim120 oder - erwartet"
-                )
-            }
+            Some(l) => config.spawn.loadout = Some(l),
+            None => eprintln!(
+                "--loadout: vier Einträge aus fall, chute, lgb, agm, arm, ship, aim9, aim120, cam oder - erwartet"
+            ),
         }
     }
     // Regelset (Konfliktlage): Kalter Krieg, begrenzter Konflikt, offener Krieg.

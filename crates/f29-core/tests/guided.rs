@@ -35,7 +35,7 @@ fn lined_up_at(
         dist,
         0.0,
         height,
-        Spawn { min_clearance: 150.0, loadout, ..Spawn::default() },
+        Spawn { min_clearance: 150.0, loadout: Some(loadout), ..Spawn::default() },
     ))
 }
 
@@ -104,7 +104,7 @@ fn tally(class: TargetClass) -> Tally {
             8_000.0,
             0.0,
             300.0,
-            Spawn { min_clearance: 150.0, loadout: agm(), ..Spawn::default() },
+            Spawn { min_clearance: 150.0, loadout: Some(agm()), ..Spawn::default() },
         );
         let Some((mut sim, target)) = select(start) else {
             continue;

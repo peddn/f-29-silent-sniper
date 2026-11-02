@@ -30,7 +30,7 @@ fn duel_in(kind: WeaponKind, jet: usize, ahead: f64, base: Spawn) -> Sim {
         heading: 0.0,
         speed: 250.0,
         throttle: 0.8,
-        loadout: Loadout([Some(kind), None, None, None]),
+        loadout: Some(Loadout([Some(kind), None, None, None])),
         ..base
     };
     let mut sim = Sim::new(SimConfig::with(SEED, spawn));

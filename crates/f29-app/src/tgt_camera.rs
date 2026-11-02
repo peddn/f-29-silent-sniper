@@ -217,7 +217,7 @@ fn update(
     // Mit der Entfernung wird das Bild unruhiger.
     effect.time = time.elapsed_secs_wrapped();
     effect.noise = noise;
-    cam.clear_color = ClearColorConfig::Custom(crate::view::sky_for(state.sim.config().spawn.night));
+    cam.clear_color = ClearColorConfig::Custom(crate::view::sky_for(state.sim.night()));
     cam.is_active = true;
     **visibility = Visibility::Inherited;
 }

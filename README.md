@@ -52,10 +52,12 @@ cargo run --release -p f29-app -- --no-damage
 cargo run --release -p f29-app -- --volume 50
 cargo run --release -p f29-app -- --no-sound
 
-# andere Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship, aim9, aim120 oder -
+# andere Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship, aim9, aim120,
+# cam (Aufklärungskamera) oder -; ohne Angabe die vorgeschlagene Beladung des Auftrags
 cargo run --release -p f29-app -- --loadout fall,fall,agm,arm
-# Regelset: Kalter Krieg (Gegner feuern nur über feindlichem Gebiet),
-# begrenzter Konflikt oder offener Krieg (Standard)
+# Regelset: Kalter Krieg (nur Aufklärung; Gegner feuern nur über feindlichem
+# Gebiet; angreifen nur, was uns entdeckt hat), begrenzter Konflikt oder
+# offener Krieg (Standard)
 cargo run --release -p f29-app -- --rules cold
 
 # nach 10 s automatisch einen Screenshot speichern und beenden
@@ -291,6 +293,11 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Missionsgenerator: zwei Ziele aus dem Gebiet, das nähere ist das
       Primärziel; Route Start → Primär → Sekundär → Landung; geheime Pisten
       entfallen (v0.3)
+- [x] Missionsauftrag (M-032): je Ziel Angriff oder Aufklärung, Mischung nach
+      Regelset; Aufklärungskamera (Foto bis 2 km, 10° um ihre geneigte
+      Sichtlinie, Bildkreis im HUD); vorgeschlagene Beladung; Aufklärung bei
+      Tag; Kalter Krieg: Angriff nur auf Ziele, die uns entdeckt haben, sonst
+      ROE VIOLATION (v0.3)
 - [ ] Planquadrate auf Karte und Missionsseite; Geländeart als Radarfaktor
 - [ ] Missionsdaten: Primär- und Sekundärziel, Route, Bedrohungslage
 - [ ] Bewaffnung und Betankung vor dem Start (Zusatztanks), Missionsauswertung

@@ -4,10 +4,10 @@
 //! die Startbedingungen exakt erhalten bleiben):
 //!
 //! ```text
-//! F29REPLAY 9
+//! F29REPLAY 10
 //! seed 3881
 //! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
-//! loadout fall,chute,lgb,agm
+//! loadout <fall,chute,lgb,agm|auto>
 //! time <day|night>
 //! awacs <on|off>
 //! stealth <on|off>
@@ -30,7 +30,7 @@ use crate::weapons::Loadout;
 use f29_world::Theater;
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 9";
+pub const MAGIC: &str = "F29REPLAY 10";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replay {
@@ -105,7 +105,7 @@ impl Replay {
             hex(sp.throttle),
             hex(sp.fuel)
         );
-        let _ = writeln!(s, "loadout {}", sp.loadout.to_text());
+        let _ = writeln!(s, "loadout {}", sp.loadout.map_or("auto".to_string(), |l| l.to_text()));
         let _ = writeln!(s, "time {}", if sp.night { "night" } else { "day" });
         let _ = writeln!(s, "awacs {}", if sp.awacs { "on" } else { "off" });
         let _ = writeln!(s, "stealth {}", if sp.visible { "off" } else { "on" });
@@ -168,8 +168,8 @@ impl Replay {
         let (ln, l) = next("loadout")?;
         let loadout = l
             .strip_prefix("loadout ")
-            .and_then(Loadout::parse)
-            .ok_or_else(|| err(ln, "erwartet `loadout a,b,c,d`".into()))?;
+            .and_then(|t| if t == "auto" { Some(None) } else { Loadout::parse(t).map(Some) })
+            .ok_or_else(|| err(ln, "erwartet `loadout a,b,c,d` oder `loadout auto`".into()))?;
         // Schalterzeile `<name> <wahr>|<falsch>`.
         let mut switch = |name: &str, yes: &str, no: &str| {
             let (ln, l) = next(name)?;
@@ -280,7 +280,10 @@ mod tests {
         assert_eq!(parsed, r);
         let mut rw = Replay::new(SimConfig::runway(5));
         rw.config.spawn.fuel = 0.4;
-        rw.config.spawn.loadout = Loadout::parse("arm,-,ship,fall").unwrap();
+        rw.config.spawn.loadout = Loadout::parse("arm,-,ship,cam");
+        rw.config.spawn.night = true;
+        assert_eq!(Replay::from_text(&rw.to_text()).expect("parse"), rw);
+        rw.config.spawn.loadout = None;
         rw.config.spawn.night = true;
         rw.config.spawn.awacs = false;
         rw.config.spawn.visible = true;

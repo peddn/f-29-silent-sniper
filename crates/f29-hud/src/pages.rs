@@ -10,6 +10,7 @@ use crate::heading_deg;
 use crate::hud::HudMode;
 use crate::map::MapData;
 use crate::mfd::{RightPage, WEAPON_STATIONS, fuel_bar};
+use f29_core::mission::Task;
 use f29_core::systems::{Condition, System};
 use f29_core::targets::TargetRole;
 use f29_core::units;
@@ -167,6 +168,7 @@ pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
             let s = k.spec();
             let guidance = match s.seeker {
                 Seeker::None if k == WeaponKind::Retarded => "RETARDED",
+                Seeker::None if k == WeaponKind::Camera => "PHOTO",
                 Seeker::None => "NONE",
                 Seeker::Optical if s.anti_air => "IR",
                 Seeker::Optical => "TV",
@@ -253,21 +255,32 @@ pub(crate) fn engine(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
 pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: Option<&MapData>) {
     let f = frame(screen);
     title(dl, screen, &f, "MISSION");
-    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, "STRIKE", Ink::MfdDim);
+    let recon = fd.objectives.iter().flatten().any(|(t, _)| *t == Task::Recon);
+    let kind = if recon { "RECON" } else { "STRIKE" };
+    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, kind, Ink::MfdDim);
     let step = f.txt * 1.5;
     let mut y = screen.max[1] - f.h * 0.15;
-    // Primär- und Sekundärziel mit Entfernung
-    for (role, label) in [(TargetRole::Primary, "PRI"), (TargetRole::Secondary, "SEC")] {
+    // Primär- und Sekundärziel: Auftrag, Name, Entfernung bzw. erledigt
+    for (k, (role, label)) in
+        [(TargetRole::Primary, "PRI"), (TargetRole::Secondary, "SEC")].into_iter().enumerate()
+    {
         let t = map.and_then(|m| m.targets.iter().find(|t| t.role == role));
-        let (name, dist) = match t {
+        let (task, done) =
+            fd.objectives[k].map_or(("", false), |(t, d)| (if t == Task::Recon { "RCN" } else { "ATK" }, d));
+        let (name, right) = match t {
+            Some(_) if done => ("DONE".to_string(), String::new()),
             Some(t) => {
                 let (dn, de) = (t.pos[0] - fd.position.x, t.pos[1] - fd.position.y);
-                (t.name, format!("{:.1} KM", units::m_to_km((dn * dn + de * de).sqrt())))
+                (
+                    t.name.chars().take(11).collect(),
+                    format!("{:.1} KM", units::m_to_km((dn * dn + de * de).sqrt())),
+                )
             }
-            None => ("---", String::new()),
+            None => ("---".to_string(), String::new()),
         };
-        dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, &format!("{label} {name}"), Ink::Warning);
-        dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &dist, Ink::Mfd);
+        let ink = if done { Ink::MfdDim } else { Ink::Warning };
+        dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, &format!("{label} {task} {name}"), ink);
+        dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &right, Ink::Mfd);
         y -= step;
     }
     // Regelset und Gebiet unter dem Flugzeug

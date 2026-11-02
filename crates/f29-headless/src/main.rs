@@ -3,9 +3,9 @@
 //! ```text
 //! f29-headless demo     [--seed N] [--seconds S] [--record DATEI]
 //! f29-headless replay   DATEI
-//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--wide 1] [--damage 1] [--bay N] [--zoom 0..10] [--out DATEI]
+//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--wide 1] [--damage 1] [--bay N] [--zoom 0..10] [--rules R] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
-//! f29-headless airfields [--seed N]
+//! f29-headless airfields [--seed N] [--rules cold|limited|war]
 //! f29-headless theater-new [--name NAME] [--seed N] [--size KM] [--grid N] --out DATEI.ron
 //! f29-headless theater-png [--theater DATEI.ron] [--size PX] [--out DATEI.png]
 //! f29-headless sound    [--out VERZEICHNIS]
@@ -29,7 +29,7 @@ f29-headless – F-29 Silent Sniper ohne Grafik
 Befehle:
   demo     [--seed N] [--seconds S] [--record DATEI]   Autopilot fliegt die Route ab
   replay   DATEI                                       Replay abspielen und Hash prüfen
-  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--wide 1] [--damage 1] [--bay N] [--zoom 0..10] [--out DATEI]
+  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--wide 1] [--damage 1] [--bay N] [--zoom 0..10] [--rules R] [--out DATEI]
                                                        HUD nach S Sekunden Demo als SVG
                                                        (SEITE des rechten MFDs: msn, tgt, wpn, eng, adi, sys;
                                                        --radar 1 schaltet am Ende das Radar ein,
@@ -41,7 +41,7 @@ Befehle:
                                                        --zoom Kartenstufe 0..10 = 0,6..640 km)
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
-  airfields [--seed N]                                 Flugplätze und Route auflisten
+  airfields [--seed N] [--rules R]                     Flugplätze, Route und Auftrag auflisten
   theater-new [--name NAME] [--seed N] [--size KM] [--grid N] --out DATEI.ron
                                                        Einsatzgebiet aus einem Seed anlegen
   theater-png [--theater DATEI.ron] [--size PX] [--out DATEI.png]
@@ -128,8 +128,8 @@ fn main() -> ExitCode {
 }
 
 /// Lässt den Autopiloten die generierte Route abfliegen.
-fn run_demo(seed: u64, seconds: f64, mut on_tick: impl FnMut(&Sim, f29_core::ControlFrame)) -> Sim {
-    let mut sim = Sim::new(SimConfig::new(seed));
+fn run_demo(config: SimConfig, seconds: f64, mut on_tick: impl FnMut(&Sim, f29_core::ControlFrame)) -> Sim {
+    let mut sim = Sim::new(config);
     let fd = sim.flight_data();
     let mut ap = Autopilot::new(fd.altitude_m, fd.heading, 220.0);
     let total = (seconds * f64::from(TICK_HZ)).round() as u64;
@@ -198,7 +198,7 @@ fn demo(args: &Args) -> Result<(), String> {
     let seconds = args.get("seconds", 300.0_f64)?;
     let mut replay = Replay::new(SimConfig::new(seed));
     let mut last_report = 0;
-    let sim = run_demo(seed, seconds, |sim, c| {
+    let sim = run_demo(SimConfig::new(seed), seconds, |sim, c| {
         replay.push(c);
         if sim.tick() - last_report >= u64::from(TICK_HZ) * 30 {
             last_report = sim.tick();
@@ -262,7 +262,14 @@ fn hud_svg(args: &Args) -> Result<(), String> {
         .find(|p| p.label().eq_ignore_ascii_case(page))
         .ok_or_else(|| format!("unbekannte Seite {page} (msn, tgt, wpn, eng, adi, sys)"))?;
     let mut last = f29_core::ControlFrame::default();
-    let mut sim = run_demo(seed, seconds, |_, c| last = c);
+    // --rules: Regelset mit dem Auftrag und seiner vorgeschlagenen Beladung.
+    let mut config = SimConfig::new(seed);
+    if let Some(code) = args.opt("rules") {
+        config.spawn.conflict =
+            f29_core::rules::Conflict::from_code(code).ok_or("--rules: cold, limited, war")?;
+        config.spawn.loadout = None;
+    }
+    let mut sim = run_demo(config, seconds, |_, c| last = c);
     if args.get("radar", 0_u8)? != 0 {
         sim.step(f29_core::ControlFrame { flags: last.flags | flags::RADAR_TOGGLE, ..last });
     }
@@ -392,8 +399,14 @@ fn terrain(args: &Args) -> Result<(), String> {
 
 fn airfields(args: &Args) -> Result<(), String> {
     let seed = args.get("seed", 0x0F29_u64)?;
-    let sim = Sim::new(SimConfig::new(seed));
-    println!("Seed {seed:#x}");
+    let mut config = SimConfig::new(seed);
+    config.spawn.loadout = None;
+    if let Some(code) = args.opt("rules") {
+        config.spawn.conflict =
+            f29_core::rules::Conflict::from_code(code).ok_or("--rules: cold, limited, war")?;
+    }
+    let sim = Sim::new(config);
+    println!("Seed {seed:#x}, {}", sim.rules().label);
     for rw in sim.terrain().runways() {
         let (a, b) = rw.numbers();
         println!(
@@ -411,6 +424,11 @@ fn airfields(args: &Args) -> Result<(), String> {
     for sp in sim.route() {
         println!("  {:<8} N {:.1} km  E {:.1} km", sp.name, sp.north / 1_000.0, sp.east / 1_000.0);
     }
+    for (i, task) in sim.mission().objectives() {
+        let t = &sim.targets()[i];
+        println!("Auftrag: {} {} ({:?})", task.label(), t.name, t.class);
+    }
+    println!("Beladung: {}", sim.mission().loadout(sim.targets()).to_text());
     Ok(())
 }
 
@@ -510,7 +528,7 @@ fn sound(args: &Args) -> Result<(), String> {
 fn bench(args: &Args) -> Result<(), String> {
     let seconds = args.get("seconds", 600.0_f64)?;
     let start = Instant::now();
-    let sim = run_demo(0x0F29, seconds, |_, _| {});
+    let sim = run_demo(SimConfig::new(0x0F29), seconds, |_, _| {});
     let dt = start.elapsed().as_secs_f64();
     let rate = sim.tick() as f64 / dt;
     println!(

@@ -2,11 +2,12 @@
 
 use crate::controls::{ControlFrame, flags, weapon_flags};
 use crate::detmath;
+use crate::events::EventLog;
 use crate::fighters::{self, FighterEvent, Fighters};
 use crate::flight::{self, AeroData, AircraftState};
 use crate::gun::{self, Gun, GunEvent};
 use crate::math::{DQuat, DVec3};
-use crate::mission;
+use crate::mission::{self, Mission, MissionEvent, Task};
 use crate::nav::Steerpoint;
 use crate::radar::{Exposure, RadarEvent, RadarKind, RadarNet};
 use crate::rng::Pcg32;
@@ -96,8 +97,8 @@ pub struct Spawn {
     pub speed: f64,
     /// Schubhebel 0..1, auf den auch das Triebwerk initialisiert wird.
     pub throttle: f64,
-    /// Beladung der Waffenschächte (M-014).
-    pub loadout: Loadout,
+    /// Beladung der Waffenschächte (M-014); `None`: Vorschlag des Auftrags.
+    pub loadout: Option<Loadout>,
     /// Nachtflug: Sensorreichweiten stark verringert (M-013).
     pub night: bool,
     /// Ein freundliches AWACS ist in der Luft: Datalink-Daten zu Zielen
@@ -125,7 +126,7 @@ impl Default for Spawn {
             heading: std::f64::consts::FRAC_PI_4,
             speed: 210.0,
             throttle: 0.55,
-            loadout: Loadout::default(),
+            loadout: Some(Loadout::default()),
             night: false,
             awacs: true,
             visible: false,
@@ -293,6 +294,13 @@ pub struct Sim {
     ground_seen: Vec<Seen>,
     fighter_seen: Vec<Seen>,
     contact_cursor: usize,
+    /// Auftrag (M-032) und erledigte Aufklärung je Ziel.
+    mission: Mission,
+    photographed: [bool; 2],
+    /// Bodenziele, die das Flugzeug entdeckt haben (Einsatzregeln).
+    detected_us: Vec<bool>,
+    roe_violations: u32,
+    mission_events: EventLog<MissionEvent>,
 }
 
 /// Gewähltes Ziel je Zielart; der HUD-Modus bestimmt, welche Auswahl die
@@ -329,7 +337,14 @@ impl Sim {
         };
         aircraft.engine = sp.throttle.clamp(0.0, 1.0);
         aircraft.fuel_kg = spec.fuel_capacity_kg * sp.fuel.clamp(0.0, 1.0);
-        let stores = Stores::new(&sp.loadout, seed);
+        let mut targets = targets::from_theater(&config.theater, &terrain);
+        let plan = mission::plan(&terrain, &targets, seed, sp.conflict);
+        for (i, role) in [(plan.primary, TargetRole::Primary), (plan.secondary, TargetRole::Secondary)] {
+            if let Some(i) = i {
+                targets[i].role = role;
+            }
+        }
+        let stores = Stores::new(&sp.loadout.unwrap_or_else(|| plan.loadout(&targets)), seed);
         aircraft.stores_kg = stores.mass_kg();
         if !aircraft.on_ground {
             // Getrimmt starten: Nase um den Anstellwinkel anheben, bei dem der
@@ -349,18 +364,13 @@ impl Sim {
             - terrain.elevation(aircraft.position.x, aircraft.position.y)
             - spec.gear_height_m)
             .max(0.0);
-        let mut targets = targets::from_theater(&config.theater, &terrain);
-        let plan = mission::plan(&terrain, &targets, seed);
-        for (i, role) in [(plan.primary, TargetRole::Primary), (plan.secondary, TargetRole::Secondary)] {
-            if let Some(i) = i {
-                targets[i].role = role;
-            }
-        }
         let route = mission::route(&plan, &terrain, &targets);
         let fighters = Fighters::new(&terrain, seed, sp.conflict.rules().max_airborne);
-        let sensors = Sensors { night: sp.night, ..Sensors::default() };
+        // Aufklärung fliegt immer bei Tag.
+        let sensors = Sensors { night: sp.night && !plan.has_recon(), ..Sensors::default() };
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
+        let targets_len = targets.len();
         let mut sim = Self {
             config,
             spec,
@@ -390,6 +400,11 @@ impl Sim {
             ground_seen: Vec::new(),
             fighter_seen: Vec::new(),
             contact_cursor: 0,
+            detected_us: vec![false; targets_len],
+            mission: plan,
+            photographed: [false; 2],
+            roe_violations: 0,
+            mission_events: EventLog::default(),
         };
         sim.ground_seen = vec![Seen::default(); sim.targets.len()];
         sim.fighter_seen = vec![Seen::default(); sim.fighters.list.len()];
@@ -449,6 +464,7 @@ impl Sim {
             self.gun.trigger(self.tick, false, DVec3::ZERO, DVec3::ZERO, DQuat::IDENTITY, DT);
             self.radar.step(self.tick, &self.targets, None);
             self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), None);
+            self.update_mission();
             return;
         }
         self.update_weapon_controls(&controls);
@@ -482,6 +498,74 @@ impl Sim {
                 gun::predict_impact(a.position, a.velocity, a.attitude, &self.terrain)
             };
         }
+        self.update_mission();
+    }
+
+    /// Auftrag (M-032): Fotos der Aufklärungsziele abhaken; Einsatzregeln
+    /// prüfen – im Kalten Krieg darf nur getroffen werden, was uns entdeckt
+    /// hat (Radarstellung mit Alarm, Jäger mit Kontakt).
+    fn update_mission(&mut self) {
+        let now = self.tick;
+        for s in &self.radar.sites {
+            if s.alert > 0 {
+                self.detected_us[s.target] = true;
+            }
+        }
+        let mut ground = Vec::new();
+        let mut air = Vec::new();
+        for &(_, e) in self.stores.events.recent(now, 0) {
+            match e {
+                WeaponEvent::Photo { target: Some(i), .. } => {
+                    let objectives =
+                        [self.mission.primary, self.mission.secondary].into_iter().zip(self.mission.tasks);
+                    for (k, (o, task)) in objectives.enumerate() {
+                        if o == Some(i) && task == Task::Recon && !self.photographed[k] {
+                            self.photographed[k] = true;
+                            self.mission_events.push(now, MissionEvent::Photographed(k));
+                        }
+                    }
+                }
+                WeaponEvent::Impact {
+                    result: ImpactResult::Destroyed { target: i, .. } | ImpactResult::Damaged(i),
+                    ..
+                } => ground.push(i),
+                WeaponEvent::FighterHit { fighter, .. } => air.push(fighter),
+                _ => {}
+            }
+        }
+        for &(_, e) in self.gun.events.recent(now, 0) {
+            match e {
+                GunEvent::Destroyed(i) => ground.push(i),
+                GunEvent::AirHit(f) => air.push(f),
+                GunEvent::Empty => {}
+            }
+        }
+        if self.rules().attack_needs_detection
+            && (ground.iter().any(|&i| !self.detected_us[i])
+                || air.iter().any(|&f| self.fighters.list[f].contact_tick.is_none()))
+        {
+            self.roe_violations += 1;
+            self.mission_events.push(now, MissionEvent::RoeViolation);
+        }
+    }
+
+    /// Auftrag der Mission.
+    pub fn mission(&self) -> &Mission {
+        &self.mission
+    }
+
+    /// Ist das Ziel des Auftrags `k` (0 = Primär, 1 = Sekundär) erledigt –
+    /// zerstört bzw. fotografiert?
+    pub fn objective_done(&self, k: usize) -> bool {
+        let target = [self.mission.primary, self.mission.secondary][k];
+        match self.mission.tasks[k] {
+            Task::Recon => self.photographed[k],
+            Task::Attack => target.is_some_and(|i| !self.targets[i].is_intact()),
+        }
+    }
+
+    pub fn mission_events(&self) -> &[(u64, MissionEvent)] {
+        &self.mission_events
     }
 
     /// Radarstellungen, die in diesem Tick feuern wollen, starten ihre
@@ -632,7 +716,7 @@ impl Sim {
         let kind = self.stores.selected_weapon().filter(|_| !self.aircraft.on_ground);
         let a = &self.aircraft;
         self.bomb_prediction = match kind {
-            Some(k) if !k.is_guided() => {
+            Some(k) if k.is_bomb() => {
                 weapons::predict_release(k, a.position, a.velocity, a.attitude, &self.terrain, DT)
             }
             _ => None,
@@ -1058,6 +1142,11 @@ impl Sim {
     }
 
     /// Zielerfassung (M-013).
+    /// Nachtflug (Aufklärungsaufträge fliegen immer bei Tag).
+    pub fn night(&self) -> bool {
+        self.sensors.night
+    }
+
     pub fn sensors(&self) -> &Sensors {
         &self.sensors
     }

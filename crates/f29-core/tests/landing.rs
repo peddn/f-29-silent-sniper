@@ -30,7 +30,7 @@ fn on_final(seed: u64, rw: &Runway, dist: f64, offset: f64, fuel: f64) -> Sim {
         speed: 95.0,
         throttle: 0.3,
         // Nach der Mission: Schächte leer.
-        loadout: f29_core::weapons::Loadout::EMPTY,
+        loadout: Some(f29_core::weapons::Loadout::EMPTY),
         night: false,
         awacs: true,
         visible: false,
@@ -352,7 +352,7 @@ fn gear_shakes_at_any_altitude_and_brakes() {
                 speed: 110.0,
                 throttle: 0.6,
                 // Ohne Waffen: geprüft wird nur der Fahrwerkswiderstand.
-                loadout: f29_core::weapons::Loadout::EMPTY,
+                loadout: Some(f29_core::weapons::Loadout::EMPTY),
                 ..Spawn::default()
             },
         ));

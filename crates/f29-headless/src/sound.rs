@@ -88,7 +88,7 @@ fn landing_demo() -> Vec<f32> {
         speed: 85.0,
         throttle: 0.4,
         // Nach der Mission: Schächte leer.
-        loadout: f29_core::weapons::Loadout::EMPTY,
+        loadout: Some(f29_core::weapons::Loadout::EMPTY),
         night: false,
         awacs: true,
         visible: false,

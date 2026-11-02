@@ -474,6 +474,12 @@ pub enum WeaponEvent {
         id: u32,
         fighter: usize,
     },
+    /// Foto Nummer `n` der Kamera; `target`: das gewählte Ziel, wenn es
+    /// gültig im Bild ist (M-032).
+    Photo {
+        n: u32,
+        target: Option<usize>,
+    },
     /// Eine feindliche Rakete hat das Flugzeug getroffen und diese Systeme
     /// beschädigt.
     AircraftHit {
@@ -498,6 +504,8 @@ pub struct Stores {
     pub door_cmd: bool,
     pub in_flight: Vec<Weapon>,
     pub countermeasures: Countermeasures,
+    /// Gemachte Fotos.
+    pub photos: u32,
     next_id: u32,
     rng: Pcg32,
     /// Letzte Ereignisse mit Tick, neueste zuletzt.
@@ -545,6 +553,29 @@ pub struct Launch<'a> {
     pub bay_ok: bool,
     /// Zeitschritt der Simulation (s), für die Vorausberechnung.
     pub dt: f64,
+}
+
+/// Ein Foto zählt bis zu dieser Entfernung zum Ziel (m; Spielerwunsch v0.3).
+pub const PHOTO_RANGE_M: f64 = 2_000.0;
+/// … und so weit (rad) um die Sichtlinie der Kamera.
+pub const PHOTO_CONE_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
+/// Die Kamera blickt so weit (rad) unter die Rumpflängsachse.
+pub const CAMERA_TILT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
+
+/// Sichtlinie der Kamera im Rumpfsystem (vorn, rechts, unten).
+pub fn camera_axis() -> DVec3 {
+    let (s, c) = detmath::sin_cos(CAMERA_TILT_RAD);
+    DVec3::new(c, 0.0, s)
+}
+
+/// Das gewählte Ziel, wenn es steht, optisch entdeckt ist, nah genug und
+/// nahe der Sichtlinie der Kamera liegt.
+fn photo_target(l: &Launch<'_>) -> Option<usize> {
+    let i = l.lock.filter(|_| l.lock_optical)?;
+    let t = l.targets.get(i).filter(|t| t.is_intact())?;
+    let to = center(t) - l.position;
+    (to.length() <= PHOTO_RANGE_M && angle_between(l.attitude.rotate(camera_axis()), to) <= PHOTO_CONE_RAD)
+        .then_some(i)
 }
 
 /// Winkel zwischen zwei Richtungen (rad).
@@ -620,6 +651,7 @@ impl Stores {
             door_cmd: false,
             in_flight: Vec::new(),
             countermeasures: Countermeasures::default(),
+            photos: 0,
             next_id: 0,
             rng: Pcg32::new(seed, STREAM_WEAPONS),
             events: EventLog::default(),
@@ -679,6 +711,10 @@ impl Stores {
             Some(_) if bay.count == 0 => Some(WeaponEvent::BayEmpty),
             None => Some(WeaponEvent::BayEmpty),
             _ if roll.abs() > MAX_RELEASE_BANK_RAD => Some(WeaponEvent::BankLimit),
+            Some(WeaponKind::Camera) => {
+                self.photos += 1;
+                Some(WeaponEvent::Photo { n: self.photos, target: photo_target(l) })
+            }
             _ if self.in_flight.iter().filter(|w| w.owner.is_none()).count() >= MAX_IN_FLIGHT => {
                 Some(WeaponEvent::Busy)
             }

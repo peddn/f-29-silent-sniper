@@ -38,6 +38,8 @@ pub enum WeaponKind {
     /// Feindliche radargelenkte Luft-Luft-Rakete mittlerer Reichweite
     /// (MiG-29), weit weg halbaktiv.
     Alamo,
+    /// Aufklärungskamera (M-032): kein Geschoss; der Auslöser macht ein Foto.
+    Camera,
 }
 
 /// Suchkopf einer gelenkten Waffe.
@@ -219,7 +221,7 @@ const SAM: WeaponSpec = WeaponSpec {
     ..MISSILE
 };
 
-const SPECS: [WeaponSpec; 14] = [
+const SPECS: [WeaponSpec; 15] = [
     BOMB,
     WeaponSpec {
         kind: WeaponKind::Retarded,
@@ -422,11 +424,22 @@ const SPECS: [WeaponSpec; 14] = [
         decoy_resistance: 0.15,
         ..MISSILE
     },
+    // Aufklärungskamera: bleibt im Schacht, macht unbegrenzt Fotos.
+    WeaponSpec {
+        kind: WeaponKind::Camera,
+        label: "CAM",
+        name: "KS-87 RECON CAMERA",
+        mass_kg: 150.0,
+        per_bay: 1,
+        lethal_radius_m: 0.0,
+        frag_radius_m: 0.0,
+        ..BOMB
+    },
 ];
 
 impl WeaponKind {
     /// Die Waffen für die Schächte (ohne die feindlichen Raketen).
-    pub const ALL: [WeaponKind; 8] = [
+    pub const ALL: [WeaponKind; 9] = [
         WeaponKind::FreeFall,
         WeaponKind::Retarded,
         WeaponKind::GuidedBomb,
@@ -435,6 +448,7 @@ impl WeaponKind {
         WeaponKind::AntiShip,
         WeaponKind::Sidewinder,
         WeaponKind::Amraam,
+        WeaponKind::Camera,
     ];
 
     pub fn spec(self) -> &'static WeaponSpec {
@@ -454,6 +468,11 @@ impl WeaponKind {
 
     pub fn is_guided(self) -> bool {
         self.spec().seeker != Seeker::None
+    }
+
+    /// Ungelenkte Bombe (Aufschlagvorhersage, Zielhilfe).
+    pub fn is_bomb(self) -> bool {
+        !self.is_guided() && self != WeaponKind::Camera
     }
 
     /// Fernsehsuchkopf: Die Waffe sendet ihr Bild (WPN-CAM-Seite).
@@ -478,6 +497,7 @@ impl WeaponKind {
             WeaponKind::Amraam => "aim120",
             WeaponKind::Aphid => "aa8",
             WeaponKind::Alamo => "aa10",
+            WeaponKind::Camera => "cam",
         }
     }
 
@@ -500,7 +520,8 @@ impl WeaponKind {
                 | W::Sidewinder
                 | W::Amraam
                 | W::Aphid
-                | W::Alamo,
+                | W::Alamo
+                | W::Camera,
                 _,
             ) => 0.0,
             (W::AntiRadar, C::AirDefense | C::EarlyWarning | C::ShortRangeSam) => 1.0,

@@ -23,7 +23,7 @@ fn main() {
         speed: 95.0,
         throttle: 0.3,
         // Nach der Mission: Schächte leer.
-        loadout: f29_core::weapons::Loadout::EMPTY,
+        loadout: Some(f29_core::weapons::Loadout::EMPTY),
         night: false,
         awacs: true,
         visible: false,

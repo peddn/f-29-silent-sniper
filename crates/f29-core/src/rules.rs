@@ -30,6 +30,9 @@ pub struct Rules {
     pub max_airborne: usize,
     /// Punkteabzug je Entdeckung (Wertung, M-032).
     pub detection_penalty: u32,
+    /// Angreifen nur, was uns entdeckt hat (Radarstellung mit Alarm, Jäger
+    /// mit Kontakt); sonst ROE-Verletzung.
+    pub attack_needs_detection: bool,
 }
 
 const RULES: [Rules; 3] = [
@@ -40,22 +43,25 @@ const RULES: [Rules; 3] = [
         fighter_min_range_m: 1_500.0,
         max_airborne: 4,
         detection_penalty: 30,
+        attack_needs_detection: true,
     },
     Rules {
-        label: "LIMITED CONFLICT",
+        label: "LIMITED",
         fire_only_over_hostile: false,
         max_hostile_missiles: 2,
         fighter_min_range_m: 1_500.0,
         max_airborne: 4,
         detection_penalty: 10,
+        attack_needs_detection: false,
     },
     Rules {
-        label: "CONVENTIONAL WAR",
+        label: "OPEN WAR",
         fire_only_over_hostile: false,
         max_hostile_missiles: 4,
         fighter_min_range_m: 1_000.0,
         max_airborne: 6,
         detection_penalty: 0,
+        attack_needs_detection: false,
     },
 ];
 

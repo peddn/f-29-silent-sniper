@@ -4,7 +4,7 @@ use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::{ScreenLayout, heading_deg};
 use f29_core::sensors;
 use f29_core::units;
-use f29_core::weapons::LaunchZone;
+use f29_core::weapons::{self, LaunchZone, WeaponKind};
 use f29_core::{FlightData, MarkKind, PickedInfo, Side, Stage};
 
 /// Zeichenhöhe der HUD-Schrift (Bildschirmeinheiten).
@@ -93,7 +93,18 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
             picked_target(dl, fd.runway_target.as_ref(), layout, &glass, vh);
         }
         HudMode::AirToGround => {
-            dl.circle(c, circle_radius(layout, sensors::GROUND_CIRCLE_RAD), 40, Ink::Hud);
+            let st = &fd.stores;
+            let camera = !st.gun_selected && st.bays[st.selected].kind == Some(WeaponKind::Camera);
+            match layout.project_body(weapons::camera_axis().to_array()).filter(|_| camera) {
+                // Kamera gewählt: ihre Sichtlinie mit dem Bildkreis (M-032).
+                Some(p) => {
+                    dl.circle(p, circle_radius(layout, weapons::PHOTO_CONE_RAD), 32, Ink::Hud);
+                    let d = TXT * 0.5;
+                    dl.line([p[0] - d, p[1]], [p[0] + d, p[1]], Ink::Hud);
+                    dl.line([p[0], p[1] - d], [p[0], p[1] + d], Ink::Hud);
+                }
+                None => dl.circle(c, circle_radius(layout, sensors::GROUND_CIRCLE_RAD), 40, Ink::Hud),
+            }
             marks(dl, fd, layout, &glass, vh, MarkKind::Ground);
             target_marker(dl, fd, layout, &glass, vh);
             bomb_aim(dl, fd, layout, &glass, vh);

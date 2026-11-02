@@ -306,7 +306,7 @@ fn autopilot_landing() -> (f64, f64) {
         speed: 95.0,
         throttle: 0.3,
         // Nach der Mission: Schächte leer.
-        loadout: crate::weapons::Loadout::EMPTY,
+        loadout: Some(crate::weapons::Loadout::EMPTY),
         night: false,
         awacs: true,
         visible: false,

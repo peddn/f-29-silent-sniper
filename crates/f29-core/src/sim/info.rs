@@ -214,6 +214,10 @@ pub struct FlightData {
     /// (im Kalten Krieg feuert der Gegner nur dort).
     pub rules: &'static str,
     pub territory: Side,
+    /// Auftrag je Ziel (Primär, Sekundär): Auftragsart und erledigt.
+    pub objectives: [Option<(Task, bool)>; 2],
+    /// Verletzungen der Einsatzregeln bisher.
+    pub roe_violations: u32,
     /// Zielhilfe, wenn eine ungelenkte Bombe gewählt ist und das Flugzeug fliegt.
     pub bomb_aim: Option<BombAim>,
     /// Waffen in der Luft für die Karte: eigene und feindliche.
@@ -785,6 +789,11 @@ impl Sim {
             awacs: self.config.spawn.awacs,
             rules: self.rules().label,
             territory: self.territory(a.position),
+            objectives: [0, 1].map(|k| {
+                [self.mission.primary, self.mission.secondary][k]
+                    .map(|_| (self.mission.tasks[k], self.objective_done(k)))
+            }),
+            roe_violations: self.roe_violations,
             own_contacts: (0..self.targets.len())
                 .filter(|&i| self.ground_seen[i].any() && self.targets[i].is_intact())
                 .collect(),
@@ -911,7 +920,7 @@ impl Sim {
 
     /// Zielhilfe aus der zuletzt berechneten Aufschlagvorhersage.
     fn bomb_aim(&self) -> Option<BombAim> {
-        let kind = self.stores.selected_weapon().filter(|k| !k.is_guided())?;
+        let kind = self.stores.selected_weapon().filter(|k| k.is_bomb())?;
         let (impact, fall_time_s) = self.bomb_prediction?;
         let a = &self.aircraft;
         let to = impact - a.position;
@@ -965,6 +974,7 @@ impl Sim {
                     }
                     WeaponEvent::AircraftHit { kind, .. } => (format!("{} HIT", kind.label()), true),
                     WeaponEvent::FighterHit { kind, .. } => (format!("{} HIT", kind.label()), false),
+                    WeaponEvent::Photo { n, .. } => (format!("PHOTO {n}"), false),
                     WeaponEvent::Decoyed { kind, .. } => (format!("{} DECOYED", kind.label()), false),
                     WeaponEvent::DecoyEmpty(kind) => (format!("{} EMPTY", kind.label()), true),
                     WeaponEvent::Acquired { kind, target, .. } => {
@@ -1011,6 +1021,14 @@ impl Sim {
                     GunEvent::AirHit(_) => return None,
                 };
                 Some(message(tick, text))
+            }))
+            .chain(self.mission_events.recent(self.tick, window).map(|&(tick, e)| {
+                let text = match e {
+                    MissionEvent::Photographed(0) => ("PRIMARY PHOTOGRAPHED".to_string(), false),
+                    MissionEvent::Photographed(_) => ("SECONDARY PHOTOGRAPHED".to_string(), false),
+                    MissionEvent::RoeViolation => ("ROE VIOLATION".to_string(), true),
+                };
+                message(tick, text)
             }))
             .chain(self.fighters.events.recent(self.tick, window).map(|&(tick, e)| {
                 let base = |b: usize| self.terrain.runways()[b].name;

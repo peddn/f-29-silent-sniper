@@ -25,7 +25,7 @@ fn approach_at(
         back,
         east_shift,
         height,
-        Spawn { min_clearance: 0.0, loadout, ..Spawn::default() },
+        Spawn { min_clearance: 0.0, loadout: Some(loadout), ..Spawn::default() },
     )
     .expect("Zielklasse vorhanden");
     // Startwahl ist die Kanone: weiter zu Schacht 1.

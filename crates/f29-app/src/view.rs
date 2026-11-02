@@ -222,7 +222,7 @@ pub fn update_camera_and_aircraft(
 ) {
     // Tageszeit: Himmel, Dunst und Nachbearbeitung (M-013: nachts kürzere
     // Sensorreichweiten).
-    let night = state.sim.config().spawn.night;
+    let night = state.sim.night();
     let sky = sky_for(night);
     if clear.0 != sky {
         clear.0 = sky;
