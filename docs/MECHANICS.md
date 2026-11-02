@@ -2091,7 +2091,11 @@ Format jedes Eintrags:
   Unterseite der F-29 als Liniengrafik nach dem Grundriss des 3D-Modells,
   Nase nach links, mit den vier Schächten (2×2: vorn Schacht 1 oben und 2
   unten, hinten 3 und 4; zusammen die halbe Höhe, der Umriss ragt über den
-  Rand), darin Kurzname und Stückzahl; unten die Liste in zwei Spalten
+  Rand), darin die Grafik der Ausrüstung und darunter die Stückzahl
+  (`crates/f29-app/assets/stores/<code>.svg`, Code wie bei `--loadout`,
+  etwa 2:1, Nase links, Text als Pfade; beim Start mit resvg gerastert;
+  fehlt eine, steht dort der Kurzname; die mitgelieferten sind schlichte
+  Platzhalter); unten die Liste in zwei Spalten
   (die zehn Ausrüstungen, EMPTY, ARMING COMPLETE). Bedienung: Pfeile
   wählen, Leertaste nimmt die Waffe, dann wählen die Pfeile einen Schacht
   (der blinkt), Leertaste legt sie ab; zurück in der Liste blinkt die Waffe

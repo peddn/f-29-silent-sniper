@@ -59,7 +59,8 @@ cargo run --release -p f29-app -- --no-sound
 
 # andere Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship, aim9, aim120,
 # cam (Aufklärungskamera), tank (Zusatztank) oder -; ohne Angabe die vorgeschlagene
-# Beladung des Auftrags (im Menü: „Arm Your Plane“)
+# Beladung des Auftrags (im Menü: „Arm Your Plane“; die Bilder der Ausrüstung dort
+# sind SVG-Dateien in crates/f29-app/assets/stores/<code>.svg und lassen sich ersetzen)
 cargo run --release -p f29-app -- --loadout fall,fall,agm,arm
 # Regelset: Kalter Krieg (nur Aufklärung; Gegner feuern nur über feindlichem
 # Gebiet; angreifen nur, was uns entdeckt hat), begrenzter Konflikt oder

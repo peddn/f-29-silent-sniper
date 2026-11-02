@@ -72,6 +72,7 @@ fn scale_line_width(
 #[allow(clippy::too_many_arguments)]
 fn draw_hud(
     time: Res<Time>,
+    art: Res<crate::store_art::StoreArt>,
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
     view: Res<ViewSettings>,
@@ -110,7 +111,9 @@ fn draw_hud(
     };
     let blink = time.elapsed_secs().fract() < 0.5;
     let list = if state.menu == Some(crate::menu::Screen::Arming) {
-        f29_hud::arming::draw(&layout, &crate::menu::arming(&state, blink))
+        let mut a = crate::menu::arming(&state, blink);
+        a.art = fd.stores.bays.map(|b| b.kind.is_some_and(|k| art.has(k)));
+        f29_hud::arming::draw(&layout, &a)
     } else if state.menu.is_some() {
         f29_hud::draw_menu(&layout, &crate::menu::page(&state))
     } else {

@@ -22,6 +22,8 @@ f29-world.workspace = true
 
 # Nur die benötigten Teile von Bevy: 2D (HUD-Overlay) und 3D, ohne UI und Audio.
 bevy = { version = "0.20", default-features = false, features = ["2d", "3d", "bevy_audio"] }
+# SVG-Grafiken der Ausrüstung (Bewaffnung), ohne Schriften und Rasterbilder.
+resvg = { version = "0.45", default-features = false }
 
 [lints]
 workspace = true

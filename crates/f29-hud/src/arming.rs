@@ -40,6 +40,28 @@ pub struct Arming {
     pub blink: bool,
     /// Treibstoff: benötigt, mitgeführt (kg).
     pub fuel: (f64, f64),
+    /// Je Schacht: Das Frontend zeigt eine Grafik ([`art_rect`]) statt des
+    /// Kurznamens.
+    pub art: [bool; 4],
+}
+
+/// Ursprung des Modells auf dem Bildschirm: Die Schächte liegen mittig im
+/// Bildbereich.
+fn origin() -> [f32; 2] {
+    let middle = BAY_CENTER[1] + BAY_HALF[1] + BAY_GAP * 0.5;
+    [-middle * SCALE, (PICTURE[0] + PICTURE[1]) * 0.5]
+}
+
+/// Umriss des Schachts `k` (Bildschirmeinheiten).
+pub fn bay_rect(k: usize) -> Rect {
+    Rect::from_center(place(bay_center(k), origin()), [BAY_HALF[1] * SCALE, BAY_HALF[0] * SCALE])
+}
+
+/// Bildfeld für die Grafik der Ausrüstung im Schacht `k`: zwischen der
+/// Nummer oben und der Stückzahl unten.
+pub fn art_rect(k: usize) -> Rect {
+    let r = bay_rect(k);
+    Rect { min: [r.min[0] + 0.012, r.min[1] + TXT * 1.7], max: [r.max[0] - 0.012, r.max[1] - TXT * 1.7] }
 }
 
 /// Modellpunkt (x quer, z längs) → Bildschirm: um 90° gegen den
@@ -67,17 +89,14 @@ pub fn draw(layout: &ScreenLayout, a: &Arming) -> DisplayList {
     // Unterseite, auf den Bildbereich beschnitten
     let half = layout.aspect * 0.5;
     let area = Rect { min: [-half, PICTURE[0]], max: [half, PICTURE[1]] };
-    // Die Schächte mittig im Bildbereich.
-    let middle = BAY_CENTER[1] + BAY_HALF[1] + BAY_GAP * 0.5;
-    let origin = [-middle * SCALE, area.center()[1]];
-    let pt = |p: [f32; 2]| place(p, origin);
+    let pt = |p: [f32; 2]| place(p, origin());
     dl.set_clip(Some(area));
     let side: Vec<[f32; 2]> = OUTLINE.iter().map(|&p| pt(p)).collect();
     let other: Vec<[f32; 2]> = OUTLINE.iter().rev().map(|&[x, z]| pt([-x, z])).collect();
     dl.polyline(&[side, other].concat(), true, Ink::HudDim);
     for k in 0..4 {
-        let c = pt(bay_center(k));
-        let r = Rect::from_center(c, [BAY_HALF[1] * SCALE, BAY_HALF[0] * SCALE]);
+        let r = bay_rect(k);
+        let c = r.center();
         let focus = a.bay == Some(k);
         let ink = if focus { blink } else { Ink::Hud };
         dl.rect(r, ink);
@@ -89,8 +108,10 @@ pub fn draw(layout: &ScreenLayout, a: &Arming) -> DisplayList {
             Some((n, c)) => (n.as_str(), format!("X{c}")),
             None => ("EMPTY", String::new()),
         };
-        dl.text_mid([c[0], c[1] + TXT * 0.4], TXT, Align::Center, name, ink);
-        dl.text_mid([c[0], c[1] - TXT * 1.2], TXT, Align::Center, &count, ink);
+        if !a.art[k] {
+            dl.text_mid(c, TXT, Align::Center, name, ink);
+        }
+        dl.text_mid([c[0], r.min[1] + TXT], TXT, Align::Center, &count, ink);
     }
     dl.set_clip(None);
 

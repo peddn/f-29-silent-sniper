@@ -119,6 +119,7 @@ pub fn arming(state: &SimState, blink: bool) -> Arming {
         bay: state.arm_bay,
         blink,
         fuel: (sim.fuel_required_kg(), sim.fuel_carried_kg()),
+        art: [false; 4],
     }
 }
 
