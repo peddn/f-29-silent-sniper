@@ -2088,8 +2088,9 @@ Format jedes Eintrags:
   6 m/s, Bruch ab 10,5 m/s, 22,5° Querlage, −7,5° Nase).
 - **Umgesetzt S2 (v0.3):** **Bewaffnung** („Arm Your Plane“): oben
   „FUEL REQUIRED / CARRIED“ (Warnfarbe bei Mangel), in der Mitte die
-  Unterseite der F-29 als Liniengrafik nach dem Grundriss des 3D-Modells
-  mit den vier Schächten (2×2, gut 60 % der Höhe, Umriss ragt über den
+  Unterseite der F-29 als Liniengrafik nach dem Grundriss des 3D-Modells,
+  Nase nach links, mit den vier Schächten (2×2: vorn Schacht 1 oben und 2
+  unten, hinten 3 und 4; zusammen die halbe Höhe, der Umriss ragt über den
   Rand), darin Kurzname und Stückzahl; unten die Liste in zwei Spalten
   (die zehn Ausrüstungen, EMPTY, ARMING COMPLETE). Bedienung: Pfeile
   wählen, Leertaste nimmt die Waffe, dann wählen die Pfeile einen Schacht

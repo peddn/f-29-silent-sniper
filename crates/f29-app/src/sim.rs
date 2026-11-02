@@ -167,7 +167,8 @@ fn step_simulation(
     mut pilot: ResMut<PilotInput>,
     view: Res<crate::view::ViewSettings>,
 ) {
-    if state.paused || state.menu.is_some() {
+    // Menü bzw. Nachbesprechung: Die Simulation steht still.
+    if state.paused || state.covered() {
         return;
     }
     let state = &mut *state;

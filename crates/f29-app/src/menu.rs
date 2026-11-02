@@ -151,8 +151,9 @@ fn arm(state: &mut SimState, (up, down, left, right, ok): (bool, bool, bool, boo
             }
         }
         Some(mut k) => {
-            // 2×2: links/rechts wechselt die Seite, hoch/runter vorn/hinten.
-            k ^= usize::from(left || right) | usize::from(up || down) << 1;
+            // 2×2, Nase links: hoch/runter wechselt die Seite, links/rechts
+            // vorn/hinten.
+            k ^= usize::from(up || down) | usize::from(left || right) << 1;
             state.arm_bay = Some(k);
             if ok {
                 let mut config = state.sim.config().clone();
