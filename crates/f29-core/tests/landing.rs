@@ -121,7 +121,9 @@ fn autopilot_lands_on_home_runway() {
     );
     let fd = sim.flight_data();
     assert!(fd.stopped_on_runway, "steht nicht auf der Bahn");
-    assert!(fd.debrief.iter().any(|l| l.contains("LANDED")), "{:?}", fd.debrief);
+    let score = fd.debrief.as_ref().expect("Wertung");
+    assert!(score.lines.iter().any(|l| l.text.contains("LANDED")), "{score:?}");
+    assert_eq!(score.factors[0].1, 1.0, "heil gelandet: voller Faktor");
     let td = fd.touchdown.expect("Aufsetzen nicht erfasst");
     assert!(!td.hard, "harte Landung: {} m/s", td.sink_mps);
     assert!(td.sink_mps > 0.0 && td.sink_mps < 2.5, "Sinkrate {}", td.sink_mps);

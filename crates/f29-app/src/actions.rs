@@ -132,6 +132,8 @@ pub fn apply_actions(
     for (action, pressed, held) in std::mem::take(&mut actions.0) {
         match action {
             Action::Gun => pilot.gun |= held,
+            // Nach dem Missionsende blättert der Auslöser die Nachbesprechung.
+            Action::Fire if state.sim.mission_over() => view.debrief += usize::from(pressed),
             Action::Fire => {
                 pilot.trigger |= held;
                 if pressed {
@@ -180,6 +182,7 @@ pub fn apply_actions(
             Action::Restart => {
                 state.restart();
                 *pilot = PilotInput::matching(&state.sim);
+                view.debrief = 0;
             }
             Action::Quit => {
                 state.save_replay();

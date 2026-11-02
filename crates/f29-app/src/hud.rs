@@ -33,9 +33,8 @@ fn setup(mut commands: Commands, mut config_store: ResMut<GizmoConfigStore>) {
     config.render_layers = RenderLayers::layer(HUD_LAYER);
     config.line.width = 2.0;
 
-    let [r, g, b] = palette::mix(0, 13, 0.18);
     commands.spawn((
-        Sprite::from_color(Color::srgb(r, g, b), Vec2::ONE),
+        Sprite::from_color(Color::BLACK, Vec2::ONE),
         Transform::from_xyz(0.0, 0.0, -10.0),
         RenderLayers::layer(HUD_LAYER),
         PanelBackground,
@@ -85,13 +84,16 @@ fn draw_hud(
     }
     let layout = layout_for(&window, &view);
 
-    // Hintergrund des Instrumentenbretts
-    let panel_h = layout.panel_fraction * h;
+    let fd = state.sim.flight_data();
+    // Hintergrund des Instrumentenbretts; nach dem Missionsende deckt er als
+    // Grund der Nachbesprechung das ganze Fenster (später ein Bild).
+    let panel_h = if fd.mission_over { h } else { layout.panel_fraction * h };
     let (transform, sprite) = &mut *panel;
     sprite.custom_size = Some(Vec2::new(w, panel_h));
+    let [r, g, b] = if fd.mission_over { palette::mix(0, 13, 0.08) } else { palette::mix(0, 13, 0.18) };
+    sprite.color = Color::srgb(r, g, b);
     transform.translation = Vec3::new(0.0, -h * 0.5 + panel_h * 0.5, -10.0);
 
-    let fd = state.sim.flight_data();
     // Ein optisch erfasstes Ziel zeigt die Zielkamera (tgt_camera.rs) statt des Drahtgitters.
     // Ausgestiegen bzw. Missionsende: Schirm bzw. Ergebnistafel immer.
     let pilot_view = fd.pilot.is_some() || fd.mission_over;
@@ -101,6 +103,7 @@ fn draw_hud(
         show_panel: true,
         mfd: mfd.0,
         camera_feed: true,
+        debrief_screen: view.debrief,
     };
     let list = f29_hud::build(&fd, &layout, &opts, maps.map.as_deref());
     for line in &list.lines {

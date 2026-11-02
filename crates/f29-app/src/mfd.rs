@@ -143,8 +143,9 @@ fn place_screens(
 ) {
     let h = window.height();
     let layout = layout_for(&window, &settings);
-    let mfd = layout.mfd_layout();
     let fd = state.sim.flight_data();
+    // Nach dem Missionsende deckt die Nachbesprechung das Brett.
+    let mfd = layout.mfd_layout().filter(|_| !fd.mission_over);
     let raster = match view.0.map_mode {
         MapMode::Grid => &assets.rasters[0],
         MapMode::Satellite => &assets.rasters[1],

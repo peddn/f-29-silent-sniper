@@ -67,10 +67,6 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
     // hoch, damit Daten und Symbole nach außen rücken (v0.2.8).
     let glass = Rect::from_center(c, [vh * 0.56, vh * 0.38]);
 
-    if fd.mission_over {
-        mission_end(dl, fd, &glass);
-        return;
-    }
     // Ausgestiegen: kein HUD (den Schirm zeigt die 3D-Ansicht).
     if fd.pilot.is_some() {
         return;
@@ -491,31 +487,6 @@ fn picked_target(dl: &mut DisplayList, t: Option<&PickedInfo>, layout: &ScreenLa
         dashed: false,
     };
     picked_marker(dl, layout, glass, vh, &frame);
-}
-
-/// Ergebnistafel nach dem Missionsende (M-032): Ausgang, Auftrag je Ziel und
-/// die letzten Einträge des Flugprotokolls.
-fn mission_end(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
-    let good = matches!(fd.status, f29_core::Status::Landed { side: Side::Friendly, .. });
-    let ink = if good { Ink::Hud } else { Ink::HudWarning };
-    let (x0, mut y) = (glass.min[0], glass.max[1] - TXT);
-    dl.text_mid([glass.center()[0], y], TXT * 1.5, Align::Center, &fd.status.outcome(), ink);
-    y -= TXT * 2.4;
-    for (k, label) in ["PRIMARY", "SECONDARY"].into_iter().enumerate() {
-        if let Some((task, done)) = fd.objectives[k] {
-            let state = if done { "DONE" } else { "NOT DONE" };
-            let text = format!("{label} {} {state}", task.label());
-            dl.text_mid([x0, y], TXT, Align::Left, &text, if done { Ink::Hud } else { Ink::HudDim });
-            y -= TXT * 1.4;
-        }
-    }
-    y -= TXT * 0.6;
-    let rows = ((y - glass.min[1]) / (TXT_SMALL * 1.35)) as usize;
-    for line in fd.debrief.iter().skip(fd.debrief.len().saturating_sub(rows.saturating_sub(2))) {
-        dl.text_mid([x0, y], TXT_SMALL, Align::Left, line, Ink::Hud);
-        y -= TXT_SMALL * 1.35;
-    }
-    dl.text_mid([glass.center()[0], glass.min[1]], TXT, Align::Center, "R - RESTART", ink);
 }
 
 /// Kursband oben im HUD.

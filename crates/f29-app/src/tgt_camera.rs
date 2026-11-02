@@ -150,8 +150,8 @@ fn update(
     let (cam, cam_transform, projection, effect) = &mut *camera;
     let (sprite_transform, sprite, visibility) = &mut *screen;
     let h = window.height();
-    let mfd = layout_for(&window, &settings).mfd_layout();
     let fd = state.sim.flight_data();
+    let mfd = layout_for(&window, &settings).mfd_layout().filter(|_| !fd.mission_over);
     // Neue Waffe mit Kamera abgefeuert: selbst auf die WPN-CAM-Seite schalten.
     let cam_id = fd.weapon_cam.map(|c| c.id);
     if cam_id.is_some() && cam_id != *last_cam {

@@ -56,6 +56,8 @@ pub struct ViewSettings {
     pub look: LookDir,
     /// Ausgestiegen: Blick des Piloten am Schirm, ohne Brett (M-032).
     pub ejected: bool,
+    /// Nach dem Missionsende: Bildschirm der Nachbesprechung (Leertaste weiter).
+    pub debrief: usize,
 }
 
 impl Default for ViewSettings {
@@ -68,6 +70,7 @@ impl Default for ViewSettings {
             wide: false,
             look: LookDir::Forward,
             ejected: false,
+            debrief: 0,
         }
     }
 }

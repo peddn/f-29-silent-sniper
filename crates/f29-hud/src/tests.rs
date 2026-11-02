@@ -83,29 +83,39 @@ fn ladder_moves_down_when_nose_goes_up() {
     assert!(horizon_y(&fd) < c[1] - 0.01);
 }
 
-/// Missionsende (M-032): Die Ergebnistafel ersetzt das HUD – Absturz rot,
-/// Landung auf eigenem Gebiet in HUD-Farbe.
+/// Missionsende (M-032): Die Nachbesprechung ersetzt HUD und Brett –
+/// Ausgang, Ereignisse seitenweise, Wertung; Absturz in Warnfarbe.
 #[test]
-fn mission_end_replaces_hud() {
-    use f29_core::{CrashCause, Side, Status};
+fn debrief_screens_replace_hud() {
+    use crate::debrief::{EVENTS_PER_SCREEN, Screen, screens};
+    use f29_core::{CrashCause, Score, ScoreLine, Side, Status};
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
-    let opts =
-        HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() };
-    let flying = build(&sample(), &layout, &opts, None).lines.len();
-    let end = |status: Status| {
-        let fd = f29_core::FlightData {
-            status,
-            mission_over: true,
-            debrief: vec!["00:10 TAKEOFF".into()],
-            ..sample()
-        };
-        build(&fd, &layout, &opts, None).lines
+    let line =
+        |k: u64| ScoreLine { time_s: k, text: "TAKEOFF".into(), points: if k == 0 { 500 } else { -30 } };
+    let score = Score {
+        lines: (0..EVENTS_PER_SCREEN as u64 + 1).map(line).collect(),
+        subtotal: 500,
+        factors: vec![("LANDED".into(), 1.0)],
+        total: 500,
     };
-    let crashed = end(Status::Crashed { tick: 1, cause: CrashCause::Terrain });
-    assert!(crashed.len() < flying, "Tafel statt HUD");
-    assert!(crashed.iter().any(|l| l.ink == Ink::HudWarning));
-    let landed = end(Status::Landed { tick: 1, side: Side::Friendly });
-    assert!(landed.iter().all(|l| l.ink != Ink::HudWarning), "gelungene Landung nicht rot");
+    assert_eq!(
+        screens(&score),
+        [Screen::Outcome, Screen::Events(0), Screen::Events(EVENTS_PER_SCREEN), Screen::Rating]
+    );
+    let end = |status: Status, screen: usize| {
+        let fd =
+            f29_core::FlightData { status, mission_over: true, debrief: Some(score.clone()), ..sample() };
+        build(&fd, &layout, &HudOptions { debrief_screen: screen, ..HudOptions::default() }, None).lines
+    };
+    let crashed = end(Status::Crashed { tick: 1, cause: CrashCause::Terrain }, 0);
+    assert!(crashed.iter().any(|l| l.ink == Ink::HudWarning), "Absturz in Warnfarbe");
+    assert!(crashed.iter().all(|l| !matches!(l.ink, Ink::Panel | Ink::Mfd)), "kein Brett");
+    let landed = end(Status::Landed { tick: 1, side: Side::Friendly }, 0);
+    assert!(landed.iter().all(|l| l.ink != Ink::HudWarning), "gelungene Landung nicht in Warnfarbe");
+    // Abzüge in Warnfarbe; jeder Bildschirm sieht anders aus.
+    let events = end(Status::Landed { tick: 1, side: Side::Friendly }, 1);
+    assert!(events.iter().any(|l| l.ink == Ink::HudWarning));
+    assert_ne!(events, end(Status::Landed { tick: 1, side: Side::Friendly }, 3));
 }
 
 #[test]

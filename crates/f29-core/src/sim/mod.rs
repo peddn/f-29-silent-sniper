@@ -26,6 +26,9 @@ use std::sync::Arc;
 
 mod hash;
 mod info;
+mod score;
+
+pub use score::{Score, ScoreLine};
 
 pub use hash::Fnv1a;
 pub use info::*;
@@ -239,6 +242,16 @@ pub enum Status {
 }
 
 impl Status {
+    /// Tick des Missionsendes (`None` im Flug).
+    pub fn tick(self) -> Option<u64> {
+        match self {
+            Status::Flying => None,
+            Status::Crashed { tick, .. } | Status::Landed { tick, .. } | Status::Ejected { tick, .. } => {
+                Some(tick)
+            }
+        }
+    }
+
     /// Ausgang der Mission für die Ergebnistafel (M-032).
     pub fn outcome(self) -> String {
         let fate = |side: Side| match side {
@@ -673,7 +686,9 @@ impl Sim {
                 Event::Radar(RadarEvent::Alert { site, level: 3 }) => {
                     log.push(LogEntry::RadarId(self.radar.sites[site].target))
                 }
-                Event::Fighter(FighterEvent::Destroyed { kind }) => log.push(LogEntry::FighterKill(kind)),
+                Event::Fighter(FighterEvent::Destroyed { kind, id }) => {
+                    log.push(LogEntry::FighterKill(id, kind))
+                }
                 _ => {}
             }
         }
@@ -682,9 +697,11 @@ impl Sim {
                 .iter()
                 .any(|(_, e)| matches!(e, LogEntry::Detected(Detector::Fighter(id, _)) if *id as usize == f))
         };
+        // Zivile Ziele zählen in der Wertung für sich (ein Abzug je Tat).
         if self.rules().attack_needs_detection
-            && (ground.iter().any(|&i| self.logged(LogEntry::Detected(Detector::Radar(i))).is_none())
-                || air.iter().any(|&f| !by_fighter(f)))
+            && (ground.iter().any(|&i| {
+                !self.targets[i].civilian && self.logged(LogEntry::Detected(Detector::Radar(i))).is_none()
+            }) || air.iter().any(|&f| !by_fighter(f)))
         {
             log.push(LogEntry::RoeViolation);
         }
@@ -760,7 +777,7 @@ impl Sim {
             LogEntry::Destroyed(i) => format!("{}{} DESTROYED", role(i), name(i)),
             LogEntry::Photographed(0) => "PRIMARY PHOTOGRAPHED".into(),
             LogEntry::Photographed(_) => "SECONDARY PHOTOGRAPHED".into(),
-            LogEntry::FighterKill(kind) => format!("{} SHOT DOWN", kind.spec().label),
+            LogEntry::FighterKill(_, kind) => format!("{} SHOT DOWN", kind.spec().label),
             LogEntry::Hit => "AIRCRAFT HIT".into(),
             LogEntry::RoeViolation => "ROE VIOLATION".into(),
             LogEntry::Landed(side) => format!("LANDED - {}", side.label()),

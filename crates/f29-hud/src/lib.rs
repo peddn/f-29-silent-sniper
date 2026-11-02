@@ -7,6 +7,7 @@
 //! gleich proportioniert.
 
 pub mod canvas;
+pub mod debrief;
 pub mod font;
 mod hud;
 pub mod map;
@@ -100,6 +101,8 @@ pub struct HudOptions {
     /// Das Frontend legt ein gerendertes Kamerabild in das Bildfeld der
     /// TGT-Seite ([`target_image_rect`]); das Drahtgitter entfällt dann.
     pub camera_feed: bool,
+    /// Nach dem Missionsende: Nummer des Bildschirms der Nachbesprechung.
+    pub debrief_screen: usize,
 }
 
 impl Default for HudOptions {
@@ -110,6 +113,7 @@ impl Default for HudOptions {
             show_panel: true,
             mfd: MfdState::default(),
             camera_feed: false,
+            debrief_screen: 0,
         }
     }
 }
@@ -123,9 +127,14 @@ pub fn build(
     map: Option<&MapData>,
 ) -> DisplayList {
     let mut dl = DisplayList::new();
+    // Nach dem Missionsende nur noch die Nachbesprechung, übers ganze Fenster.
+    if fd.mission_over {
+        debrief::draw(&mut dl, fd, layout, opts.debrief_screen);
+        return dl;
+    }
     let on = displays_on(fd);
-    // Ergebnistafel und Schirm erscheinen immer.
-    if opts.show_hud && (on || fd.mission_over || fd.pilot.is_some()) {
+    // Am Schirm erscheint das HUD (leer) immer.
+    if opts.show_hud && (on || fd.pilot.is_some()) {
         hud::draw(&mut dl, fd, layout, opts.hud_mode);
     }
     if opts.show_panel && layout.panel_fraction > 0.0 {

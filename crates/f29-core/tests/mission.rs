@@ -179,7 +179,7 @@ fn ejection_depends_on_speed_and_territory() {
     let mut sim = eject(200.0);
     let side = sim.territory(sim.aircraft().position);
     assert_eq!(sim.status(), f29_core::Status::Ejected { tick: 1, side, survived: true });
-    assert!(!sim.mission_over() && sim.flight_data().debrief.is_empty(), "am Schirm noch kein Ende");
+    assert!(!sim.mission_over() && sim.flight_data().debrief.is_none(), "am Schirm noch kein Ende");
     let start = sim.pilot().unwrap().position;
     let mut peak = start.z;
     let mut wreck = None;
@@ -200,9 +200,9 @@ fn ejection_depends_on_speed_and_territory() {
     assert!(peak < start.z - 10.0, "Sitz schießt nach oben");
     assert!(sim.mission_over(), "Pilot nicht unten");
     assert!(wreck.is_some(), "Flugzeug nicht abgestürzt");
-    let debrief = sim.flight_data().debrief;
+    let debrief = sim.flight_data().debrief.expect("Wertung");
     for line in ["EJECTED", "AIRCRAFT LOST", "PILOT ON THE GROUND"] {
-        assert!(debrief.iter().any(|l| l.contains(line)), "{line}: {debrief:?}");
+        assert!(debrief.lines.iter().any(|l| l.text.contains(line)), "{line}: {debrief:?}");
     }
 
     let mut failed = eject(260.0);

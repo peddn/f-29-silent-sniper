@@ -1887,10 +1887,37 @@ Format jedes Eintrags:
     Explosion). Die Mission endet erst, wenn der Pilot unten ist; am Schirm
     ist Zeitraffer erlaubt. Ein misslungener Ausstieg zeigt den Ausschuss
     und endet nach 1,5 s. Alles in der Simulation gerechnet (Replays).
-  - Ergebnistafel statt HUD: Ausgang, Auftrag je Ziel, Protokoll; R startet
-    neu.
-- **Status:** Auftragsarten, Kamera, Beladung, Flugprotokoll und Ausgang
-  umgesetzt (v0.3); Wertung und Nachbesprechung folgen
+  - **Wertung** (`Sim::score`, eigene Werte, Spielerentscheidungen v0.3):
+    Punkte je Protokolleintrag, der Reihe nach.
+
+    | Eintrag | Punkte |
+    |---|---|
+    | Primärziel erledigt (zerstört bzw. fotografiert) | +500 |
+    | Sekundärziel | +200, mit erledigtem Primärziel +400 (fällt das Primärziel später, bekommt seine Zeile die Differenz dazu) |
+    | Radar- oder Flugabwehrstellung | +50 |
+    | anderes militärisches Ziel | +25 |
+    | MiG-21 / MiG-29 abgeschossen | +100 / +150 |
+    | Wegpunkt außerhalb des eigenen Gebiets | +5 |
+    | Entdeckung je Radar bzw. Jäger (erstes Mal) | −Abzug des Regelsets (30 / 10 / 0); zurück, wenn man genau diesen Entdecker zerstört |
+    | ziviles Ziel zerstört | −200 (zählt nicht zusätzlich als ROE-Verletzung: ein Abzug je Tat) |
+    | ROE-Verletzung | −100 |
+
+    Die Summe ist mindestens 0. Darauf Faktoren: **Ausgang** (auf eigenem
+    Gebiet gelandet ×1, über eigenem Gebiet ausgestiegen ×0,5, neutrales
+    Gebiet ×0,25, gefangen, tot oder abgestürzt ×0), **Regelset** (Kalter
+    Krieg ×1,5, begrenzt ×1, offener Krieg ×0,75 – strengere Regeln sind
+    schwerer zu fliegen) und **Flugzeit** ab dem Start (ab 20 / 30 / 40 min
+    ×1,1 / ×1,2 / ×1,3 – der Treibstoff reicht nur für weite Wege, nicht
+    fürs Trödeln).
+  - **Nachbesprechung als eigene Bildschirme** wie im Original statt HUD
+    und Brett, über das ganze Fenster (dunkler Grund, später ein Bild):
+    Ausgang mit den Aufträgen, die Ereignisse mit Zeit und Punkten (14 je
+    Bildschirm), die Wertung mit Faktoren und Summe. Leertaste bzw. Auslöser
+    blättert weiter, R startet neu, Escape beendet. `f29-headless replay
+    DATEI --debrief PRÄFIX` schreibt die Bildschirme als SVG.
+- **Status:** Auftragsarten, Kamera, Beladung, Flugprotokoll, Ausgang,
+  Wertung und Nachbesprechung umgesetzt (v0.3); Karte mit Flugweg in der
+  Nachbesprechung folgt (4b), Beförderung und Orden mit der Kampagne
 
 ### M-033 Regelsets (Konfliktlage)
 
@@ -1913,10 +1940,11 @@ Format jedes Eintrags:
     MSN-Seite zeigt das Regelset und „FRIENDLY“/„NEUTRAL“/„HOSTILE“.
   - **Kalter Krieg: Angriff nur auf Ziele, die uns entdeckt haben** –
     Radarstellungen mit Alarm, Jäger mit Radarkontakt. Jeder Treffer auf
-    anderes ist eine Verletzung der Einsatzregeln („ROE VIOLATION“, gezählt
-    für die Wertung). Missionsaufträge sind dort nur Aufklärung.
-  - Die Entdeckungskosten nutzt die Wertung (M-032); weitere Werte
-    (Alarmanstieg, Zivil- und Eigenbeschuss) kommen mit ihr.
+    anderes Militärische ist eine Verletzung der Einsatzregeln („ROE
+    VIOLATION“, −100 in der Wertung); zivile Ziele kosten ohnehin ihren
+    eigenen Abzug. Missionsaufträge sind dort nur Aufklärung.
+  - Entdeckungskosten und Wertungsfaktor des Regelsets nutzt die Wertung
+    (M-032).
 - **Status:** umgesetzt (v0.3)
 
 ### M-034 Zeitraffer

@@ -30,8 +30,8 @@ pub enum LogEntry {
     Destroyed(usize),
     /// Aufklärungsziel fotografiert (0 = Primär-, 1 = Sekundärziel).
     Photographed(usize),
-    /// Jäger abgeschossen.
-    FighterKill(FighterKind),
+    /// Jäger abgeschossen (Nummer, Typ).
+    FighterKill(u32, FighterKind),
     /// Das Flugzeug wurde getroffen.
     Hit,
     /// Einsatzregeln verletzt.

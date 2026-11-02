@@ -239,8 +239,8 @@ pub struct FlightData {
     pub roe_violations: u32,
     /// Mission vorbei: Ergebnistafel (nach einem Ausstieg erst am Boden).
     pub mission_over: bool,
-    /// Nach dem Missionsende: das Flugprotokoll als Zeilen „MM:SS TEXT“.
-    pub debrief: Vec<String>,
+    /// Nach dem Missionsende: die Wertung mit dem Flugprotokoll.
+    pub debrief: Option<super::Score>,
     /// Ausgestiegener Pilot: Ort, Kurs beim Ausstieg, Sekunden seither und
     /// Schirm offen 0..1.
     pub pilot: Option<PilotInfo>,
@@ -843,17 +843,7 @@ impl Sim {
                 chute: p.chute(self.tick),
                 speed: p.velocity.length(),
             }),
-            debrief: if !self.mission_over() {
-                Vec::new()
-            } else {
-                self.log
-                    .iter()
-                    .map(|&(tick, e)| {
-                        let s = (tick as f64 * DT) as u64;
-                        format!("{:02}:{:02} {}", s / 60, s % 60, self.log_text(e))
-                    })
-                    .collect()
-            },
+            debrief: self.mission_over().then(|| self.score()),
             last_release: self.events().iter().rev().find_map(|&(tick, e)| match e {
                 Event::Weapon(WeaponEvent::Released { kind, .. }) => Some((tick, kind)),
                 Event::Weapon(WeaponEvent::Photo { .. }) => Some((tick, WeaponKind::Camera)),
@@ -1119,7 +1109,7 @@ impl Sim {
                         FighterEvent::Landed { kind, base: b } => {
                             (format!("{} - {} LANDED", base(b), kind.spec().label), false)
                         }
-                        FighterEvent::Destroyed { kind } => {
+                        FighterEvent::Destroyed { kind, .. } => {
                             (format!("{} DESTROYED", kind.spec().label), false)
                         }
                         FighterEvent::GunHit { kind } => (format!("{} GUN HIT", kind.spec().label), true),

@@ -35,6 +35,8 @@ pub struct Rules {
     pub attack_needs_detection: bool,
     /// Verschiebt das gewürfelte Pilotenkönnen der Jäger (−1 = schwächer).
     pub pilot_skill: i8,
+    /// Faktor auf die Wertung (strengere Regeln sind schwerer zu fliegen).
+    pub score_factor: f64,
 }
 
 const RULES: [Rules; 3] = [
@@ -47,6 +49,7 @@ const RULES: [Rules; 3] = [
         detection_penalty: 30,
         attack_needs_detection: true,
         pilot_skill: -1,
+        score_factor: 1.5,
     },
     Rules {
         label: "LIMITED",
@@ -57,6 +60,7 @@ const RULES: [Rules; 3] = [
         detection_penalty: 10,
         attack_needs_detection: false,
         pilot_skill: 0,
+        score_factor: 1.0,
     },
     Rules {
         label: "OPEN WAR",
@@ -67,6 +71,7 @@ const RULES: [Rules; 3] = [
         detection_penalty: 0,
         attack_needs_detection: false,
         pilot_skill: 1,
+        score_factor: 0.75,
     },
 ];
 
@@ -109,6 +114,7 @@ mod tests {
         assert!(war.max_hostile_missiles > limited.max_hostile_missiles);
         assert!(war.max_airborne > limited.max_airborne);
         assert!(cold.pilot_skill < limited.pilot_skill && limited.pilot_skill < war.pilot_skill);
+        assert!(cold.score_factor > limited.score_factor && limited.score_factor > war.score_factor);
         for c in Conflict::ALL {
             assert_eq!(Conflict::from_code(c.code()), Some(c));
         }

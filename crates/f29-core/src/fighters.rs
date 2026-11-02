@@ -389,6 +389,7 @@ pub enum FighterEvent {
     /// Abgeschossen (stürzt ab).
     Destroyed {
         kind: FighterKind,
+        id: u32,
     },
     /// Seine Kanone hat das Flugzeug getroffen.
     GunHit {
@@ -539,7 +540,7 @@ impl Fighters {
         f.damage += strength;
         if f.damage >= f.spec().toughness {
             f.mode = Mode::Falling;
-            self.events.push(tick, FighterEvent::Destroyed { kind: f.kind });
+            self.events.push(tick, FighterEvent::Destroyed { kind: f.kind, id: f.id });
         }
     }
 

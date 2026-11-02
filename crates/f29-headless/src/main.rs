@@ -170,6 +170,12 @@ fn print_summary(sim: &Sim) {
     let fd = sim.flight_data();
     println!("Zeit         {:.1} s ({} Ticks)", fd.time_s, fd.tick);
     println!("Status       {:?}", fd.status);
+    if let Some(score) = &fd.debrief {
+        println!(
+            "Wertung      {} (Ereignisse {}, Faktoren {:?})",
+            score.total, score.subtotal, score.factors
+        );
+    }
     println!(
         "Position     N {:.0} m  E {:.0} m  Höhe {:.0} m (Radar {:.0} m)",
         fd.position.x, fd.position.y, fd.altitude_m, fd.radar_altitude_m
@@ -238,6 +244,18 @@ fn replay(args: &Args) -> Result<(), String> {
     let elapsed = start.elapsed();
     print_summary(&sim);
     println!("Abgespielt   {} Ticks in {:.1} ms", replay.tick_count(), elapsed.as_secs_f64() * 1e3);
+    // --debrief PRÄFIX: die Bildschirme der Nachbesprechung als SVG.
+    if let (Some(prefix), Some(score)) = (args.opt("debrief"), sim.flight_data().debrief) {
+        let layout = f29_hud::ScreenLayout::cockpit(16.0 / 9.0);
+        for k in 0..f29_hud::debrief::screens(&score).len() {
+            let opts = f29_hud::HudOptions { debrief_screen: k, ..f29_hud::HudOptions::default() };
+            let dl = f29_hud::build(&sim.flight_data(), &layout, &opts, None);
+            let path = format!("{prefix}-{k}.svg");
+            std::fs::write(&path, f29_hud::svg::to_svg(&dl, &layout, 720))
+                .map_err(|e| format!("{path}: {e}"))?;
+            println!("Nachbesprechung {path}");
+        }
+    }
     match replay.final_hash {
         Some(h) if h == sim.state_hash() => {
             println!("Hash         OK");
