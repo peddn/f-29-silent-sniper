@@ -293,15 +293,28 @@ pub(super) fn fly(w: &mut Weapon, dt: f64) {
 /// Wie [`fly`] mit vorgegebener Luftdichte.
 pub(super) fn fly_with_density(w: &mut Weapon, dt: f64, density: f64) {
     let s = w.kind.spec();
-    let speed = w.velocity.length();
     let drag_area = if w.chute_open() { s.deployed_drag_area_m2 } else { s.drag_area_m2 };
+    fall_step(&mut w.position, &mut w.velocity, s.mass_kg, drag_area, density, dt);
+    w.age_s += dt;
+}
+
+/// Freier Fall mit Luftwiderstand (Cw·A in m², Masse in kg) – für Bomben
+/// und den ausgestiegenen Piloten am Schirm.
+pub fn fall_step(
+    position: &mut DVec3,
+    velocity: &mut DVec3,
+    mass_kg: f64,
+    drag_area: f64,
+    density: f64,
+    dt: f64,
+) {
+    let speed = velocity.length();
     let mut accel = DVec3::new(0.0, 0.0, G0);
     if speed > 0.0 {
-        accel -= w.velocity / speed * (0.5 * density * speed * speed * drag_area / s.mass_kg);
+        accel -= *velocity / speed * (0.5 * density * speed * speed * drag_area / mass_kg);
     }
-    w.velocity += accel * dt;
-    w.position += w.velocity * dt;
-    w.age_s += dt;
+    *velocity += accel * dt;
+    *position += *velocity * dt;
 }
 
 /// Dreht die Einheitsrichtung `from` um höchstens `max_angle` zu `to`.

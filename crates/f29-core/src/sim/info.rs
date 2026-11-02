@@ -836,16 +836,12 @@ impl Sim {
             }),
             roe_violations: self.roe_violations(),
             mission_over: self.mission_over(),
-            pilot: self.pilot().map(|p| {
-                let seconds = (self.tick - p.ejected_tick) as f64 * DT;
-                let survived = matches!(self.status, Status::Ejected { survived: true, .. });
-                PilotInfo {
-                    position: p.position,
-                    heading: p.heading,
-                    seconds,
-                    chute: if survived { ((seconds - CHUTE_DELAY_S) / 0.6).clamp(0.0, 1.0) } else { 0.0 },
-                    speed: p.velocity.length(),
-                }
+            pilot: self.pilot().map(|p| PilotInfo {
+                position: p.position,
+                heading: p.heading,
+                seconds: p.seconds(self.tick),
+                chute: p.chute(self.tick),
+                speed: p.velocity.length(),
             }),
             debrief: if !self.mission_over() {
                 Vec::new()

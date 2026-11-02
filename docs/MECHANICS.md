@@ -1808,7 +1808,8 @@ Format jedes Eintrags:
     60° Quer- bzw. Längsneigung in jede Richtung, sonst tödlich; danach
     wieder das Gebiet. Absturz wie bisher.
   - **Ausstieg in Bildern:** HUD und Brett verschwinden, die Kamera hängt am
-    Piloten. Der Sitz stößt ihn mit 30 m/s nach oben, die Luft bremst, er
+    Piloten. Der Sitz stößt ihn mit 30 m/s nach oben; danach fällt er mit
+    derselben Physik wie die Fallschirmbombe (Masse, Widerstand), er
     taumelt; nach 2 s öffnet sich der Schirm (Kappe und Leinen oben im
     Bild), dann sinkt er mit 6 m/s und pendelt leicht (kein Wind). Das
     verlassene Flugzeug kippt ab und stürzt in einer Spirale ab (Rauch,

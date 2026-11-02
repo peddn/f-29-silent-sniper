@@ -261,13 +261,18 @@ pub const EJECT_MAX_TAS_MPS: f64 = 231.5;
 /// … und bis zu dieser Quer- bzw. Längsneigung in jede Richtung (rad, 60°).
 pub const EJECT_MAX_ANGLE_RAD: f64 = std::f64::consts::FRAC_PI_3;
 /// Der Sitz stößt den Piloten mit dieser Geschwindigkeit (m/s) nach oben
-/// aus dem Flugzeug; bis zum Öffnen des Schirms bremst ihn die Luft.
+/// aus dem Flugzeug. Danach fällt er wie eine Fallschirmbombe (derselbe
+/// Flug mit Widerstand, [`weapons::fall_step`]): Masse mit Sitz (kg),
+/// Widerstandsfläche Cw·A ohne und mit Schirm (m²; mit Schirm sinkt er in
+/// Bodennähe mit gut 6 m/s).
 const SEAT_PUSH_MPS: f64 = 30.0;
-const SEAT_DRAG: f64 = 0.004;
-/// Der Schirm öffnet sich nach so vielen Sekunden; der Pilot sinkt dann
-/// mit dieser Geschwindigkeit (m/s).
+const PILOT_MASS_KG: f64 = 120.0;
+const SEAT_DRAG_AREA_M2: f64 = 0.5;
+const CHUTE_DRAG_AREA_M2: f64 = 50.0;
+/// Der Schirm beginnt sich nach so vielen Sekunden zu öffnen und braucht
+/// dafür so lange (s).
 pub const CHUTE_DELAY_S: f64 = 2.0;
-const CHUTE_SINK_MPS: f64 = 6.0;
+const CHUTE_OPENING_S: f64 = 0.6;
 /// Nach einem misslungenen Ausstieg endet die Mission nach so vielen
 /// Sekunden (man sieht noch den Ausschuss).
 const FAILED_EJECTION_S: f64 = 1.5;
@@ -281,6 +286,23 @@ pub struct Pilot {
     pub heading: f64,
     pub ejected_tick: u64,
     pub landed_tick: Option<u64>,
+    /// Der Ausstieg ist gelungen: Der Schirm öffnet sich.
+    pub survived: bool,
+}
+
+impl Pilot {
+    /// Sekunden seit dem Ausstieg.
+    pub fn seconds(&self, tick: u64) -> f64 {
+        (tick - self.ejected_tick) as f64 * DT
+    }
+
+    /// Schirm offen 0..1.
+    pub fn chute(&self, tick: u64) -> f64 {
+        if !self.survived {
+            return 0.0;
+        }
+        ((self.seconds(tick) - CHUTE_DELAY_S) / CHUTE_OPENING_S).clamp(0.0, 1.0)
+    }
 }
 
 /// Ein Wegpunkt gilt in diesem Umkreis als erreicht (m).
@@ -1155,6 +1177,7 @@ impl Sim {
             heading: a.attitude.to_euler().0,
             ejected_tick: self.tick,
             landed_tick: None,
+            survived,
         });
     }
 
@@ -1182,15 +1205,10 @@ impl Sim {
         let Some(p) = self.pilot.as_mut().filter(|p| p.landed_tick.is_none()) else {
             return;
         };
-        let t = (self.tick - p.ejected_tick) as f64 * DT;
-        if t < CHUTE_DELAY_S {
-            let drag = p.velocity * (p.velocity.length() * SEAT_DRAG);
-            p.velocity += (DVec3::new(0.0, 0.0, crate::atmosphere::G0) - drag) * DT;
-        } else {
-            let k = 1.0 - (-DT / 0.7).exp();
-            p.velocity += (DVec3::new(0.0, 0.0, CHUTE_SINK_MPS) - p.velocity) * k;
-        }
-        p.position += p.velocity * DT;
+        let t = p.seconds(self.tick);
+        let area = SEAT_DRAG_AREA_M2 + (CHUTE_DRAG_AREA_M2 - SEAT_DRAG_AREA_M2) * p.chute(self.tick);
+        let density = crate::atmosphere::isa(-p.position.z).density;
+        weapons::fall_step(&mut p.position, &mut p.velocity, PILOT_MASS_KG, area, density, DT);
         let ground = self.terrain.elevation(p.position.x, p.position.y);
         if t > 0.5 && -p.position.z <= ground {
             p.position.z = -ground;

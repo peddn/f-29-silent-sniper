@@ -54,8 +54,8 @@ mod spec;
 
 pub use countermeasures::*;
 pub(crate) use guidance::ground_crossing;
-pub use guidance::predict_release;
 use guidance::*;
+pub use guidance::{fall_step, predict_release};
 pub use spec::*;
 
 /// RNG-Strom der Waffenwirkung.
