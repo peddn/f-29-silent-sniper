@@ -1989,3 +1989,46 @@ Format jedes Eintrags:
   Auszeichnungen mit eigenen Namen. Die Wertung ist datengetrieben
   (`data/career.ron`), der Spielstand versioniert serialisiert.
 - **Status:** geplant (v0.5)
+
+### M-036 Menüführung vor dem Flug
+
+- **Verhalten (Original):** Zwischen den Flügen führt eine feste Folge von
+  Bildschirmen zum Start; aus der Nachbesprechung geht es zurück an den
+  Anfang.
+- **Referenzstelle:** f19re `src_start/stmain.c` (Zustandsautomat der
+  Bildschirme), `src_start/stmenu.c` (Erkennung, Dienstplan,
+  Auftragswahl, Auswahllisten, Lagekarte), `src_start/stutil.c`
+  (`printMission`, Briefingtext; `drawStoreIcons`, Bewaffnung). Zwei
+  Bildschirme (Bewaffnung, Schlussauswahl) sind in der Rekonstruktion
+  leer, die Menütexte liegen nur in den Spieldaten; diese Teile nach dem
+  Handbuch (gamesdatabase.org, „F-19 Stealth Fighter“).
+- **Lesephase v0.3 (eigene Worte, keine Werte):**
+  1. **Flugzeugerkennung:** eine Silhouette einem Namen zuordnen; falsch
+     heißt nur Übungsflüge (eigentlich der Kopierschutz – in der
+     englischen Fassung fest auf „richtig“ gepatcht).
+  2. **Dienstplan:** Liste der Piloten mit Punkten, Einsätzen und Status;
+     einen wählen, einen neuen mit Namen anlegen oder einen löschen. Die
+     Akten werden beim Verlassen gespeichert.
+  3. **Auftrag:** zeigt die aktuelle Wahl (Gebiet, Konfliktstufe,
+     Missionsart, Gegnerqualität, Flugverhalten) – annehmen oder ändern.
+     Ändern geht der Reihe nach durch je eine Auswahlliste: Gebiet (vier),
+     Konfliktstufe (drei), Missionsart (Luft-Luft, Angriff, Übung),
+     Gegnerqualität (vier Stufen), Flugverhalten (kein Absturz, leichte
+     oder realistische Landungen). Ändern kostet nichts.
+  4. **Lagebesprechung:** Karte des Gebiets mit Start, Primär-,
+     Sekundärziel und Landeplatz; Menü mit Zieltexten (eine Textseite je
+     Auftrag mit Ziel, Ort, Gitterkoordinate, ggf. Frist), Radarstellungen
+     (Kreise, durchgezogen Doppler, gepunktet Puls), Raketenreichweiten,
+     Flugplätzen, Flugplan, besonderen Ereignissen und „Raum verlassen“.
+     Die Mission wird beim ersten Betreten erzeugt.
+  5. **Bewaffnung:** Waffe wählen und einem Schacht zuweisen; angezeigt
+     wird benötigter gegen mitgeführten Treibstoff. Vorschlag: je ein
+     Schacht für Primär- und Sekundärziel, Zusatztreibstoff in einem der
+     anderen.
+  6. **Schlussauswahl:** neue Mission, Lagebesprechung, Bewaffnung, Start.
+     „Neue Mission“ kostet nichts (gilt nur als „unpatriotisch“) – damit
+     lässt sich eine ungünstige Mission (weite Strecke, Kamera belegt
+     einen Schacht) gegen eine bessere tauschen.
+  7. Nach dem Flug: Nachbesprechung, Beförderung und Orden (M-030), dann
+     zurück zum Dienstplan.
+- **Status:** gelesen (v0.3); Umsetzung offen
