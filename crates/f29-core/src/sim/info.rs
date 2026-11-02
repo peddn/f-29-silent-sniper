@@ -854,9 +854,9 @@ impl Sim {
                     })
                     .collect()
             },
-            last_release: self.stores.events.iter().rev().find_map(|&(tick, e)| match e {
-                WeaponEvent::Released { kind, .. } => Some((tick, kind)),
-                WeaponEvent::Photo { .. } => Some((tick, WeaponKind::Camera)),
+            last_release: self.events().iter().rev().find_map(|&(tick, e)| match e {
+                Event::Weapon(WeaponEvent::Released { kind, .. }) => Some((tick, kind)),
+                Event::Weapon(WeaponEvent::Photo { .. }) => Some((tick, WeaponKind::Camera)),
                 _ => None,
             }),
             camera: (self.stores.selected_weapon() == Some(WeaponKind::Camera)).then(|| {
@@ -980,24 +980,22 @@ impl Sim {
     /// Fehlschuss (auch feindliche Raketen) oder Treffer am eigenen Flugzeug.
     fn blast(&self) -> Option<BlastInfo> {
         let recent = self.tick.saturating_sub((0.5 / DT) as u64);
-        let weapons =
-            self.stores.events.iter().rev().take_while(|(t, _)| *t >= recent).find_map(|&(tick, e)| {
-                let (id, kind, at) = match e {
-                    WeaponEvent::Impact { id, position, result, .. } => {
-                        let hit = matches!(result, ImpactResult::Destroyed { .. } | ImpactResult::Damaged(_));
-                        (id, if hit { BlastKind::TargetHit } else { BlastKind::Miss }, position)
-                    }
-                    WeaponEvent::AircraftHit { id, .. } => {
-                        (id, BlastKind::AircraftHit, self.aircraft.position)
-                    }
-                    WeaponEvent::FighterHit { id, fighter, .. } => {
-                        (id, BlastKind::TargetHit, self.fighters.list[fighter].position)
-                    }
-                    _ => return None,
-                };
-                let distance_m = (at - self.listener()).length();
-                Some(BlastInfo { id: tick << 16 | u64::from(id & 0xFFFF), kind, distance_m })
-            });
+        let weapons = self.events().iter().rev().take_while(|(t, _)| *t >= recent).find_map(|&(tick, e)| {
+            let Event::Weapon(e) = e else { return None };
+            let (id, kind, at) = match e {
+                WeaponEvent::Impact { id, position, result, .. } => {
+                    let hit = matches!(result, ImpactResult::Destroyed { .. } | ImpactResult::Damaged(_));
+                    (id, if hit { BlastKind::TargetHit } else { BlastKind::Miss }, position)
+                }
+                WeaponEvent::AircraftHit { id, .. } => (id, BlastKind::AircraftHit, self.aircraft.position),
+                WeaponEvent::FighterHit { id, fighter, .. } => {
+                    (id, BlastKind::TargetHit, self.fighters.list[fighter].position)
+                }
+                _ => return None,
+            };
+            let distance_m = (at - self.listener()).length();
+            Some(BlastInfo { id: tick << 16 | u64::from(id & 0xFFFF), kind, distance_m })
+        });
         // Aufschlag des verlassenen Flugzeugs
         let wreck = self.wreck_tick().filter(|&t| t >= recent).map(|t| BlastInfo {
             id: t << 16 | 0xFFFF,
@@ -1045,77 +1043,90 @@ impl Sim {
         let message = |tick: u64, (text, warning): (String, bool)| {
             (tick, WeaponMessage { text, warning, age_s: self.tick.saturating_sub(tick) as f64 * DT })
         };
+        let site_name = |k: usize| self.targets[self.radar.sites[k].target].name;
+        let base = |b: usize| self.terrain.runways()[b].name;
         let mut all: Vec<(u64, WeaponMessage)> = self
-            .stores
             .events
             .recent(self.tick, window)
-            .map(|&(tick, e)| {
+            .filter_map(|&(tick, e)| {
                 let text = match e {
-                    WeaponEvent::Released { kind, .. } => (format!("{} AWAY", kind.label()), false),
-                    WeaponEvent::BayClosed => ("BAY CLOSED".to_string(), true),
-                    WeaponEvent::BayFault => ("BAY FAULT".to_string(), true),
-                    WeaponEvent::BayEmpty => ("BAY EMPTY".to_string(), true),
-                    WeaponEvent::BankLimit => ("BANK LIMIT".to_string(), true),
-                    WeaponEvent::Busy => ("WEAPONS BUSY".to_string(), true),
-                    WeaponEvent::FragWarning => ("FRAG WARNING".to_string(), true),
-                    WeaponEvent::Expired { kind, .. } => (format!("{} LOST", kind.label()), false),
-                    WeaponEvent::SamLaunch { kind, site, .. } => {
-                        (format!("MISSILE LAUNCH {} - {}", kind.label(), name(site)), true)
-                    }
-                    WeaponEvent::AirLaunch { kind, fighter, .. } => {
-                        let by = self.fighters.list[fighter].spec().label;
-                        (format!("MISSILE LAUNCH {} - {by}", kind.label()), true)
-                    }
-                    WeaponEvent::AircraftHit { kind, .. } => (format!("{} HIT", kind.label()), true),
-                    WeaponEvent::FighterHit { kind, .. } => (format!("{} HIT", kind.label()), false),
-                    WeaponEvent::Photo { n, .. } => (format!("PHOTO {n}"), false),
-                    WeaponEvent::Decoyed { kind, .. } => (format!("{} DECOYED", kind.label()), false),
-                    WeaponEvent::DecoyEmpty(kind) => (format!("{} EMPTY", kind.label()), true),
-                    WeaponEvent::Acquired { kind, target, .. } => {
-                        (format!("{} LOCK {}", kind.label(), name(target)), self.targets[target].civilian)
-                    }
-                    WeaponEvent::LaserLost { kind, .. } => (format!("{} LASER LOST", kind.label()), true),
-                    WeaponEvent::Impact { kind, result, .. } => match result {
-                        ImpactResult::Destroyed { target: i, .. } if self.targets[i].civilian => {
+                    Event::Weapon(e) => match e {
+                        WeaponEvent::Released { kind, .. } => (format!("{} AWAY", kind.label()), false),
+                        WeaponEvent::BayClosed => ("BAY CLOSED".to_string(), true),
+                        WeaponEvent::BayFault => ("BAY FAULT".to_string(), true),
+                        WeaponEvent::BayEmpty => ("BAY EMPTY".to_string(), true),
+                        WeaponEvent::BankLimit => ("BANK LIMIT".to_string(), true),
+                        WeaponEvent::Busy => ("WEAPONS BUSY".to_string(), true),
+                        WeaponEvent::FragWarning => ("FRAG WARNING".to_string(), true),
+                        WeaponEvent::Expired { kind, .. } => (format!("{} LOST", kind.label()), false),
+                        WeaponEvent::SamLaunch { kind, site, .. } => {
+                            (format!("MISSILE LAUNCH {} - {}", kind.label(), name(site)), true)
+                        }
+                        WeaponEvent::AirLaunch { kind, fighter, .. } => {
+                            let by = self.fighters.list[fighter].spec().label;
+                            (format!("MISSILE LAUNCH {} - {by}", kind.label()), true)
+                        }
+                        WeaponEvent::AircraftHit { kind, .. } => (format!("{} HIT", kind.label()), true),
+                        WeaponEvent::FighterHit { kind, .. } => (format!("{} HIT", kind.label()), false),
+                        WeaponEvent::Photo { n, .. } => (format!("PHOTO {n}"), false),
+                        WeaponEvent::Decoyed { kind, .. } => (format!("{} DECOYED", kind.label()), false),
+                        WeaponEvent::DecoyEmpty(kind) => (format!("{} EMPTY", kind.label()), true),
+                        WeaponEvent::Acquired { kind, target, .. } => {
+                            (format!("{} LOCK {}", kind.label(), name(target)), self.targets[target].civilian)
+                        }
+                        WeaponEvent::LaserLost { kind, .. } => (format!("{} LASER LOST", kind.label()), true),
+                        WeaponEvent::Impact { kind, result, .. } => match result {
+                            ImpactResult::Destroyed { target: i, .. } if self.targets[i].civilian => {
+                                (format!("CIVILIAN {} DESTROYED", name(i)), true)
+                            }
+                            ImpactResult::Destroyed { target: i, critical: true } => {
+                                (format!("CRITICAL HIT {} DESTROYED", name(i)), false)
+                            }
+                            ImpactResult::Destroyed { target: i, .. } => {
+                                (format!("{} DESTROYED", name(i)), false)
+                            }
+                            ImpactResult::Damaged(i) => (format!("{} DAMAGED", name(i)), false),
+                            ImpactResult::Ineffective(i) => (format!("INEFFECTIVE ON {}", name(i)), true),
+                            ImpactResult::Ground => (format!("{} MISSED", kind.label()), false),
+                        },
+                    },
+                    Event::Radar(e) => match e {
+                        RadarEvent::Alert { site, level: 1 } => {
+                            (format!("RADAR DETECTED - {}", site_name(site)), true)
+                        }
+                        RadarEvent::Alert { site, level: 2 } => {
+                            (format!("TRACKED - {}", site_name(site)), true)
+                        }
+                        RadarEvent::Alert { site, .. } => (format!("RADAR ID - {}", site_name(site)), true),
+                        RadarEvent::Lost { site } => (format!("{} LOST CONTACT", site_name(site)), false),
+                        RadarEvent::Fire { .. } => return None,
+                    },
+                    Event::Gun(e) => match e {
+                        GunEvent::Destroyed(i) if self.targets[i].civilian => {
                             (format!("CIVILIAN {} DESTROYED", name(i)), true)
                         }
-                        ImpactResult::Destroyed { target: i, critical: true } => {
-                            (format!("CRITICAL HIT {} DESTROYED", name(i)), false)
+                        GunEvent::Destroyed(i) => (format!("GUN {} DESTROYED", name(i)), false),
+                        GunEvent::Empty => ("GUN EMPTY".to_string(), true),
+                        GunEvent::AirHit(_) => return None,
+                    },
+                    Event::Fighter(e) => match e {
+                        FighterEvent::Takeoff { kind, base: b } => {
+                            (format!("{} - {} TAKEOFF", base(b), kind.spec().label), true)
                         }
-                        ImpactResult::Destroyed { target: i, .. } => {
-                            (format!("{} DESTROYED", name(i)), false)
+                        FighterEvent::Contact { kind, .. } => {
+                            (format!("{} RADAR CONTACT", kind.spec().label), true)
                         }
-                        ImpactResult::Damaged(i) => (format!("{} DAMAGED", name(i)), false),
-                        ImpactResult::Ineffective(i) => (format!("INEFFECTIVE ON {}", name(i)), true),
-                        ImpactResult::Ground => (format!("{} MISSED", kind.label()), false),
+                        FighterEvent::Landed { kind, base: b } => {
+                            (format!("{} - {} LANDED", base(b), kind.spec().label), false)
+                        }
+                        FighterEvent::Destroyed { kind } => {
+                            (format!("{} DESTROYED", kind.spec().label), false)
+                        }
+                        FighterEvent::GunHit { kind } => (format!("{} GUN HIT", kind.spec().label), true),
                     },
                 };
-                message(tick, text)
+                Some(message(tick, text))
             })
-            .chain(self.radar.events.recent(self.tick, window).filter_map(|&(tick, e)| {
-                let site_name = |k: usize| self.targets[self.radar.sites[k].target].name;
-                let text = match e {
-                    RadarEvent::Alert { site, level: 1 } => {
-                        (format!("RADAR DETECTED - {}", site_name(site)), true)
-                    }
-                    RadarEvent::Alert { site, level: 2 } => (format!("TRACKED - {}", site_name(site)), true),
-                    RadarEvent::Alert { site, .. } => (format!("RADAR ID - {}", site_name(site)), true),
-                    RadarEvent::Lost { site } => (format!("{} LOST CONTACT", site_name(site)), false),
-                    RadarEvent::Fire { .. } => return None,
-                };
-                Some(message(tick, text))
-            }))
-            .chain(self.gun.events.recent(self.tick, window).filter_map(|&(tick, e)| {
-                let text = match e {
-                    GunEvent::Destroyed(i) if self.targets[i].civilian => {
-                        (format!("CIVILIAN {} DESTROYED", name(i)), true)
-                    }
-                    GunEvent::Destroyed(i) => (format!("GUN {} DESTROYED", name(i)), false),
-                    GunEvent::Empty => ("GUN EMPTY".to_string(), true),
-                    GunEvent::AirHit(_) => return None,
-                };
-                Some(message(tick, text))
-            }))
             // Auftrag: aus dem Flugprotokoll
             .chain(
                 self.log
@@ -1126,21 +1137,6 @@ impl Sim {
                     })
                     .map(|&(tick, e)| message(tick, (self.log_text(e), e == LogEntry::RoeViolation))),
             )
-            .chain(self.fighters.events.recent(self.tick, window).map(|&(tick, e)| {
-                let base = |b: usize| self.terrain.runways()[b].name;
-                let text = match e {
-                    FighterEvent::Takeoff { kind, base: b } => {
-                        (format!("{} - {} TAKEOFF", base(b), kind.spec().label), true)
-                    }
-                    FighterEvent::Contact { kind } => (format!("{} RADAR CONTACT", kind.spec().label), true),
-                    FighterEvent::Landed { kind, base: b } => {
-                        (format!("{} - {} LANDED", base(b), kind.spec().label), false)
-                    }
-                    FighterEvent::Destroyed { kind } => (format!("{} DESTROYED", kind.spec().label), false),
-                    FighterEvent::GunHit { kind } => (format!("{} GUN HIT", kind.spec().label), true),
-                };
-                message(tick, text)
-            }))
             .collect();
         // Waffen und Kanone zeitlich mischen (stabil: gleiche Ticks in Reihenfolge).
         all.sort_by_key(|(tick, _)| *tick);

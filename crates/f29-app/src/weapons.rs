@@ -363,7 +363,7 @@ fn spawn_blasts(
 ) {
     let last = visuals.last_event_tick;
     let mut newest = last;
-    for &(tick, e) in state.sim.weapon_events() {
+    for (tick, e) in state.sim.weapon_events() {
         if tick <= last {
             continue;
         }

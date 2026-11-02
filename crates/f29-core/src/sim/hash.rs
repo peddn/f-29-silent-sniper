@@ -73,7 +73,6 @@ impl Sim {
             }
             h.u64(p.landed_tick.unwrap_or(0));
         }
-        h.u64(self.detected_us.iter().filter(|&&d| d).count() as u64);
         for (kind, value) in self.systems.hash_parts() {
             h.u64(kind);
             h.f64(value);

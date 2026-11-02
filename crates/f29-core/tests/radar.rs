@@ -63,8 +63,7 @@ fn three_hits_climb_to_radar_id() {
     assert!(msgs.iter().any(|m| m.text.starts_with("RADAR ID")), "{msgs:?}");
     assert!(sim.radar().sites[site].ping_point.is_some());
     let levels: Vec<u8> = sim
-        .radar()
-        .events
+        .radar_events()
         .iter()
         .filter_map(|(_, e)| match e {
             RadarEvent::Alert { site: s, level } if *s == site => Some(*level),
@@ -126,7 +125,7 @@ fn alert_decays_without_hits() {
         }
     }
     assert_eq!(alert(&crashed, site), 0);
-    assert!(crashed.radar().events.iter().any(|(_, e)| *e == RadarEvent::Lost { site }));
+    assert!(crashed.radar_events().iter().any(|(_, e)| *e == RadarEvent::Lost { site }));
 }
 
 /// Eine zerstörte Stellung pingt nicht mehr und vergisst.

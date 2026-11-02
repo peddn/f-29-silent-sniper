@@ -6,6 +6,15 @@ use crate::fighters::FighterKind;
 use crate::sim::CrashCause;
 use f29_world::Side;
 
+/// Wer das Flugzeug entdeckt hat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Detector {
+    /// Eine Radarstellung (Ziel-Index).
+    Radar(usize),
+    /// Ein Jäger mit seinem Radar (Nummer, Typ).
+    Fighter(u32, FighterKind),
+}
+
 /// Ein Eintrag im Flugprotokoll.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogEntry {
@@ -13,10 +22,10 @@ pub enum LogEntry {
     Takeoff,
     /// Wegpunkt der Route erreicht (Index in `Sim::route`).
     Waypoint(usize),
+    /// Entdeckt – je Quelle beim ersten Mal (Einsatzregeln, Wertung).
+    Detected(Detector),
     /// Eine Radarstellung hat das Flugzeug identifiziert (Ziel-Index).
     RadarId(usize),
-    /// Ein Jäger hat das Flugzeug mit seinem Radar erfasst.
-    FighterContact(FighterKind),
     /// Bodenziel zerstört (Ziel-Index).
     Destroyed(usize),
     /// Aufklärungsziel fotografiert (0 = Primär-, 1 = Sekundärziel).

@@ -2,9 +2,10 @@
 
 use crate::controls::{ControlFrame, flags, weapon_flags};
 use crate::detmath;
+use crate::events::EventLog;
 use crate::fighters::{self, FighterEvent, Fighters};
 use crate::flight::{self, AeroData, AircraftState};
-use crate::flightlog::LogEntry;
+use crate::flightlog::{Detector, LogEntry};
 use crate::gun::{self, Gun, GunEvent};
 use crate::math::{DQuat, DVec3};
 use crate::mission::{self, Mission, Task};
@@ -305,6 +306,18 @@ impl Pilot {
     }
 }
 
+/// Ein Ereignis eines Teilsystems im einen Ereignisstrom der Simulation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Event {
+    Weapon(WeaponEvent),
+    Radar(RadarEvent),
+    Gun(GunEvent),
+    Fighter(FighterEvent),
+}
+
+/// So viele Ereignisse hält der Strom (reicht für Meldungen und Effekte).
+const EVENTS_KEPT: usize = 256;
+
 /// Ein Wegpunkt gilt in diesem Umkreis als erreicht (m).
 const WAYPOINT_REACHED_M: f64 = 3_000.0;
 
@@ -383,7 +396,8 @@ pub struct Sim {
     /// Auftrag (M-032) und erledigte Aufklärung je Ziel.
     mission: Mission,
     /// Bodenziele, die das Flugzeug entdeckt haben (Einsatzregeln).
-    detected_us: Vec<bool>,
+    /// Der eine Ereignisstrom (die letzten Ereignisse aller Teilsysteme).
+    events: EventLog<Event, EVENTS_KEPT>,
     /// Flugprotokoll (M-032).
     log: Vec<(u64, LogEntry)>,
     /// Schon in der Luft gewesen (Landung beendet dann die Mission).
@@ -460,7 +474,6 @@ impl Sim {
         let sensors = Sensors { night: sp.night && !plan.has_recon(), ..Sensors::default() };
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
-        let targets_len = targets.len();
         let aircraft_on_ground = aircraft.on_ground;
         let mut sim = Self {
             config,
@@ -491,7 +504,7 @@ impl Sim {
             ground_seen: Vec::new(),
             fighter_seen: Vec::new(),
             contact_cursor: 0,
-            detected_us: vec![false; targets_len],
+            events: EventLog::default(),
             mission: plan,
             log: Vec::new(),
             has_flown: !aircraft_on_ground,
@@ -557,11 +570,13 @@ impl Sim {
             self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), None);
             self.step_unmanned();
             self.step_pilot();
+            self.collect_events();
             self.update_mission();
             return;
         }
         if controls.has_weapon(weapon_flags::EJECT) {
             self.eject();
+            self.collect_events();
             self.update_mission();
             return;
         }
@@ -597,6 +612,7 @@ impl Sim {
                 gun::predict_impact(a.position, a.velocity, a.attitude, &self.terrain)
             };
         }
+        self.collect_events();
         self.update_mission();
     }
 
@@ -605,17 +621,27 @@ impl Sim {
     /// hat (Radarstellung mit Alarm, Jäger mit Kontakt).
     fn update_mission(&mut self) {
         let now = self.tick;
-        for s in &self.radar.sites {
-            if s.alert > 0 {
-                self.detected_us[s.target] = true;
+        let events: Vec<Event> = self.events.recent(now, 0).map(|&(_, e)| e).collect();
+        // Entdeckungen zuerst (je Quelle einmal): Ein Treffer im selben Tick
+        // auf den Entdecker ist dann schon erlaubt.
+        for e in &events {
+            let by = match *e {
+                Event::Radar(RadarEvent::Alert { site, .. }) => {
+                    Detector::Radar(self.radar.sites[site].target)
+                }
+                Event::Fighter(FighterEvent::Contact { kind, id }) => Detector::Fighter(id, kind),
+                _ => continue,
+            };
+            if self.logged(LogEntry::Detected(by)).is_none() {
+                self.log.push((now, LogEntry::Detected(by)));
             }
         }
         let mut ground = Vec::new();
         let mut air = Vec::new();
         let mut log = Vec::new();
-        for &(_, e) in self.stores.events.recent(now, 0) {
+        for e in events {
             match e {
-                WeaponEvent::Photo { target: Some(i), .. } => {
+                Event::Weapon(WeaponEvent::Photo { target: Some(i), .. }) => {
                     let objectives =
                         [self.mission.primary, self.mission.secondary].into_iter().zip(self.mission.tasks);
                     for (k, (o, task)) in objectives.enumerate() {
@@ -627,61 +653,88 @@ impl Sim {
                         }
                     }
                 }
-                WeaponEvent::Impact {
+                Event::Weapon(WeaponEvent::Impact {
                     result: ImpactResult::Destroyed { target: i, .. } | ImpactResult::Damaged(i),
                     ..
-                } => {
+                }) => {
                     ground.push(i);
                     if !self.targets[i].is_intact() {
                         log.push(LogEntry::Destroyed(i));
                     }
                 }
-                WeaponEvent::FighterHit { fighter, .. } => air.push(fighter),
-                WeaponEvent::AircraftHit { .. } => log.push(LogEntry::Hit),
-                _ => {}
-            }
-        }
-        for &(_, e) in self.gun.events.recent(now, 0) {
-            match e {
-                GunEvent::Destroyed(i) => {
+                Event::Gun(GunEvent::Destroyed(i)) => {
                     ground.push(i);
                     log.push(LogEntry::Destroyed(i));
                 }
-                GunEvent::AirHit(f) => air.push(f),
-                GunEvent::Empty => {}
-            }
-        }
-        if self.rules().attack_needs_detection
-            && (ground.iter().any(|&i| !self.detected_us[i])
-                || air.iter().any(|&f| self.fighters.list[f].contact_tick.is_none()))
-        {
-            log.push(LogEntry::RoeViolation);
-        }
-        for &(_, e) in self.radar.events.recent(now, 0) {
-            if let RadarEvent::Alert { site, level: 3 } = e {
-                log.push(LogEntry::RadarId(self.radar.sites[site].target));
-            }
-        }
-        for &(_, e) in self.fighters.events.recent(now, 0) {
-            match e {
-                FighterEvent::Contact { kind } => log.push(LogEntry::FighterContact(kind)),
-                FighterEvent::Destroyed { kind } => log.push(LogEntry::FighterKill(kind)),
-                FighterEvent::GunHit { .. } => log.push(LogEntry::Hit),
+                Event::Weapon(WeaponEvent::FighterHit { fighter, .. })
+                | Event::Gun(GunEvent::AirHit(fighter)) => air.push(fighter),
+                Event::Weapon(WeaponEvent::AircraftHit { .. })
+                | Event::Fighter(FighterEvent::GunHit { .. }) => log.push(LogEntry::Hit),
+                Event::Radar(RadarEvent::Alert { site, level: 3 }) => {
+                    log.push(LogEntry::RadarId(self.radar.sites[site].target))
+                }
+                Event::Fighter(FighterEvent::Destroyed { kind }) => log.push(LogEntry::FighterKill(kind)),
                 _ => {}
             }
+        }
+        let by_fighter = |f: usize| {
+            self.log
+                .iter()
+                .any(|(_, e)| matches!(e, LogEntry::Detected(Detector::Fighter(id, _)) if *id as usize == f))
+        };
+        if self.rules().attack_needs_detection
+            && (ground.iter().any(|&i| self.logged(LogEntry::Detected(Detector::Radar(i))).is_none())
+                || air.iter().any(|&f| !by_fighter(f)))
+        {
+            log.push(LogEntry::RoeViolation);
         }
         // Wegpunkte der Route (ohne Start- und Landeplatz) beim ersten Mal.
         if self.status == Status::Flying {
             let p = self.aircraft.position;
             for k in 1..self.route.len().saturating_sub(1) {
                 let sp = &self.route[k];
-                let reached = self.log.iter().any(|(_, e)| *e == LogEntry::Waypoint(k));
-                if !reached && (sp.north - p.x).hypot(sp.east - p.y) < WAYPOINT_REACHED_M {
+                if self.logged(LogEntry::Waypoint(k)).is_none()
+                    && (sp.north - p.x).hypot(sp.east - p.y) < WAYPOINT_REACHED_M
+                {
                     log.push(LogEntry::Waypoint(k));
                 }
             }
         }
         self.log.extend(log.into_iter().map(|e| (now, e)));
+    }
+
+    /// Übernimmt die Ereignisse der Teilsysteme aus diesem Tick in den einen
+    /// Ereignisstrom.
+    fn collect_events(&mut self) {
+        let weapons = self.stores.events.take().into_iter().map(|(t, e)| (t, Event::Weapon(e)));
+        let radar = self.radar.events.take().into_iter().map(|(t, e)| (t, Event::Radar(e)));
+        let gun = self.gun.events.take().into_iter().map(|(t, e)| (t, Event::Gun(e)));
+        let fighters = self.fighters.events.take().into_iter().map(|(t, e)| (t, Event::Fighter(e)));
+        for (t, e) in weapons.chain(radar).chain(gun).chain(fighters).collect::<Vec<_>>() {
+            self.events.push(t, e);
+        }
+    }
+
+    /// Alle Ereignisse der letzten Zeit (Meldungen, Klang, Effekte), älteste
+    /// zuerst.
+    pub fn events(&self) -> &[(u64, Event)] {
+        &self.events
+    }
+
+    /// Nur die Waffenereignisse.
+    pub fn weapon_events(&self) -> Vec<(u64, WeaponEvent)> {
+        self.events
+            .iter()
+            .filter_map(|&(t, e)| if let Event::Weapon(w) = e { Some((t, w)) } else { None })
+            .collect()
+    }
+
+    /// Nur die Radarereignisse.
+    pub fn radar_events(&self) -> Vec<(u64, RadarEvent)> {
+        self.events
+            .iter()
+            .filter_map(|&(t, e)| if let Event::Radar(r) = e { Some((t, r)) } else { None })
+            .collect()
     }
 
     /// Flugprotokoll (M-032).
@@ -702,7 +755,8 @@ impl Sim {
             LogEntry::Takeoff => "TAKEOFF".into(),
             LogEntry::Waypoint(k) => format!("WAYPOINT {} {}", k + 1, self.route[k].name),
             LogEntry::RadarId(i) => format!("RADAR ID - {}", name(i)),
-            LogEntry::FighterContact(kind) => format!("{} RADAR CONTACT", kind.spec().label),
+            LogEntry::Detected(Detector::Radar(i)) => format!("DETECTED - {}", name(i)),
+            LogEntry::Detected(Detector::Fighter(_, kind)) => format!("{} RADAR CONTACT", kind.spec().label),
             LogEntry::Destroyed(i) => format!("{}{} DESTROYED", role(i), name(i)),
             LogEntry::Photographed(0) => "PRIMARY PHOTOGRAPHED".into(),
             LogEntry::Photographed(_) => "SECONDARY PHOTOGRAPHED".into(),
@@ -870,17 +924,17 @@ impl Sim {
             return self.mission_over();
         }
         self.aircraft.gear > 0.0
-            || self.stores.events.iter().any(|(t, e)| {
-                *t == now
-                    && matches!(
-                        e,
+            || self.events.recent(now, 0).any(|(_, e)| {
+                matches!(
+                    e,
+                    Event::Weapon(
                         WeaponEvent::SamLaunch { .. }
                             | WeaponEvent::AirLaunch { .. }
                             | WeaponEvent::AircraftHit { .. }
-                    )
+                    ) | Event::Radar(RadarEvent::Alert { .. })
+                        | Event::Fighter(FighterEvent::GunHit { .. })
+                )
             })
-            || self.radar.events.recent(now, 0).any(|(_, e)| matches!(e, RadarEvent::Alert { .. }))
-            || self.fighters.events.recent(now, 0).any(|(_, e)| matches!(e, FighterEvent::GunHit { .. }))
     }
 
     /// Feindliche Jäger zum Verändern – Zugang für Tests.
@@ -1451,11 +1505,6 @@ impl Sim {
     /// Waffen im Flug (für die Darstellung).
     pub fn weapons_in_flight(&self) -> &[Weapon] {
         &self.stores.in_flight
-    }
-
-    /// Waffenereignisse mit Tick, neueste zuletzt.
-    pub fn weapon_events(&self) -> &[(u64, WeaponEvent)] {
-        &self.stores.events
     }
 }
 

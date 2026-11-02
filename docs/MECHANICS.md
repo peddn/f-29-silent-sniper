@@ -1798,9 +1798,13 @@ Format jedes Eintrags:
   - Klang beim Auslösen: Rakete (Zündknall, Fauchen), Bombe (Ausklinken),
     Kamera (Verschluss).
   - **Flugprotokoll** (`f29_core::flightlog`): Start, erreichte Wegpunkte
-    (3 km), Radar-ID, Jägerkontakt, zerstörte Ziele (mit Rolle bzw. zivil),
-    Fotos, Abschüsse, Treffer am Flugzeug, ROE-Verletzungen, Landung,
-    Ausstieg, Absturz – mit Tick, deterministisch.
+    (3 km), Radar-ID, Entdeckung (je Radar bzw. je Jäger, erstes Mal),
+    zerstörte Ziele (mit Rolle bzw. zivil), Fotos, Abschüsse, Treffer am
+    Flugzeug, ROE-Verletzungen, Landung, Ausstieg, Absturz – mit Tick,
+    deterministisch. Das Protokoll ist die eine Quelle für Auftrag, ROE
+    („hat uns das Ziel entdeckt?“) und später die Wertung; alle Teilsysteme
+    melden ihre Ereignisse in einen gemeinsamen Strom, aus dem Protokoll,
+    Meldungen, Klang und Effekte lesen.
   - **Missionsende:** Nach einem Flug auf einer Bahn zum Stehen gekommen –
     die Mission endet von selbst; das Gebiet unter dem Flugzeug entscheidet
     (eigen: MISSION COMPLETE, neutral: internationaler Zwischenfall,

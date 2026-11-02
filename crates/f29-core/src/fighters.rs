@@ -315,9 +315,10 @@ pub enum FighterEvent {
         kind: FighterKind,
         base: usize,
     },
-    /// Das eigene Radar eines Jägers hat das Flugzeug erfasst.
+    /// Das eigene Radar eines Jägers (Nummer `id`) hat das Flugzeug erfasst.
     Contact {
         kind: FighterKind,
+        id: u32,
     },
     Landed {
         kind: FighterKind,
@@ -443,7 +444,7 @@ impl Fighters {
                 && x.signal(&f.spec().radar, f.position) > x.stealth()
             {
                 if !seen {
-                    self.events.push(tick, FighterEvent::Contact { kind: f.kind });
+                    self.events.push(tick, FighterEvent::Contact { kind: f.kind, id: f.id });
                 }
                 f.contact_tick = Some(tick);
                 self.contact = Some((x.position, tick));
