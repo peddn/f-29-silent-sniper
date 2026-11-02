@@ -1916,8 +1916,9 @@ Format jedes Eintrags:
     blättert weiter, R startet neu, Escape beendet. `f29-headless replay
     DATEI --debrief PRÄFIX` schreibt die Bildschirme als SVG.
 - **Status:** Auftragsarten, Kamera, Beladung, Flugprotokoll, Ausgang,
-  Wertung und Nachbesprechung umgesetzt (v0.3); Karte mit Flugweg in der
-  Nachbesprechung folgt (4b), Beförderung und Orden mit der Kampagne
+  Wertung und Nachbesprechung umgesetzt (v0.3); die Karte mit dem Flugweg
+  aus der Nachbesprechung des Originals entfällt (Spielerentscheidung);
+  Beförderung und Orden kommen mit der Kampagne
 
 ### M-033 Regelsets (Konfliktlage)
 
