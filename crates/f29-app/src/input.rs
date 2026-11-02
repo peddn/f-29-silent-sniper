@@ -2,7 +2,7 @@
 
 use crate::mfd::MfdView;
 use crate::sim::{SimState, SimSystems};
-use crate::view::{CockpitLook, ViewMode, ViewSettings};
+use crate::view::{ViewMode, ViewSettings};
 use bevy::app::AppExit;
 use bevy::input::keyboard::Key;
 use bevy::prelude::*;
@@ -238,15 +238,15 @@ fn hotkeys(
     let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     if shift && keys.just_pressed(KeyCode::F1) {
         view.mode = ViewMode::Cockpit;
-        view.look = CockpitLook::Front;
+        view.look = LookDir::Forward;
     }
     // Blick aus dem Cockpit: Strg+I/J/K/L vorn/links/hinten/rechts
     let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
     for (key, look) in [
-        (KeyCode::KeyI, CockpitLook::Front),
-        (KeyCode::KeyJ, CockpitLook::Left),
-        (KeyCode::KeyK, CockpitLook::Back),
-        (KeyCode::KeyL, CockpitLook::Right),
+        (KeyCode::KeyI, LookDir::Forward),
+        (KeyCode::KeyJ, LookDir::Left),
+        (KeyCode::KeyK, LookDir::Aft),
+        (KeyCode::KeyL, LookDir::Right),
     ] {
         if ctrl && keys.just_pressed(key) {
             view.mode = ViewMode::Cockpit;

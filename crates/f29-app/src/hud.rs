@@ -3,10 +3,11 @@
 use crate::HUD_LAYER;
 use crate::mfd::{MapAssets, MfdView};
 use crate::sim::{SimState, SimSystems};
-use crate::view::{CockpitLook, ViewMode, ViewSettings, layout_for};
+use crate::view::{ViewMode, ViewSettings, layout_for};
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use f29_core::sensors::LookDir;
 use f29_hud::{HudOptions, Ink};
 use f29_render::palette;
 
@@ -95,8 +96,7 @@ fn draw_hud(
     // Ausgestiegen bzw. Missionsende: Schirm bzw. Ergebnistafel immer.
     let pilot_view = fd.pilot.is_some() || fd.mission_over;
     let opts = HudOptions {
-        show_hud: pilot_view
-            || (view.hud && view.mode == ViewMode::Cockpit && view.look == CockpitLook::Front),
+        show_hud: pilot_view || (view.hud && view.mode == ViewMode::Cockpit && view.look == LookDir::Forward),
         hud_mode: view.hud_mode,
         show_panel: true,
         mfd: mfd.0,

@@ -316,7 +316,7 @@ fn diving_into_terrain_crashes_and_freezes() {
         panic!("kein Absturz – Höhe {:.0} m", sim.flight_data().altitude_m);
     };
     let fd = sim.flight_data();
-    assert!(fd.warnings.crashed);
+    assert!(fd.mission_over);
     assert!(fd.radar_altitude_m.abs() < 1e-6);
     let hash = sim.state_hash();
     let pos = sim.aircraft().position;

@@ -8,13 +8,14 @@
 use crate::HUD_LAYER;
 use crate::sim::{SimState, SimSystems};
 use crate::terrain::{to_bevy_mesh, vertex_color_material};
-use crate::view::{CockpitLook, ViewMode, ViewSettings};
+use crate::view::{ViewMode, ViewSettings};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::RenderLayers;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::mesh::PrimitiveTopology;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
+use f29_core::sensors::LookDir;
 use f29_render::mesh::{MeshData, srgb_to_linear};
 use f29_render::palette;
 
@@ -51,14 +52,14 @@ const HARNESS_M: f32 = 0.6;
 const RISER_M: f32 = 0.03;
 
 #[derive(Component)]
-struct Frame(CockpitLook);
+struct Frame(LookDir);
 
 #[derive(Component)]
 struct Chute;
 
 /// Silhouetten in Bildschirmanteilen (x, y je −1..1, y oben) als konvexe
 /// Vielecke; eigene Formen, das Original liefert keine.
-fn frame_polygons(look: CockpitLook) -> Vec<Vec<[f32; 2]>> {
+fn frame_polygons(look: LookDir) -> Vec<Vec<[f32; 2]>> {
     let mirror = |p: &[[f32; 2]]| p.iter().map(|&[x, y]| [-x, y]).rev().collect::<Vec<_>>();
     // Blick nach links: Kanzelrand unten, vorn (rechts im Bild) der Kanzelbogen.
     let left = vec![
@@ -66,10 +67,10 @@ fn frame_polygons(look: CockpitLook) -> Vec<Vec<[f32; 2]>> {
         vec![[0.78, -0.78], [0.9, -0.78], [0.74, 1.0], [0.62, 1.0]],
     ];
     match look {
-        CockpitLook::Front => Vec::new(),
-        CockpitLook::Left => left,
-        CockpitLook::Right => left.iter().map(|p| mirror(p)).collect(),
-        CockpitLook::Back => vec![
+        LookDir::Forward => Vec::new(),
+        LookDir::Left => left,
+        LookDir::Right => left.iter().map(|p| mirror(p)).collect(),
+        LookDir::Aft => vec![
             // Kanzelrahmen links und rechts
             vec![[-1.0, -1.0], [-0.62, -1.0], [-0.8, -0.5], [-1.0, -0.4]],
             mirror(&[[-1.0, -1.0], [-0.62, -1.0], [-0.8, -0.5], [-1.0, -0.4]]),
@@ -141,7 +142,7 @@ fn setup(
 ) {
     let [r, g, b] = palette::mix(0, 13, 0.28);
     let frame_color = colors.add(Color::srgb(r, g, b));
-    for look in [CockpitLook::Left, CockpitLook::Right, CockpitLook::Back] {
+    for look in [LookDir::Left, LookDir::Right, LookDir::Aft] {
         commands.spawn((
             Mesh2d(meshes.add(polygon_mesh(&frame_polygons(look)))),
             MeshMaterial2d(frame_color.clone()),

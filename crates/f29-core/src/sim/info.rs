@@ -8,7 +8,6 @@ pub struct Warnings {
     pub stall: bool,
     pub pull_up: bool,
     pub over_g: bool,
-    pub crashed: bool,
     /// Weniger als 15 % Treibstoff.
     pub fuel_low: bool,
     /// Der Rest reicht nicht mehr bis zur Heimatbasis plus Reserve.
@@ -758,7 +757,6 @@ impl Sim {
                 && time_to_impact < 6.0
                 && (!a.gear_down() || -vs > 2.0 * self.spec.max_landing_sink_mps),
             over_g: airborne && aero.load_factor > self.spec.g_limit_pos * 0.95,
-            crashed,
             fuel_low: !crashed && a.fuel_kg < FUEL_LOW_FRACTION * self.spec.fuel_capacity_kg,
             bingo: airborne && a.fuel_kg < fuel_needed,
             flameout: !crashed && a.flamed_out(),
@@ -836,7 +834,7 @@ impl Sim {
                 [self.mission.primary, self.mission.secondary][k]
                     .map(|_| (self.mission.tasks[k], self.objective_done(k)))
             }),
-            roe_violations: self.roe_violations,
+            roe_violations: self.roe_violations(),
             mission_over: self.mission_over(),
             pilot: self.pilot().map(|p| {
                 let seconds = (self.tick - p.ejected_tick) as f64 * DT;
@@ -1122,14 +1120,16 @@ impl Sim {
                 };
                 Some(message(tick, text))
             }))
-            .chain(self.mission_events.recent(self.tick, window).map(|&(tick, e)| {
-                let text = match e {
-                    MissionEvent::Photographed(0) => ("PRIMARY PHOTOGRAPHED".to_string(), false),
-                    MissionEvent::Photographed(_) => ("SECONDARY PHOTOGRAPHED".to_string(), false),
-                    MissionEvent::RoeViolation => ("ROE VIOLATION".to_string(), true),
-                };
-                message(tick, text)
-            }))
+            // Auftrag: aus dem Flugprotokoll
+            .chain(
+                self.log
+                    .iter()
+                    .filter(|(t, e)| {
+                        self.tick.saturating_sub(*t) <= window
+                            && matches!(e, LogEntry::Photographed(_) | LogEntry::RoeViolation)
+                    })
+                    .map(|&(tick, e)| message(tick, (self.log_text(e), e == LogEntry::RoeViolation))),
+            )
             .chain(self.fighters.events.recent(self.tick, window).map(|&(tick, e)| {
                 let base = |b: usize| self.terrain.runways()[b].name;
                 let text = match e {

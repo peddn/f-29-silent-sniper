@@ -10,6 +10,7 @@ use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use f29_core::DVec3;
+use f29_core::sensors::LookDir;
 use f29_hud::ScreenLayout;
 use f29_render::{coords, model, palette};
 
@@ -36,28 +37,10 @@ pub enum ViewMode {
     Chase,
 }
 
-/// Blick aus dem Cockpit (wie im Original vorn, links, rechts, hinten;
-/// Strg+I/J/K/L). Nur vorn mit HUD.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum CockpitLook {
-    #[default]
-    Front,
-    Left,
-    Right,
-    Back,
-}
-
-impl CockpitLook {
-    /// Drehung um die Hochachse des Flugzeugs (rad, Y-up, links positiv).
-    fn yaw(self) -> f32 {
-        use std::f32::consts::{FRAC_PI_2, PI};
-        match self {
-            CockpitLook::Front => 0.0,
-            CockpitLook::Left => FRAC_PI_2,
-            CockpitLook::Right => -FRAC_PI_2,
-            CockpitLook::Back => PI,
-        }
-    }
+/// Drehung der Kamera um die Hochachse für einen Blick aus dem Cockpit
+/// (M-035, Y-up: links positiv); dieselben Richtungen wie die Zielwahl.
+fn look_yaw(look: LookDir) -> f32 {
+    -look.offset() as f32
 }
 
 #[derive(Resource, Debug, Clone)]
@@ -69,7 +52,8 @@ pub struct ViewSettings {
     pub retro: RetroMode,
     /// Weitwinkelsicht ohne Instrumentenbrett (Cockpit, Shift+F5).
     pub wide: bool,
-    pub look: CockpitLook,
+    /// Blick aus dem Cockpit (Strg+I/J/K/L); nur vorn mit HUD.
+    pub look: LookDir,
     /// Ausgestiegen: Blick des Piloten am Schirm, ohne Brett (M-032).
     pub ejected: bool,
 }
@@ -82,7 +66,7 @@ impl Default for ViewSettings {
             hud_mode: f29_hud::HudMode::default(),
             retro: RetroMode::Full,
             wide: false,
-            look: CockpitLook::Front,
+            look: LookDir::Forward,
             ejected: false,
         }
     }
@@ -144,7 +128,7 @@ pub fn layout_for(window: &Window, view: &ViewSettings) -> ScreenLayout {
     let aspect = window.width() / window.height().max(1.0);
     // Vollbild: Weitwinkelsicht, Blick zur Seite oder nach hinten (wie im
     // Original ohne Brett), ausgestiegen.
-    let side_look = view.mode == ViewMode::Cockpit && view.look != CockpitLook::Front;
+    let side_look = view.mode == ViewMode::Cockpit && view.look != LookDir::Forward;
     if (view.wide && view.mode == ViewMode::Cockpit) || side_look || view.ejected {
         ScreenLayout::wide(aspect)
     } else {
@@ -288,7 +272,7 @@ pub fn update_camera_and_aircraft(
         ViewMode::Cockpit => {
             **ac_visibility = Visibility::Hidden;
             cam.translation = rot * EYE_OFFSET;
-            cam.rotation = rot * Quat::from_rotation_y(view.look.yaw());
+            cam.rotation = rot * Quat::from_rotation_y(look_yaw(view.look));
         }
         ViewMode::Chase => {
             **ac_visibility = Visibility::Visible;

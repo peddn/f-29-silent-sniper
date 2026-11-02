@@ -64,8 +64,6 @@ impl Sim {
         h.u64(st.selected as u64 | u64::from(st.gun_selected) << 8);
         h.u64(u64::from(st.photos));
         h.u64(st.photo_ready_tick);
-        h.u64(u64::from(self.photographed[0]) | u64::from(self.photographed[1]) << 1);
-        h.u64(u64::from(self.roe_violations));
         h.u64(self.log.len() as u64 | u64::from(self.has_flown) << 32);
         if let Some(p) = &self.pilot {
             for v in [p.position, p.velocity] {
@@ -75,7 +73,6 @@ impl Sim {
             }
             h.u64(p.landed_tick.unwrap_or(0));
         }
-        h.u64(self.wreck_tick.unwrap_or(0));
         h.u64(self.detected_us.iter().filter(|&&d| d).count() as u64);
         for (kind, value) in self.systems.hash_parts() {
             h.u64(kind);

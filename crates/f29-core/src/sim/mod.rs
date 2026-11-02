@@ -2,13 +2,12 @@
 
 use crate::controls::{ControlFrame, flags, weapon_flags};
 use crate::detmath;
-use crate::events::EventLog;
 use crate::fighters::{self, FighterEvent, Fighters};
 use crate::flight::{self, AeroData, AircraftState};
 use crate::flightlog::LogEntry;
 use crate::gun::{self, Gun, GunEvent};
 use crate::math::{DQuat, DVec3};
-use crate::mission::{self, Mission, MissionEvent, Task};
+use crate::mission::{self, Mission, Task};
 use crate::nav::Steerpoint;
 use crate::radar::{Exposure, RadarEvent, RadarKind, RadarNet};
 use crate::rng::Pcg32;
@@ -361,11 +360,8 @@ pub struct Sim {
     contact_cursor: usize,
     /// Auftrag (M-032) und erledigte Aufklärung je Ziel.
     mission: Mission,
-    photographed: [bool; 2],
     /// Bodenziele, die das Flugzeug entdeckt haben (Einsatzregeln).
     detected_us: Vec<bool>,
-    roe_violations: u32,
-    mission_events: EventLog<MissionEvent>,
     /// Flugprotokoll (M-032).
     log: Vec<(u64, LogEntry)>,
     /// Schon in der Luft gewesen (Landung beendet dann die Mission).
@@ -373,7 +369,6 @@ pub struct Sim {
     /// Nach dem Ausstieg: der Pilot; und wann das verlassene Flugzeug
     /// aufschlug.
     pilot: Option<Pilot>,
-    wreck_tick: Option<u64>,
 }
 
 /// Gewähltes Ziel je Zielart; der HUD-Modus bestimmt, welche Auswahl die
@@ -476,13 +471,9 @@ impl Sim {
             contact_cursor: 0,
             detected_us: vec![false; targets_len],
             mission: plan,
-            photographed: [false; 2],
-            roe_violations: 0,
             log: Vec::new(),
             has_flown: !aircraft_on_ground,
             pilot: None,
-            wreck_tick: None,
-            mission_events: EventLog::default(),
         };
         sim.ground_seen = vec![Seen::default(); sim.targets.len()];
         sim.fighter_seen = vec![Seen::default(); sim.fighters.list.len()];
@@ -606,9 +597,10 @@ impl Sim {
                     let objectives =
                         [self.mission.primary, self.mission.secondary].into_iter().zip(self.mission.tasks);
                     for (k, (o, task)) in objectives.enumerate() {
-                        if o == Some(i) && task == Task::Recon && !self.photographed[k] {
-                            self.photographed[k] = true;
-                            self.mission_events.push(now, MissionEvent::Photographed(k));
+                        if o == Some(i)
+                            && task == Task::Recon
+                            && self.logged(LogEntry::Photographed(k)).is_none()
+                        {
                             log.push(LogEntry::Photographed(k));
                         }
                     }
@@ -641,8 +633,6 @@ impl Sim {
             && (ground.iter().any(|&i| !self.detected_us[i])
                 || air.iter().any(|&f| self.fighters.list[f].contact_tick.is_none()))
         {
-            self.roe_violations += 1;
-            self.mission_events.push(now, MissionEvent::RoeViolation);
             log.push(LogEntry::RoeViolation);
         }
         for &(_, e) in self.radar.events.recent(now, 0) {
@@ -716,13 +706,19 @@ impl Sim {
     pub fn objective_done(&self, k: usize) -> bool {
         let target = [self.mission.primary, self.mission.secondary][k];
         match self.mission.tasks[k] {
-            Task::Recon => self.photographed[k],
+            Task::Recon => self.logged(LogEntry::Photographed(k)).is_some(),
             Task::Attack => target.is_some_and(|i| !self.targets[i].is_intact()),
         }
     }
 
-    pub fn mission_events(&self) -> &[(u64, MissionEvent)] {
-        &self.mission_events
+    /// Tick des ersten Protokolleintrags `e`.
+    pub fn logged(&self, e: LogEntry) -> Option<u64> {
+        self.log.iter().find(|(_, x)| *x == e).map(|(t, _)| *t)
+    }
+
+    /// Verletzungen der Einsatzregeln bisher.
+    pub fn roe_violations(&self) -> u32 {
+        self.log.iter().filter(|(_, e)| *e == LogEntry::RoeViolation).count() as u32
     }
 
     /// Radarstellungen, die in diesem Tick feuern wollen, starten ihre
@@ -1165,7 +1161,7 @@ impl Sim {
     /// Das verlassene Flugzeug kippt ab und stürzt in einer steilen
     /// Spirale ab; am Boden bleibt das Wrack liegen.
     fn step_unmanned(&mut self) {
-        if self.pilot.is_none() || self.wreck_tick.is_some() || self.aircraft.on_ground {
+        if self.pilot.is_none() || self.wreck_tick().is_some() || self.aircraft.on_ground {
             return;
         }
         let controls = ControlFrame::from_analog(-0.4, 0.7, 0.0, self.aircraft.engine, 0);
@@ -1176,7 +1172,6 @@ impl Sim {
             a.position.z = -ground;
             a.velocity = DVec3::ZERO;
             a.body_rates = DVec3::ZERO;
-            self.wreck_tick = Some(self.tick);
             self.log.push((self.tick, LogEntry::AircraftLost));
         }
     }
@@ -1225,7 +1220,7 @@ impl Sim {
 
     /// Wann das verlassene Flugzeug aufschlug (Explosion, Klang).
     pub fn wreck_tick(&self) -> Option<u64> {
-        self.wreck_tick
+        self.logged(LogEntry::AircraftLost)
     }
 
     /// Nach einem Flug auf einer Bahn zum Stehen gekommen: Missionsende.

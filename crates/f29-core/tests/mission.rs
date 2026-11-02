@@ -5,7 +5,8 @@ mod common;
 use common::*;
 
 use f29_core::controls::{flags, weapon_flags};
-use f29_core::mission::{MissionEvent, Task};
+use f29_core::flightlog::LogEntry;
+use f29_core::mission::Task;
 use f29_core::rules::Conflict;
 use f29_core::sensors::LookDir;
 use f29_core::sim::Spawn;
@@ -73,7 +74,7 @@ fn recon_run(back: f64) -> (Sim, usize) {
 }
 
 fn photographed(sim: &Sim) -> bool {
-    sim.mission_events().iter().any(|(_, e)| *e == MissionEvent::Photographed(0))
+    sim.logged(LogEntry::Photographed(0)).is_some()
 }
 
 /// Foto aus der Nähe mit dem Ziel in der Sichtlinie der Kamera: erledigt;

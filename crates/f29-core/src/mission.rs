@@ -195,13 +195,3 @@ pub fn route(m: &Mission, terrain: &Terrain, targets: &[Target]) -> Vec<Steerpoi
         .flatten()
         .collect()
 }
-
-/// Ereignisse des Auftrags (Meldungen, später Flugprotokoll und Wertung).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MissionEvent {
-    /// Aufklärungsziel fotografiert (0 = Primär-, 1 = Sekundärziel).
-    Photographed(usize),
-    /// Einsatzregeln verletzt: Angriff auf ein Ziel, das uns nicht entdeckt
-    /// hat (Kalter Krieg).
-    RoeViolation,
-}
