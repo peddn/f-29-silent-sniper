@@ -13,7 +13,7 @@ use crate::math::{DQuat, DVec3};
 use crate::rng::Pcg32;
 use crate::targets::Target;
 use crate::weapons::{ImpactResult, Stores, ground_crossing};
-use f29_terrain::Terrain;
+use f29_world::Terrain;
 
 /// Eigener Zufallsstrom der Kanone (Streuung).
 pub const STREAM_GUN: u64 = 0x4755_4E53;

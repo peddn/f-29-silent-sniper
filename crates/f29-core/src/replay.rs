@@ -4,7 +4,7 @@
 //! die Startbedingungen exakt erhalten bleiben):
 //!
 //! ```text
-//! F29REPLAY 8
+//! F29REPLAY 9
 //! seed 3881
 //! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
 //! loadout fall,chute,lgb,agm
@@ -13,6 +13,7 @@
 //! stealth <on|off>
 //! damage <on|off>
 //! rules <cold|limited|war>
+//! theater <prüfsumme> <name>
 //! frames <anzahl Zeilen>
 //! <wiederholungen> <pitch> <roll> <yaw> <throttle> <flags> <waffen>
 //! ...
@@ -26,9 +27,10 @@ use crate::controls::ControlFrame;
 use crate::rules::Conflict;
 use crate::sim::{Sim, SimConfig, Spawn, SpawnKind};
 use crate::weapons::Loadout;
+use f29_world::Theater;
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 8";
+pub const MAGIC: &str = "F29REPLAY 9";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replay {
@@ -109,6 +111,8 @@ impl Replay {
         let _ = writeln!(s, "stealth {}", if sp.visible { "off" } else { "on" });
         let _ = writeln!(s, "damage {}", if sp.invulnerable { "off" } else { "on" });
         let _ = writeln!(s, "rules {}", sp.conflict.code());
+        let th = &self.config.theater;
+        let _ = writeln!(s, "theater {:016x} {}", th.checksum(), th.name);
         let _ = writeln!(s, "frames {}", self.frames.len());
         for (n, f) in &self.frames {
             let _ =
@@ -184,6 +188,14 @@ impl Replay {
             .strip_prefix("rules ")
             .and_then(Conflict::from_code)
             .ok_or_else(|| err(ln, "erwartet `rules cold|limited|war`".into()))?;
+        // Bisher nur das eingebaute Gebiet; die Prüfsumme sichert, dass es
+        // dasselbe ist wie bei der Aufnahme.
+        let (ln, l) = next("theater")?;
+        let builtin = Theater::builtin();
+        let expected = format!("theater {:016x} {}", builtin.checksum(), builtin.name);
+        if l != expected {
+            return Err(err(ln, format!("Gebiet unbekannt oder verändert: `{l}`")));
+        }
 
         let (ln, frames_line) = next("frames")?;
         let count = frames_line
@@ -224,9 +236,9 @@ impl Replay {
         };
 
         Ok(Self {
-            config: SimConfig {
+            config: SimConfig::with(
                 seed,
-                spawn: Spawn {
+                Spawn {
                     kind,
                     fuel,
                     north,
@@ -243,7 +255,7 @@ impl Replay {
                     invulnerable,
                     conflict,
                 },
-            },
+            ),
             frames,
             final_hash,
         })

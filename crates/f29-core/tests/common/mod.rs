@@ -30,10 +30,23 @@ pub fn events_since(sim: &Sim, tick: u64) -> Vec<WeaponEvent> {
     sim.weapon_events().iter().filter(|(t, _)| *t > tick).map(|(_, e)| *e).collect()
 }
 
-/// Erstes Ziel der Klasse in der Mission zu `seed`.
+/// Ziel der Klasse im Gebiet, das am weitesten von anderen Radarstellungen
+/// entfernt ist – damit Tests eine Stellung allein betrachten.
 pub fn first_of(seed: u64, class: TargetClass) -> Option<(usize, Target)> {
     let probe = Sim::new(SimConfig::new(seed));
-    probe.targets().iter().enumerate().find(|(_, t)| t.class == class).map(|(i, t)| (i, t.clone()))
+    let ts = probe.targets();
+    let alone = |i: usize| {
+        let t = &ts[i];
+        ts.iter()
+            .enumerate()
+            .filter(|&(j, o)| j != i && o.class.is_radar())
+            .map(|(_, o)| (o.north - t.north).hypot(o.east - t.east))
+            .fold(f64::MAX, f64::min)
+    };
+    (0..ts.len())
+        .filter(|&i| ts[i].class == class && !ts[i].civilian)
+        .max_by(|&a, &b| alone(a).total_cmp(&alone(b)))
+        .map(|i| (i, ts[i].clone()))
 }
 
 /// Luftstart `height` m über dem ersten Ziel der Klasse, `back` m davor
@@ -49,6 +62,28 @@ pub fn approach(
     rest: Spawn,
 ) -> Option<(Sim, usize)> {
     let (i, t) = first_of(seed, class)?;
+    Some(approach_target(seed, i, &t, back, side, height, rest))
+}
+
+/// Ziel Nummer `seed` (umlaufend) unter den militärischen der Klasse – für
+/// Tests über viele Seeds mit wechselnden Zielen.
+pub fn nth_of(seed: u64, class: TargetClass) -> Option<(usize, Target)> {
+    let probe = Sim::new(SimConfig::new(seed));
+    let all: Vec<_> =
+        probe.targets().iter().enumerate().filter(|(_, t)| t.class == class && !t.civilian).collect();
+    all.get(seed as usize % all.len().max(1)).map(|(i, t)| (*i, (*t).clone()))
+}
+
+/// Wie [`approach`], auf das Ziel `i` (`t`).
+pub fn approach_target(
+    seed: u64,
+    i: usize,
+    t: &Target,
+    back: f64,
+    side: f64,
+    height: f64,
+    rest: Spawn,
+) -> (Sim, usize) {
     let spawn = Spawn {
         north: t.north - back,
         east: t.east + side,
@@ -58,7 +93,7 @@ pub fn approach(
         throttle: 0.7,
         ..rest
     };
-    Some((Sim::new(SimConfig { seed, spawn }), i))
+    (Sim::new(SimConfig::with(seed, spawn)), i)
 }
 
 /// Alle Flugabwehrstellungen zerstören.

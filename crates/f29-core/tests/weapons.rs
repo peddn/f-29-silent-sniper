@@ -141,10 +141,14 @@ fn free_fall_bomb_hits_the_predicted_point_and_destroys_a_soft_target() {
     let first = bomb_run(TargetClass::Soft, 0.0);
     let err = (first.impact - first.predicted).length();
     assert!(err < 5.0, "Vorhersage {err:.1} m daneben");
-    // Querversatz des ersten Anflugs ausgleichen (Drift beim Trimmen).
+    // Querversatz ausgleichen (Drift beim Trimmen; im Gelände in zwei Schritten).
     let goal = first.sim.targets()[first.target].clone();
-    let drift = first.impact.y - goal.east;
-    let run = bomb_run(TargetClass::Soft, -drift);
+    let mut shift = goal.east - first.impact.y;
+    let mut run = bomb_run(TargetClass::Soft, shift);
+    for _ in 0..2 {
+        shift += goal.east - run.impact.y;
+        run = bomb_run(TargetClass::Soft, shift);
+    }
     let miss = ((run.impact.x - goal.north).powi(2) + (run.impact.y - goal.east).powi(2)).sqrt();
     assert!(miss < 8.0, "Einschlag {miss:.1} m neben dem Ziel");
     assert!(matches!(run.result, ImpactResult::Destroyed { .. }), "{:?}", run.result);
@@ -175,9 +179,9 @@ fn retarded_bomb_avoids_the_frag_warning_at_low_level() {
         .find(|&(n, e)| water(n, e))
         .expect("6 km offene See nach Norden");
     let frag = |bay: usize| {
-        let mut sim = Sim::new(SimConfig {
-            seed: SEED,
-            spawn: Spawn {
+        let mut sim = Sim::new(SimConfig::with(
+            SEED,
+            Spawn {
                 north: start.0,
                 east: start.1,
                 altitude: 70.0,
@@ -187,7 +191,7 @@ fn retarded_bomb_avoids_the_frag_warning_at_low_level() {
                 throttle: 0.7,
                 ..Spawn::default()
             },
-        });
+        ));
         // Höhe halten (einfacher Regler auf Höhe und Steigrate).
         let hold = |sim: &mut Sim, w: u16| {
             let fd = sim.flight_data();
@@ -270,9 +274,9 @@ fn bomb_aim_warns_too_low_except_with_the_snakeye() {
         .find(|&(n, e)| water(n, e))
         .expect("offene See");
     let too_low = |bay_shift: bool| {
-        let mut sim = Sim::new(SimConfig {
-            seed: SEED,
-            spawn: Spawn {
+        let mut sim = Sim::new(SimConfig::with(
+            SEED,
+            Spawn {
                 north: start.0,
                 east: start.1,
                 altitude: 70.0,
@@ -282,7 +286,7 @@ fn bomb_aim_warns_too_low_except_with_the_snakeye() {
                 throttle: 0.8,
                 ..Spawn::default()
             },
-        });
+        ));
         step(&mut sim, 0, weapon_flags::NEXT_BAY);
         step(&mut sim, 0, if bay_shift { weapon_flags::NEXT_BAY } else { 0 });
         for _ in 0..12 {

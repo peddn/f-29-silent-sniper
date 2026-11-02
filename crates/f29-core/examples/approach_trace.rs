@@ -30,7 +30,7 @@ fn main() {
         invulnerable: false,
         conflict: Default::default(),
     };
-    let mut sim = Sim::new(SimConfig { seed, spawn });
+    let mut sim = Sim::new(SimConfig::with(seed, spawn));
     let mut ap = Approach::new(rw.clone());
     for i in 0..(300.0 / DT) as usize {
         let fd = sim.flight_data();

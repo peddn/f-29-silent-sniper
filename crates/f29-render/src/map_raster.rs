@@ -10,7 +10,7 @@
 
 use crate::palette;
 use f29_core::terrain::noise::fbm;
-use f29_core::terrain::{Surface, Terrain};
+use f29_core::terrain::{Surface, Terrain, par_rows};
 
 /// Nordausgerichtetes Farbraster (sRGB, 8 Bit).
 #[derive(Debug, Clone, PartialEq)]
@@ -65,45 +65,41 @@ impl MapRaster {
             return Self { origin: grid.origin, spacing: grid.spacing, n, pixels };
         }
         let sun = [0.45_f64, -0.35, 0.82]; // Licht von Südwesten (Nord, Ost, oben)
-        let mut pixels = Vec::with_capacity(n * n);
-        for i in 0..n {
-            for j in 0..n {
-                let p = grid.position(i, j);
-                let h = grid.at(i, j);
-                let steep = grid.steepness(i, j);
-                let surface = terrain.classify(p[0], p[1], h, steep);
-                let v = (fbm(terrain.seed() ^ 0xC010, p[0] / 900.0, p[1] / 900.0, 2) * 0.5 + 0.5) as f32;
-                let base = match surface {
-                    Surface::Water => palette::mix(2, 1, ((-h).clamp(0.0, 300.0) / 300.0) as f32 * 0.7),
-                    Surface::Beach => palette::srgb(10),
-                    Surface::Grass => palette::mix(8, 9, v * 0.8),
-                    Surface::Forest => palette::mix(7, 8, v * 0.3),
-                    Surface::Rock => palette::mix(13, 12, v * 0.5),
-                    Surface::Snow => palette::srgb(6),
-                };
-                // Hangschattierung aus dem Raster
-                let lit = if surface == Surface::Water {
-                    1.0
-                } else {
-                    let hn = |a: usize, b: usize| grid.at(a.min(n - 1), b.min(n - 1)).max(0.0);
-                    let dn = (hn(i + 1, j) - hn(i.saturating_sub(1), j)) / (2.0 * grid.spacing);
-                    let de = (hn(i, j + 1) - hn(i, j.saturating_sub(1))) / (2.0 * grid.spacing);
-                    let len = (dn * dn + de * de + 1.0).sqrt();
-                    let d = (-dn * sun[0] - de * sun[1] + sun[2]) / len;
-                    (0.55 + 0.55 * d).clamp(0.35, 1.15) as f32
-                };
-                pixels.push(to_u8(base.map(|c| c * lit)));
-            }
-        }
+        let pixels = par_rows(n, |i| {
+            (0..n)
+                .map(|j| {
+                    let p = grid.position(i, j);
+                    let h = grid.at(i, j);
+                    let steep = grid.steepness(i, j);
+                    let surface = terrain.classify(p[0], p[1], h, steep);
+                    let v = (fbm(terrain.seed() ^ 0xC010, p[0] / 900.0, p[1] / 900.0, 2) * 0.5 + 0.5) as f32;
+                    let base = match surface {
+                        Surface::Water => palette::mix(2, 1, ((-h).clamp(0.0, 300.0) / 300.0) as f32 * 0.7),
+                        Surface::Beach => palette::srgb(10),
+                        Surface::Grass => palette::mix(8, 9, v * 0.8),
+                        Surface::Forest => palette::mix(7, 8, v * 0.3),
+                        Surface::Rock => palette::mix(13, 12, v * 0.5),
+                        Surface::Snow => palette::srgb(6),
+                    };
+                    // Hangschattierung aus dem Raster
+                    let lit = if surface == Surface::Water {
+                        1.0
+                    } else {
+                        let hn = |a: usize, b: usize| grid.at(a.min(n - 1), b.min(n - 1)).max(0.0);
+                        let dn = (hn(i + 1, j) - hn(i.saturating_sub(1), j)) / (2.0 * grid.spacing);
+                        let de = (hn(i, j + 1) - hn(i, j.saturating_sub(1))) / (2.0 * grid.spacing);
+                        let len = (dn * dn + de * de + 1.0).sqrt();
+                        let d = (-dn * sun[0] - de * sun[1] + sun[2]) / len;
+                        (0.55 + 0.55 * d).clamp(0.35, 1.15) as f32
+                    };
+                    to_u8(base.map(|c| c * lit))
+                })
+                .collect()
+        });
         let mut map = Self { origin: grid.origin, spacing: grid.spacing, n, pixels };
         // Bahnen als dunkle bzw. erdfarbene Striche einzeichnen
         for rw in terrain.runways() {
-            let color = match rw.kind {
-                f29_core::terrain::AirfieldKind::Home | f29_core::terrain::AirfieldKind::Enemy => {
-                    to_u8(palette::mix(0, 13, 0.3))
-                }
-                f29_core::terrain::AirfieldKind::Secret => to_u8(palette::srgb(11)),
-            };
+            let color = to_u8(palette::mix(0, 13, 0.3));
             let steps = (rw.length_m / (map.spacing * 0.5)).ceil() as usize;
             for k in 0..=steps {
                 let u = -rw.length_m * 0.5 + rw.length_m * k as f64 / steps as f64;

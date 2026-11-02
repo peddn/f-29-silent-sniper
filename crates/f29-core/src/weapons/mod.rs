@@ -46,7 +46,7 @@ use crate::rules::Rules;
 use crate::sensors::{self, line_of_sight};
 use crate::systems::System;
 use crate::targets::{Target, TargetClass, TargetState};
-use f29_terrain::Terrain;
+use f29_world::Terrain;
 
 mod countermeasures;
 mod guidance;

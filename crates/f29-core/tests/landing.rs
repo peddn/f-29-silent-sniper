@@ -37,7 +37,7 @@ fn on_final(seed: u64, rw: &Runway, dist: f64, offset: f64, fuel: f64) -> Sim {
         invulnerable: false,
         conflict: Default::default(),
     };
-    Sim::new(SimConfig { seed, spawn })
+    Sim::new(SimConfig::with(seed, spawn))
 }
 
 /// Fliegt den Anflug, bis das Flugzeug steht oder abstürzt.
@@ -122,8 +122,8 @@ fn autopilot_lands_on_home_runway() {
 }
 
 #[test]
-fn land_on_secret_strip_turn_around_and_take_off_again() {
-    let rw = runway(SEED, AirfieldKind::Secret);
+fn land_turn_around_and_take_off_again() {
+    let rw = runway(SEED, AirfieldKind::Home);
     let mut sim = on_final(SEED, &rw, 6_000.0, 0.0, 0.45);
     let mut ap = Approach::new(rw.clone());
     fly_approach(&mut sim, &mut ap, 240.0);
@@ -218,29 +218,37 @@ fn hard_and_off_runway_touchdowns_crash() {
     assert!(matches!(crash_cause(&sim), Some(CrashCause::Terrain | CrashCause::Water)), "{:?}", sim.status());
 }
 
+/// Route des Auftrags: Startbasis → Primärziel → Sekundärziel → Landeplatz;
+/// das Primärziel liegt näher an der Basis.
 #[test]
-fn route_leads_over_the_secret_strip_back_home() {
+fn route_leads_to_both_targets_and_back_home() {
+    use f29_core::targets::TargetRole;
+    let mut missions = Vec::new();
     for seed in [SEED, 1, 77] {
         let sim = Sim::new(SimConfig::new(seed));
         let route = sim.route();
-        let n = route.len();
-        assert!(n >= 3);
-        let strip = &route[n - 2];
-        let home = &route[n - 1];
-        assert_eq!(home.name, "HOME");
-        let si = strip.runway.expect("Piste als Navigationspunkt");
-        assert_eq!(sim.terrain().runways()[si].kind, AirfieldKind::Secret);
-        let rw = &sim.terrain().runways()[si];
-        assert_eq!((strip.north, strip.east), (rw.center[0], rw.center[1]));
+        let names: Vec<&str> = route.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["HOME", "PRIMARY", "SECONDARY", "HOME"]);
+        let home = &sim.terrain().runways()[route[0].runway.expect("Basis")];
+        assert_eq!(home.kind, AirfieldKind::Home);
+        let at = |role| sim.targets().iter().find(|t| t.role == role).expect("Missionsziel");
+        let (p, s) = (at(TargetRole::Primary), at(TargetRole::Secondary));
+        assert_eq!((route[1].north, route[1].east), (p.north, p.east));
+        assert_eq!((route[2].north, route[2].east), (s.north, s.east));
+        let d = |t: &f29_core::targets::Target| (t.north - home.center[0]).hypot(t.east - home.center[1]);
+        assert!(d(p) <= d(s), "Primärziel weiter weg");
+        assert!(!p.civilian && !s.civilian);
+        missions.push((p.name, s.name, p.north));
     }
+    assert!(missions.windows(2).any(|w| w[0] != w[1]), "jeder Seed gleicher Auftrag");
 }
 
 #[test]
 fn fuel_burns_and_weight_matters() {
     let high = |fuel: f64| {
-        Sim::new(SimConfig {
-            seed: SEED,
-            spawn: Spawn {
+        Sim::new(SimConfig::with(
+            SEED,
+            Spawn {
                 altitude: 6_000.0,
                 min_clearance: 2_500.0,
                 speed: 200.0,
@@ -248,7 +256,7 @@ fn fuel_burns_and_weight_matters() {
                 fuel,
                 ..Spawn::default()
             },
-        })
+        ))
     };
     // Vollgas eine Minute: rund 4 kg/s (Höhe senkt den Verbrauch)
     let mut sim = high(1.0);
@@ -276,9 +284,9 @@ fn fuel_burns_and_weight_matters() {
 
 #[test]
 fn flameout_glides_and_warns() {
-    let mut sim = Sim::new(SimConfig {
-        seed: SEED,
-        spawn: Spawn {
+    let mut sim = Sim::new(SimConfig::with(
+        SEED,
+        Spawn {
             altitude: 6_000.0,
             min_clearance: 2_500.0,
             speed: 200.0,
@@ -286,7 +294,7 @@ fn flameout_glides_and_warns() {
             fuel: 0.002,
             ..Spawn::default()
         },
-    });
+    ));
     for _ in 0..ticks(20.0) {
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 1.0, 0));
     }
@@ -300,9 +308,9 @@ fn flameout_glides_and_warns() {
 #[test]
 fn bingo_when_far_from_home_with_little_fuel() {
     let far = |fuel: f64| {
-        let mut sim = Sim::new(SimConfig {
-            seed: SEED,
-            spawn: Spawn {
+        let mut sim = Sim::new(SimConfig::with(
+            SEED,
+            Spawn {
                 north: 120_000.0,
                 altitude: 6_000.0,
                 min_clearance: 2_500.0,
@@ -310,7 +318,7 @@ fn bingo_when_far_from_home_with_little_fuel() {
                 fuel,
                 ..Spawn::default()
             },
-        });
+        ));
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.6, 0));
         sim.flight_data().warnings.bingo
     };
@@ -320,16 +328,10 @@ fn bingo_when_far_from_home_with_little_fuel() {
 
 #[test]
 fn gear_overspeed_buffets_and_warns() {
-    let mut sim = Sim::new(SimConfig {
-        seed: SEED,
-        spawn: Spawn {
-            altitude: 3_000.0,
-            min_clearance: 2_500.0,
-            speed: 200.0,
-            throttle: 0.8,
-            ..Spawn::default()
-        },
-    });
+    let mut sim = Sim::new(SimConfig::with(
+        SEED,
+        Spawn { altitude: 3_000.0, min_clearance: 2_500.0, speed: 200.0, throttle: 0.8, ..Spawn::default() },
+    ));
     for _ in 0..ticks(6.0) {
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.8, flags::GEAR));
     }
@@ -342,9 +344,9 @@ fn gear_overspeed_buffets_and_warns() {
 #[test]
 fn gear_shakes_at_any_altitude_and_brakes() {
     let run = |gear: u8| {
-        let mut sim = Sim::new(SimConfig {
-            seed: SEED,
-            spawn: Spawn {
+        let mut sim = Sim::new(SimConfig::with(
+            SEED,
+            Spawn {
                 altitude: 6_000.0,
                 min_clearance: 2_500.0,
                 speed: 110.0,
@@ -353,7 +355,7 @@ fn gear_shakes_at_any_altitude_and_brakes() {
                 loadout: f29_core::weapons::Loadout::EMPTY,
                 ..Spawn::default()
             },
-        });
+        ));
         let mut max_bank = 0.0_f64;
         for i in 0..ticks(20.0) {
             sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.6, gear));

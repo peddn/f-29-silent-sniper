@@ -213,7 +213,7 @@ pub struct FlightData {
     /// Regelset der Mission und ob das Flugzeug über feindlichem Gebiet ist
     /// (im Kalten Krieg feuert der Gegner nur dort).
     pub rules: &'static str,
-    pub over_hostile: bool,
+    pub territory: Side,
     /// Zielhilfe, wenn eine ungelenkte Bombe gewählt ist und das Flugzeug fliegt.
     pub bomb_aim: Option<BombAim>,
     /// Waffen in der Luft für die Karte: eigene und feindliche.
@@ -371,24 +371,6 @@ pub struct PickedInfo {
     pub seen: Seen,
     /// Erfasst: im Erfassungskreis der Zielart.
     pub locked: bool,
-}
-
-/// Seite eines Ziels (Freund, neutral, Feind).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Side {
-    Friendly,
-    Neutral,
-    Hostile,
-}
-
-impl Side {
-    pub fn label(self) -> &'static str {
-        match self {
-            Side::Friendly => "FRIENDLY",
-            Side::Neutral => "NEUTRAL",
-            Side::Hostile => "HOSTILE",
-        }
-    }
 }
 
 /// Zielart einer HUD-Markierung.
@@ -802,7 +784,7 @@ impl Sim {
             systems: self.systems,
             awacs: self.config.spawn.awacs,
             rules: self.rules().label,
-            over_hostile: self.over_hostile(a.position),
+            territory: self.territory(a.position),
             own_contacts: (0..self.targets.len())
                 .filter(|&i| self.ground_seen[i].any() && self.targets[i].is_intact())
                 .collect(),
@@ -862,7 +844,7 @@ impl Sim {
             runway_target: self.picks.runway.index.map(|i| {
                 let r = &self.terrain.runways()[i];
                 let side = match r.kind {
-                    AirfieldKind::Home | AirfieldKind::Secret => Side::Friendly,
+                    AirfieldKind::Home => Side::Friendly,
                     AirfieldKind::Enemy => Side::Hostile,
                 };
                 self.picked_info(MarkKind::Runway, i, r.name, side, runway_point(r), DVec3::ZERO)

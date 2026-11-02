@@ -11,8 +11,8 @@
 use crate::mesh::MeshData;
 use crate::palette;
 use f29_core::DVec3;
-use f29_terrain::noise::fbm;
-use f29_terrain::{Surface, Terrain};
+use f29_world::noise::fbm;
+use f29_world::{Surface, Terrain};
 
 /// Kantenlänge einer Kachel in Metern.
 pub const CHUNK_SIZE: f64 = 2_048.0;

@@ -14,9 +14,9 @@ use f29_core::{ControlFrame, Sim, SimConfig, TICK_HZ};
 /// der ersten Stellung der Klasse, `height` m darüber.
 fn near_site(class: TargetClass, north_off: f64, east_off: f64, height: f64, heading: f64) -> (Sim, usize) {
     let (i, t) = first_of(SEED, class).expect("Radarstellung vorhanden");
-    let sim = Sim::new(SimConfig {
-        seed: SEED,
-        spawn: Spawn {
+    let sim = Sim::new(SimConfig::with(
+        SEED,
+        Spawn {
             north: t.north + north_off,
             east: t.east + east_off,
             altitude: t.elevation + height,
@@ -26,7 +26,7 @@ fn near_site(class: TargetClass, north_off: f64, east_off: f64, height: f64, hea
             throttle: 0.7,
             ..Spawn::default()
         },
-    });
+    ));
     let site = sim.radar().sites.iter().position(|s| s.target == i).expect("als Radar geführt");
     (sim, site)
 }
@@ -163,10 +163,7 @@ fn takeoff_roll_stays_undetected() {
         for s in &probe.radar().sites {
             let t = &probe.targets()[s.target];
             let d = (t.north - home[0]).hypot(t.east - home[1]);
-            assert!(
-                d > f29_core::targets::HOME_RADAR_CLEARANCE_M,
-                "Seed {seed}: Radar {d:.0} m von der Basis"
-            );
+            assert!(d > 35_000.0, "Seed {seed}: Radar {d:.0} m von der Basis");
         }
     }
     let mut sim = Sim::new(SimConfig::runway(SEED));

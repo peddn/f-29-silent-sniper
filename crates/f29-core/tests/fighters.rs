@@ -5,22 +5,38 @@ mod common;
 use common::*;
 
 use f29_core::sim::Spawn;
-use f29_core::targets::TargetClass;
+use f29_core::targets::{Target, TargetClass};
+use f29_core::terrain::AirfieldKind;
 use f29_core::{ControlFrame, Sim, SimConfig};
+
+/// 15 km südlich der SAM-Stellung, die einem feindlichen Horst am nächsten
+/// liegt, 3 km darüber.
+fn near_base(rest: Spawn) -> (Sim, usize) {
+    let probe = Sim::new(SimConfig::new(SEED));
+    let bases: Vec<[f64; 2]> = probe
+        .terrain()
+        .runways()
+        .iter()
+        .filter(|r| r.kind == AirfieldKind::Enemy)
+        .map(|r| r.center)
+        .collect();
+    let to_base =
+        |t: &Target| bases.iter().map(|c| (c[0] - t.north).hypot(c[1] - t.east)).fold(f64::MAX, f64::min);
+    let (i, t) = probe
+        .targets()
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.class == TargetClass::AirDefense)
+        .min_by(|a, b| to_base(a.1).total_cmp(&to_base(b.1)))
+        .expect("Stellung");
+    approach_target(SEED, i, t, 15_000.0, 0.0, 3_000.0, rest)
+}
 
 /// Voll sichtbar über einer SAM-Stellung: Sobald sie das Flugzeug verfolgt,
 /// starten Jäger, die Karte sieht sie, und es gibt eine Startmeldung.
 #[test]
 fn alert_scrambles_fighters_with_a_message() {
-    let (mut sim, _) = approach(
-        SEED,
-        TargetClass::AirDefense,
-        15_000.0,
-        0.0,
-        3_000.0,
-        Spawn { visible: true, ..Spawn::default() },
-    )
-    .expect("Stellung");
+    let (mut sim, _) = near_base(Spawn { visible: true, ..Spawn::default() });
     assert!(sim.flight_data().fighters.is_empty());
     let mut message = false;
     for _ in 0..ticks(90.0) {
@@ -44,15 +60,7 @@ fn alert_scrambles_fighters_with_a_message() {
 fn fighters_are_picked_separately_from_ground_targets() {
     use f29_core::controls::{flags, weapon_flags};
     use f29_core::sensors::LookDir;
-    let (mut sim, _) = approach(
-        SEED,
-        TargetClass::AirDefense,
-        15_000.0,
-        0.0,
-        3_000.0,
-        Spawn { visible: true, ..Spawn::default() },
-    )
-    .expect("Stellung");
+    let (mut sim, _) = near_base(Spawn { visible: true, ..Spawn::default() });
     step(&mut sim, flags::RADAR_TOGGLE, 0);
     let mut ap = f29_core::autopilot::Autopilot::new(-sim.aircraft().position.z, 0.0, 250.0);
     let mut picked = false;
@@ -88,7 +96,6 @@ fn fighters_are_picked_separately_from_ground_targets() {
 fn runways_are_picked_with_their_side() {
     use f29_core::controls::weapon_flags;
     use f29_core::sensors::LookDir;
-    use f29_core::terrain::AirfieldKind;
     let mut sim = Sim::new(SimConfig::new(SEED));
     let pos = sim.aircraft().position;
     let heading = sim.aircraft().attitude.to_euler().0;
@@ -120,7 +127,7 @@ fn awacs_reports_what_own_sensors_do_not_detect() {
     use f29_core::{MarkKind, Stage};
     let start = |awacs: bool| {
         let spawn = Spawn { visible: true, night: true, awacs, invulnerable: true, ..Spawn::default() };
-        approach(SEED, TargetClass::AirDefense, 15_000.0, 0.0, 3_000.0, spawn).expect("Stellung").0
+        near_base(spawn).0
     };
     let (mut with, mut without) = (start(true), start(false));
     let range = f29_core::sensors::OPTICAL_RANGE_M * f29_core::sensors::NIGHT_OPTICAL_FACTOR;

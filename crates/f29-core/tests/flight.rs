@@ -10,10 +10,10 @@ use f29_core::{ControlFrame, DT, Sim, SimConfig, Status};
 
 /// Spawn hoch über allem Gelände, damit Manöver nicht in Bergen enden.
 fn high_sim(altitude: f64, speed: f64, throttle: f64) -> Sim {
-    Sim::new(SimConfig {
-        seed: SEED,
-        spawn: Spawn { altitude, min_clearance: 2_500.0, speed, throttle, ..Spawn::default() },
-    })
+    Sim::new(SimConfig::with(
+        SEED,
+        Spawn { altitude, min_clearance: 2_500.0, speed, throttle, ..Spawn::default() },
+    ))
 }
 
 /// Halbe Rolle auf den Rücken, dann ziehen, bis die Nase steil nach unten zeigt.
@@ -273,16 +273,10 @@ fn full_throttle_climbs_and_idle_descends() {
 
 #[test]
 fn top_speed_is_subsonic_at_sea_level() {
-    let mut sim = Sim::new(SimConfig {
-        seed: SEED,
-        spawn: Spawn {
-            altitude: 300.0,
-            min_clearance: 300.0,
-            speed: 230.0,
-            throttle: 1.0,
-            ..Spawn::default()
-        },
-    });
+    let mut sim = Sim::new(SimConfig::with(
+        SEED,
+        Spawn { altitude: 300.0, min_clearance: 300.0, speed: 230.0, throttle: 1.0, ..Spawn::default() },
+    ));
     let mut ap = Autopilot::new(sim.flight_data().altitude_m, sim.flight_data().heading, 400.0);
     for _ in 0..ticks(120.0) {
         let c = ap.control(sim.spec(), &sim.flight_data(), DT);
@@ -365,16 +359,10 @@ fn throttle_changes_speed_noticeably() {
 #[test]
 fn turbulence_only_near_the_ground() {
     let roll_activity = |agl_m: f64| {
-        let mut sim = Sim::new(SimConfig {
-            seed: SEED,
-            spawn: Spawn {
-                altitude: 0.0,
-                min_clearance: agl_m,
-                speed: 220.0,
-                throttle: 0.6,
-                ..Spawn::default()
-            },
-        });
+        let mut sim = Sim::new(SimConfig::with(
+            SEED,
+            Spawn { altitude: 0.0, min_clearance: agl_m, speed: 220.0, throttle: 0.6, ..Spawn::default() },
+        ));
         let mut sum = 0.0;
         for _ in 0..ticks(3.0) {
             sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.6, 0));

@@ -6,7 +6,8 @@ use crate::fighters::{self, FighterEvent, Fighters};
 use crate::flight::{self, AeroData, AircraftState};
 use crate::gun::{self, Gun, GunEvent};
 use crate::math::{DQuat, DVec3};
-use crate::nav::{self, Steerpoint};
+use crate::mission;
+use crate::nav::Steerpoint;
 use crate::radar::{Exposure, RadarEvent, RadarKind, RadarNet};
 use crate::rng::Pcg32;
 use crate::rules::{Conflict, Rules};
@@ -18,7 +19,8 @@ use crate::weapons::{
     WeaponEvent, WeaponKind,
 };
 use f29_data::{AircraftSpec, F29_SPEC};
-use f29_terrain::{AirfieldKind, Terrain};
+use f29_world::{AirfieldKind, Side, Terrain, Theater};
+use std::sync::Arc;
 
 mod hash;
 mod info;
@@ -138,17 +140,24 @@ impl Default for Spawn {
 pub struct SimConfig {
     pub seed: u64,
     pub spawn: Spawn,
+    /// Einsatzgebiet (M-031).
+    pub theater: Arc<Theater>,
 }
 
 impl SimConfig {
-    /// Luftstart (für Tests, Demo und Replays).
+    /// Luftstart im eingebauten Gebiet (für Tests, Demo und Replays).
     pub fn new(seed: u64) -> Self {
-        Self { seed, spawn: Spawn::default() }
+        Self::with(seed, Spawn::default())
     }
 
-    /// Start auf der Bahn der Heimatbasis.
+    /// Mit eigenen Startbedingungen im eingebauten Gebiet.
+    pub fn with(seed: u64, spawn: Spawn) -> Self {
+        Self { seed, spawn, theater: Arc::new(Theater::builtin().clone()) }
+    }
+
+    /// Start auf der Bahn der Startbasis.
     pub fn runway(seed: u64) -> Self {
-        Self { seed, spawn: Spawn { kind: SpawnKind::Runway, throttle: 0.0, ..Spawn::default() } }
+        Self::with(seed, Spawn { kind: SpawnKind::Runway, throttle: 0.0, ..Spawn::default() })
     }
 }
 
@@ -211,10 +220,6 @@ pub enum Status {
     Flying,
     Crashed { tick: u64, cause: CrashCause },
 }
-
-/// Übergangsregel bis zum Gebietsraster: so weit (m) um die eigenen
-/// Flugplätze ist eigenes Gebiet.
-pub const FRIENDLY_RADIUS_M: f64 = 40_000.0;
 
 /// So viele Ziele prüft die eigene Erfassung je Erfassungstakt (reihum).
 const CONTACTS_PER_UPDATE: usize = 4;
@@ -302,7 +307,7 @@ pub struct Picks {
 impl Sim {
     pub fn new(config: SimConfig) -> Self {
         let seed = config.seed;
-        let terrain = Terrain::new(seed);
+        let terrain = Terrain::from_theater(&config.theater);
         let spec = F29_SPEC;
         let sp = &config.spawn;
         let home = terrain.runways().first().cloned();
@@ -344,8 +349,14 @@ impl Sim {
             - terrain.elevation(aircraft.position.x, aircraft.position.y)
             - spec.gear_height_m)
             .max(0.0);
-        let route = build_route(&terrain, config.seed, sp);
-        let targets = targets::generate(&terrain, seed, &route);
+        let mut targets = targets::from_theater(&config.theater, &terrain);
+        let plan = mission::plan(&terrain, &targets, seed);
+        for (i, role) in [(plan.primary, TargetRole::Primary), (plan.secondary, TargetRole::Secondary)] {
+            if let Some(i) = i {
+                targets[i].role = role;
+            }
+        }
+        let route = mission::route(&plan, &terrain, &targets);
         let fighters = Fighters::new(&terrain, seed, sp.conflict.rules().max_airborne);
         let sensors = Sensors { night: sp.night, ..Sensors::default() };
         let aero = flight::aero_data(&spec, &aircraft);
@@ -358,8 +369,9 @@ impl Sim {
             aircraft,
             aero,
             status: Status::Flying,
+            // Erster Wegpunkt ist die Startbasis: gleich zum nächsten.
+            active_steerpoint: usize::from(route.len() > 1),
             route,
-            active_steerpoint: 0,
             last_controls,
             turbulence_rng: Pcg32::new(seed, STREAM_TURBULENCE),
             gust: DVec3::ZERO,
@@ -548,13 +560,14 @@ impl Sim {
         self.config.spawn.conflict.rules()
     }
 
-    /// Liegt `pos` über feindlichem Gebiet? Übergangsregel bis zum
-    /// Gebietsraster (v0.3): außerhalb von [`FRIENDLY_RADIUS_M`] um die
-    /// Heimatbasis und die geheimen Pisten.
+    /// Gebiet unter `pos` (Raster des Einsatzgebiets, M-031).
+    pub fn territory(&self, pos: DVec3) -> Side {
+        self.config.theater.side_at(pos.x, pos.y)
+    }
+
+    /// Liegt `pos` über feindlichem Gebiet?
     pub fn over_hostile(&self, pos: DVec3) -> bool {
-        let own = self.terrain.runways().iter().filter(|r| r.kind != AirfieldKind::Enemy);
-        own.into_iter()
-            .all(|r| DVec3::new(r.center[0] - pos.x, r.center[1] - pos.y, 0.0).length() > FRIENDLY_RADIUS_M)
+        self.territory(pos) == Side::Hostile
     }
 
     /// Darf der Gegner gerade feuern (Regelset; im Kalten Krieg nur über
@@ -882,7 +895,7 @@ impl Sim {
             return;
         }
         let p = self.aircraft.position;
-        if self.terrain.ground_height(p.x, p.y) < f29_terrain::SEA_LEVEL_M {
+        if self.terrain.ground_height(p.x, p.y) < f29_world::SEA_LEVEL_M {
             self.crash(CrashCause::Water);
         } else if self.terrain.runway_at(p.x, p.y).is_none()
             && self.aircraft.velocity.length() > OFF_RUNWAY_MAX_SPEED
@@ -926,7 +939,7 @@ impl Sim {
     fn evaluate_touchdown(&self) -> Result<Touchdown, CrashCause> {
         let a = &self.aircraft;
         let p = a.position;
-        if self.terrain.ground_height(p.x, p.y) < f29_terrain::SEA_LEVEL_M {
+        if self.terrain.ground_height(p.x, p.y) < f29_world::SEA_LEVEL_M {
             return Err(CrashCause::Water);
         }
         let Some(runway) = self.terrain.runway_at(p.x, p.y) else {
@@ -1064,27 +1077,6 @@ fn center(t: &Target) -> DVec3 {
 }
 
 /// Bahnmitte (NED).
-fn runway_point(r: &f29_terrain::Runway) -> DVec3 {
+fn runway_point(r: &f29_world::Runway) -> DVec3 {
     DVec3::new(r.center[0], r.center[1], -r.elevation_m)
-}
-
-/// Route: zwei Wegpunkte, dann die nächstgelegene geheime Piste, dann nach Hause.
-fn build_route(terrain: &Terrain, seed: u64, sp: &Spawn) -> Vec<Steerpoint> {
-    let runways = terrain.runways();
-    let Some(home) = runways.first() else {
-        return nav::generate_route(terrain, seed, sp.north, sp.east, 4);
-    };
-    let mut route = nav::generate_route(terrain, seed, home.center[0], home.center[1], 2);
-    let last = route.last().map_or(home.center, |p| [p.north, p.east]);
-    let dist = |c: [f64; 2]| (c[0] - last[0]) * (c[0] - last[0]) + (c[1] - last[1]) * (c[1] - last[1]);
-    let strip = runways
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| r.kind == AirfieldKind::Secret)
-        .min_by(|a, b| dist(a.1.center).total_cmp(&dist(b.1.center)));
-    if let Some((i, rw)) = strip {
-        route.push(Steerpoint::runway(rw, i));
-    }
-    route.push(Steerpoint::runway(home, 0));
-    route
 }

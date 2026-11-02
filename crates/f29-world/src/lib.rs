@@ -1,6 +1,10 @@
-//! Deterministisches, prozedurales Terrain.
+//! Einsatzgebiete (M-031): Datenformat ([`theater`]), Objektklassen
+//! ([`class`]), Flugplätze und das daraus erzeugte Gelände.
 //!
-//! Das Terrain ist eine reine Funktion `(seed, x, y) -> Höhe`. Simulation
+//! Das Terrain ist eine reine Funktion `(Gebiet, x, y) -> Höhe`: Das
+//! Grobraster des Gebiets gibt die Großform vor (Meer, Ebene, Hügel,
+//! Gebirge), deterministisches Rauschen die Feinheiten. Ohne Gebiet
+//! ([`Terrain::new`]) ist es reines Rauschen. Simulation
 //! (Kollision, Radarhöhe, Sichtlinien) und Darstellung (Meshes)
 //! werten exakt dieselbe Funktion aus, daher gibt es keine Abweichung
 //! zwischen dem, was man sieht, und dem, womit man kollidiert.
@@ -9,9 +13,16 @@
 //! Simulationskern); Höhen in Metern über dem Meeresspiegel.
 
 pub mod airfield;
+pub mod class;
 pub mod noise;
+pub mod populate;
+pub mod theater;
 
 pub use airfield::{AirfieldKind, Runway};
+pub use class::{ShapeBox, TargetClass};
+pub use theater::{Ground, Side, Theater};
+
+use std::sync::Arc;
 
 use noise::{fbm, mix64, ridged, smoothstep};
 
@@ -106,7 +117,54 @@ pub struct Terrain {
     s_ridge: u64,
     s_hill: u64,
     s_forest: u64,
+    s_warp: u64,
     runways: Vec<Runway>,
+    /// Großform aus dem Grobraster eines Gebiets.
+    grid: Option<Arc<GridField>>,
+}
+
+/// Höhenvorgaben je Rasterzelle: Grundhöhe (m), Gebirgs- und Hügelanteil.
+#[derive(Debug, Clone, PartialEq)]
+struct GridField {
+    n: usize,
+    size_m: f64,
+    cells: Vec<[f64; 3]>,
+}
+
+/// Vorgaben je Geländeart: Grundhöhe (m), Gebirgsanteil, Hügelanteil.
+fn profile(g: Ground) -> [f64; 3] {
+    match g {
+        Ground::Water => [-150.0, 0.0, 0.3],
+        Ground::Plain => [60.0, 0.0, 0.5],
+        Ground::Hills => [300.0, 0.12, 1.8],
+        Ground::Mountains => [700.0, 1.0, 1.3],
+    }
+}
+
+/// Feinrauschen über der Grundhöhe eines Gebiets (m) und seine Wellenlänge.
+const GRID_DETAIL_M: f64 = 90.0;
+const GRID_DETAIL_SCALE: f64 = 12_000.0;
+/// Verzerrung der Rasterabfrage (Anteil einer Zelle): natürliche Küsten.
+const GRID_WARP: f64 = 0.4;
+
+impl GridField {
+    /// Vorgaben weich zwischen den Zellmitten gemischt (außen: Randzellen).
+    fn at(&self, x: f64, y: f64) -> [f64; 3] {
+        let cell = self.size_m / self.n as f64;
+        let half = self.size_m * 0.5;
+        let last = (self.n - 1) as f64;
+        let v = ((half - x) / cell - 0.5).clamp(0.0, last);
+        let u = ((y + half) / cell - 0.5).clamp(0.0, last);
+        let (r0, c0) = (v.floor().min(last - 1.0), u.floor().min(last - 1.0));
+        let (fv, fu) = (smoothstep(0.0, 1.0, v - r0), smoothstep(0.0, 1.0, u - c0));
+        let idx = |r: f64, c: f64| self.cells[r as usize * self.n + c as usize];
+        let (a, b, c, d) = (idx(r0, c0), idx(r0, c0 + 1.0), idx(r0 + 1.0, c0), idx(r0 + 1.0, c0 + 1.0));
+        std::array::from_fn(|k| {
+            let top = a[k] + (b[k] - a[k]) * fu;
+            let bottom = c[k] + (d[k] - c[k]) * fu;
+            top + (bottom - top) * fv
+        })
+    }
 }
 
 impl Terrain {
@@ -119,7 +177,7 @@ impl Terrain {
     pub fn with_params(seed: u64, params: TerrainParams) -> Self {
         // Jede Schicht bekommt einen eigenen, aus dem Seed abgeleiteten Strom.
         let sub = |k: u64| mix64(seed ^ mix64(k));
-        let mut t = Self {
+        Self {
             seed,
             params,
             s_continent: sub(1),
@@ -127,10 +185,36 @@ impl Terrain {
             s_ridge: sub(3),
             s_hill: sub(4),
             s_forest: sub(5),
+            s_warp: sub(6),
             runways: Vec::new(),
-        };
-        t.runways = airfield::place_airfields(seed, |x, y| t.raw_height(x, y));
+            grid: None,
+        }
+    }
+
+    /// Gelände eines Einsatzgebiets: Großform aus dem Grobraster,
+    /// Flugplätze aus der Datei.
+    pub fn from_theater(theater: &Theater) -> Self {
+        let n = theater.grid_n();
+        let cells = (0..n * n).map(|k| profile(theater.ground(k / n, k % n))).collect();
+        let mut t = Self::new(theater.seed);
+        t.grid = Some(Arc::new(GridField { n, size_m: theater.size_m, cells }));
+        t.runways = theater
+            .airfields
+            .iter()
+            .map(|a| {
+                let c = [a.north, a.east];
+                let elevation = t.raw_height(c[0], c[1]).max(airfield::MIN_SITE_M);
+                let mut r = Runway::new(a.kind, theater::intern(&a.name), c, a.heading_deg, elevation);
+                r.fighters = [a.mig21, a.mig29];
+                r
+            })
+            .collect();
         t
+    }
+
+    /// Kantenlänge des Gebiets (m); ohne Gebiet `None`.
+    pub fn size_m(&self) -> Option<f64> {
+        self.grid.as_ref().map(|g| g.size_m)
     }
 
     /// Alle Start- und Landebahnen; die erste ist die Heimatbasis.
@@ -158,7 +242,10 @@ impl Terrain {
     }
 
     /// Geländehöhe ohne Flugplätze.
-    fn raw_height(&self, x: f64, y: f64) -> f64 {
+    pub fn raw_height(&self, x: f64, y: f64) -> f64 {
+        if let Some(g) = &self.grid {
+            return self.grid_height(g, x, y);
+        }
         let p = &self.params;
         let cs = p.continent_scale;
         let continent = fbm(self.s_continent, x / cs, y / cs, 5);
@@ -176,10 +263,35 @@ impl Terrain {
         base + mountains + hills
     }
 
+    /// Höhe aus dem Grobraster: Vorgaben der verzerrt abgefragten Zelle, dazu
+    /// Feinrauschen, Gebirgsgrate und Hügel nach ihrem Anteil.
+    fn grid_height(&self, g: &GridField, x: f64, y: f64) -> f64 {
+        let p = &self.params;
+        let cell = g.size_m / g.n as f64;
+        let ws = cell * 1.5;
+        let wx = fbm(self.s_warp, x / ws, y / ws, 3) * cell * GRID_WARP;
+        let wy = fbm(self.s_warp ^ 0x5741_5250, x / ws, y / ws, 3) * cell * GRID_WARP;
+        let [base, mountain, hill] = g.at(x + wx, y + wy);
+        let detail = fbm(self.s_continent, x / GRID_DETAIL_SCALE, y / GRID_DETAIL_SCALE, 4) * GRID_DETAIL_M;
+        let rs = p.ridge_scale;
+        let r = ridged(self.s_ridge, x / rs, y / rs, 5);
+        let hs = p.hill_scale;
+        let hills = fbm(self.s_hill, x / hs, y / hs, 4) * p.hill_amplitude * hill;
+        base + detail + mountain * r * r * p.mountain_height + hills
+    }
+
     /// Obere Schranke der Geländehöhe (m): Rauschfunktionen liegen in −1..1.
     /// Darüber muss niemand das Gelände abfragen (z. B. Bombenvorhersage).
     pub fn max_elevation(&self) -> f64 {
         let p = &self.params;
+        if self.grid.is_some() {
+            let [base, mountain, hill] = profile(Ground::Mountains);
+            return base
+                + GRID_DETAIL_M
+                + mountain * p.mountain_height
+                + hill.max(1.8) * p.hill_amplitude
+                + 50.0;
+        }
         p.continent_amplitude.abs() + p.base_height + p.mountain_height.abs() + p.hill_amplitude.abs() + 50.0
     }
 
@@ -236,13 +348,11 @@ impl Terrain {
     pub fn height_grid(&self, center: [f64; 2], half_extent: f64, n: usize) -> HeightGrid {
         let spacing = 2.0 * half_extent / (n.max(2) - 1) as f64;
         let origin = [center[0] - half_extent, center[1] - half_extent];
-        let mut heights = Vec::with_capacity(n * n);
-        for i in 0..n {
-            for j in 0..n {
-                heights
-                    .push(self.ground_height(origin[0] + i as f64 * spacing, origin[1] + j as f64 * spacing));
-            }
-        }
+        let heights = par_rows(n, |i| {
+            (0..n)
+                .map(|j| self.ground_height(origin[0] + i as f64 * spacing, origin[1] + j as f64 * spacing))
+                .collect()
+        });
         HeightGrid { origin, spacing, n, heights }
     }
 
@@ -263,6 +373,22 @@ impl Terrain {
         }
         out
     }
+}
+
+/// Berechnet `n` Zeilen parallel auf allen Kernen und hängt sie aneinander.
+pub fn par_rows<T: Send>(n: usize, row: impl Fn(usize) -> Vec<T> + Sync) -> Vec<T> {
+    let threads = std::thread::available_parallelism().map_or(1, |k| k.get());
+    let chunk = n.div_ceil(threads).max(1);
+    std::thread::scope(|s| {
+        let parts: Vec<_> = (0..n)
+            .step_by(chunk)
+            .map(|a| {
+                let row = &row;
+                s.spawn(move || (a..(a + chunk).min(n)).flat_map(row).collect::<Vec<T>>())
+            })
+            .collect();
+        parts.into_iter().flat_map(|h| h.join().expect("Rasterzeile")).collect()
+    })
 }
 
 #[cfg(test)]
@@ -370,23 +496,56 @@ mod tests {
         }
     }
 
+    fn theater() -> Terrain {
+        Terrain::from_theater(Theater::builtin())
+    }
+
     #[test]
-    fn airfields_exist_and_are_deterministic() {
-        for seed in [0x0F29_u64, 1, 7, 1234, 99_999] {
-            let t = Terrain::new(seed);
-            let r = t.runways();
-            assert!(r.len() >= 2, "Seed {seed}: nur {} Bahnen", r.len());
-            assert_eq!(r[0].kind, AirfieldKind::Home);
-            assert!(r[1..].iter().all(|x| x.kind != AirfieldKind::Home));
-            let enemy = r.iter().filter(|x| x.kind == AirfieldKind::Enemy).count();
-            assert_eq!(enemy, 2, "Seed {seed}: {enemy} feindliche Plätze");
-            assert_eq!(Terrain::new(seed).runways(), r);
+    fn airfields_come_from_the_theater() {
+        let t = theater();
+        let r = t.runways();
+        assert_eq!(r.len(), Theater::builtin().airfields.len());
+        assert_eq!(r[0].kind, AirfieldKind::Home);
+        assert!(r.iter().any(|x| x.kind == AirfieldKind::Enemy && x.fighters != [0, 0]));
+        assert_eq!(theater().runways(), r);
+        assert!(Terrain::new(1).runways().is_empty(), "ohne Gebiet keine Plätze");
+    }
+
+    /// Das Grobraster gibt die Großform vor: In der Mitte von Wasserzellen
+    /// ist Meer, in Gebirgszellen ist es hoch; die Schranke hält.
+    #[test]
+    fn grid_shapes_the_land() {
+        let th = Theater::builtin();
+        let t = theater();
+        let n = th.grid_n();
+        let cell = th.size_m / n as f64;
+        let (mut wet, mut water, mut high, mut mountains) = (0, 0, 0, 0);
+        for r in 0..n {
+            for c in 0..n {
+                let x = th.size_m * 0.5 - (r as f64 + 0.5) * cell;
+                let y = -th.size_m * 0.5 + (c as f64 + 0.5) * cell;
+                let h = t.ground_height(x, y);
+                assert!(h < t.max_elevation());
+                match th.ground(r, c) {
+                    Ground::Water => {
+                        water += 1;
+                        wet += usize::from(h < SEA_LEVEL_M);
+                    }
+                    Ground::Mountains => {
+                        mountains += 1;
+                        high += usize::from(h > 500.0);
+                    }
+                    _ => {}
+                }
+            }
         }
+        assert!(wet * 10 >= water * 8, "nur {wet} von {water} Wasserzellen nass");
+        assert!(high * 10 >= mountains * 7, "nur {high} von {mountains} Gebirgszellen hoch");
     }
 
     #[test]
     fn runways_are_flat_on_land_and_blend_smoothly() {
-        let t = Terrain::new(0x0F29);
+        let t = theater();
         for rw in t.runways() {
             assert!(rw.elevation_m > 10.0);
             for i in 0..=20 {
@@ -410,7 +569,7 @@ mod tests {
 
     #[test]
     fn runway_numbers_match_heading() {
-        let t = Terrain::new(3);
+        let t = theater();
         for rw in t.runways() {
             let (a, b) = rw.numbers();
             assert!((1..=36).contains(&a) && (1..=36).contains(&b));

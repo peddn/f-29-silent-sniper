@@ -15,9 +15,9 @@ fn near_primary() -> Sim {
     let probe = Sim::new(SimConfig::new(SEED));
     let t =
         probe.targets().iter().find(|t| t.role == f29_core::targets::TargetRole::Primary).unwrap().clone();
-    Sim::new(SimConfig {
-        seed: SEED,
-        spawn: Spawn {
+    Sim::new(SimConfig::with(
+        SEED,
+        Spawn {
             north: t.north - 12_000.0,
             east: t.east,
             altitude: 3_000.0,
@@ -27,7 +27,7 @@ fn near_primary() -> Sim {
             throttle: 0.7,
             ..Spawn::default()
         },
-    })
+    ))
 }
 
 /// Nächstes intaktes Ziel im Kegel der Blickrichtung bis `range` (ohne Sichtlinie).
@@ -228,7 +228,7 @@ fn night_cuts_both_sensor_ranges() {
 
 /// Eigene Erfassung vs. AWACS: Ziele jenseits beider Reichweiten sind nie
 /// eigene Kontakte; mit Radar ist nach einem Durchlauf jedes Ziel in
-/// Radarreichweite ein eigener Kontakt.
+/// Radarreichweite und Sichtlinie ein eigener Kontakt.
 #[test]
 fn own_contacts_follow_sensor_ranges() {
     let mut sim = near_primary();
@@ -245,7 +245,14 @@ fn own_contacts_follow_sensor_ranges() {
         let own = fd.own_contacts.contains(&i);
         if r > RADAR_RANGE_M.max(OPTICAL_RANGE_M) + 2_000.0 {
             assert!(!own, "Ziel {i} in {r:.0} m ist kein eigener Kontakt");
-        } else if r < RADAR_RANGE_M - 2_000.0 && t.is_intact() {
+        } else if r < RADAR_RANGE_M - 2_000.0
+            && t.is_intact()
+            && f29_core::sensors::line_of_sight(
+                |n, e| sim.terrain().elevation(n, e),
+                [p.x, p.y, -p.z],
+                [c[0], c[1], -c[2]],
+            )
+        {
             assert!(own, "Ziel {i} in {r:.0} m sollte per Radar erfasst sein");
             inside += 1;
         }

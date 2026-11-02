@@ -12,7 +12,7 @@ use f29_core::targets::TargetClass;
 use f29_core::weapons::{self, ImpactResult, LaunchZone, Loadout, WeaponEvent, WeaponKind};
 use f29_core::{ControlFrame, Sim};
 
-/// Flug auf das erste Ziel der Klasse zu, `dist` m davor, 1500 m darüber;
+/// Flug auf das Ziel Nummer `seed` der Klasse zu, `dist` m davor, 1500 m darüber;
 /// Radar an und auf dieses Ziel weitergeschaltet. `None`, wenn das Ziel nicht
 /// aufschaltbar ist (z. B. Gelände im Weg).
 fn lined_up(seed: u64, class: TargetClass, dist: f64, loadout: Loadout) -> Option<(Sim, usize)> {
@@ -27,14 +27,21 @@ fn lined_up_at(
     height: f64,
     loadout: Loadout,
 ) -> Option<(Sim, usize)> {
-    let (mut sim, i) = approach(
+    let (i, t) = nth_of(seed, class)?;
+    select(approach_target(
         seed,
-        class,
+        i,
+        &t,
         dist,
         0.0,
         height,
         Spawn { min_clearance: 150.0, loadout, ..Spawn::default() },
-    )?;
+    ))
+}
+
+/// Radar an und bis zum Ziel weiterschalten; `None`, wenn es nicht
+/// aufschaltbar ist.
+fn select((mut sim, i): (Sim, usize)) -> Option<(Sim, usize)> {
     // Startwahl ist die Kanone: weiter zu Schacht 1.
     step(&mut sim, flags::RADAR_TOGGLE, weapon_flags::NEXT_BAY);
     step(&mut sim, ControlFrame::look_flags(LookDir::Right.code()), 0);
@@ -89,7 +96,17 @@ struct Tally {
 fn tally(class: TargetClass) -> Tally {
     let mut t = Tally::default();
     for seed in 1..=120_u64 {
-        let Some((mut sim, target)) = lined_up_at(seed, class, 8_000.0, 300.0, agm()) else {
+        let (i, goal) = nth_of(seed, class).expect("Ziele der Klasse");
+        let start = approach_target(
+            seed,
+            i,
+            &goal,
+            8_000.0,
+            0.0,
+            300.0,
+            Spawn { min_clearance: 150.0, loadout: agm(), ..Spawn::default() },
+        );
+        let Some((mut sim, target)) = select(start) else {
             continue;
         };
         let events = shoot(&mut sim);
@@ -259,15 +276,15 @@ fn laser_bomb_falls_ballistic_when_the_designation_ends() {
     assert!(sim.targets()[target].is_intact() || sim.targets()[target].damage < 1.0);
 }
 
-/// Zu weit entfernt reicht die Energie der Laserbombe nicht: keine
-/// Übergabe.
+/// Zu weit entfernt reicht die Energie der Laserbombe nicht: Die Zone
+/// sagt den Fehlwurf voraus, die Bombe fällt zu kurz.
 #[test]
 fn laser_bomb_needs_energy_to_reach_the_target() {
-    let (mut sim, _) =
-        (1..=20_u64).find_map(|s| lined_up_at(s, TargetClass::Soft, 8_000.0, 900.0, lgb())).expect("Anflug");
-    assert_eq!(sim.flight_data().target.and_then(|t| t.zone), Some(LaunchZone::NoLock));
+    let (mut sim, target) =
+        (1..=20_u64).find_map(|s| lined_up_at(s, TargetClass::Soft, 14_000.0, 900.0, lgb())).expect("Anflug");
+    assert_eq!(sim.flight_data().target.and_then(|t| t.zone), Some(LaunchZone::Locked));
     let events = shoot(&mut sim);
-    assert!(!events.iter().any(|e| matches!(e, WeaponEvent::Acquired { .. })), "{events:?}");
+    assert!(sim.targets()[target].is_intact(), "{events:?}");
 }
 
 /// Nach der Zerstörung bleibt die Wahl auf dem Wrack; das Wrack

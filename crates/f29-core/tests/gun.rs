@@ -10,7 +10,7 @@ use f29_core::sim::Spawn;
 use f29_core::{ControlFrame, Sim, SimConfig, TICK_HZ};
 
 fn air() -> Sim {
-    Sim::new(SimConfig { seed: SEED, spawn: Spawn::default() })
+    Sim::new(SimConfig::with(SEED, Spawn::default()))
 }
 
 fn hold(sim: &mut Sim, seconds: f64, w: u16) {

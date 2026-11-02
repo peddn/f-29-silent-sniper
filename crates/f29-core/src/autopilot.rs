@@ -76,14 +76,14 @@ const FLARE_HEIGHT_M: f64 = 12.0;
 /// Bremsen bis zum Stillstand. Testpilot für Landungen und Golden Replays.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Approach {
-    pub runway: f29_terrain::Runway,
+    pub runway: f29_world::Runway,
     /// Fahrwerk ausfahren (für Tests der Bauchlandung abschaltbar).
     pub gear: bool,
     throttle_integral: f64,
 }
 
 impl Approach {
-    pub fn new(runway: f29_terrain::Runway) -> Self {
+    pub fn new(runway: f29_world::Runway) -> Self {
         Self { runway, gear: true, throttle_integral: 0.3 }
     }
 

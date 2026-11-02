@@ -228,7 +228,7 @@ impl RadarNet {
             .iter()
             .enumerate()
             .filter_map(|(i, t)| {
-                let (spec, _) = t.class.air_defense()?;
+                let (spec, _) = crate::targets::air_defense(t.class)?;
                 let mut s = RadarSite {
                     target: i,
                     spec,

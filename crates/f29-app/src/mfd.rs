@@ -13,14 +13,14 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::tasks::futures::check_ready;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
 use bevy::window::PrimaryWindow;
-use f29_hud::map::{MAP_HALF_EXTENT_M, map_center};
+use f29_hud::map::map_half_extent;
 use f29_hud::{MapData, MapMode, MfdState, Rect};
 use f29_render::map_raster::{MapRaster, MapStyle};
 use f29_render::palette;
 use std::sync::Arc;
 
 /// Pixel je Kante der Kartenraster (Kartengebiet 200 km ⇒ ≈ 98 m/px).
-const SAT_RASTER_N: usize = 2_048;
+const SAT_RASTER_N: usize = 4_096;
 /// Pixel je Kante des Kartenausschnitts im MFD.
 const SAT_VIEW_PX: u32 = 256;
 
@@ -103,7 +103,7 @@ fn load_maps(mut assets: ResMut<MapAssets>, state: Res<SimState>) {
         for (k, style) in [MapStyle::Height, MapStyle::Satellite].into_iter().enumerate() {
             let t = terrain.clone();
             assets.raster_tasks[k] = Some(pool.spawn(async move {
-                MapRaster::build(&t, map_center(&t), MAP_HALF_EXTENT_M, SAT_RASTER_N, style)
+                MapRaster::build(&t, [0.0, 0.0], map_half_extent(&t), SAT_RASTER_N, style)
             }));
         }
     }

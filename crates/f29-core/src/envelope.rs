@@ -16,7 +16,7 @@ use crate::math::{DQuat, DVec3};
 use crate::sim::{Spawn, SpawnKind};
 use crate::{DT, Sim, SimConfig, Status, units};
 use f29_data::{AircraftSpec, F29_SPEC};
-use f29_terrain::AirfieldKind;
+use f29_world::AirfieldKind;
 
 /// Startwert für alle Manöver auf Gelände.
 const SEED: u64 = 0x0F29;
@@ -313,7 +313,7 @@ fn autopilot_landing() -> (f64, f64) {
         invulnerable: false,
         conflict: Default::default(),
     };
-    let mut sim = Sim::new(SimConfig { seed: SEED, spawn });
+    let mut sim = Sim::new(SimConfig::with(SEED, spawn));
     let mut ap = Approach::new(rw);
     let mut sink = 0.0;
     for _ in 0..ticks(300.0) {

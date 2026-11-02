@@ -16,7 +16,9 @@ path = "src/main.rs"
 f29-core.workspace = true
 f29-audio.workspace = true
 f29-hud.workspace = true
-f29-terrain.workspace = true
+f29-world.workspace = true
+f29-render.workspace = true
+png = "0.18"
 
 [lints]
 workspace = true

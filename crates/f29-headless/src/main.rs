@@ -6,6 +6,8 @@
 //! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--wide 1] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N]
+//! f29-headless theater-new [--name NAME] [--seed N] [--size KM] [--grid N] --out DATEI.ron
+//! f29-headless theater-png [--theater DATEI.ron] [--size PX] [--out DATEI.png]
 //! f29-headless sound    [--out VERZEICHNIS]
 //! f29-headless bench    [--seconds S]
 //! ```
@@ -15,7 +17,7 @@ use f29_core::controls::flags;
 use f29_core::replay::Replay;
 use f29_core::{DT, Sim, SimConfig, Status, TICK_HZ, detmath, units};
 use f29_hud::{HudOptions, ScreenLayout};
-use f29_terrain::Surface;
+use f29_world::Surface;
 use std::process::ExitCode;
 
 mod sound;
@@ -40,6 +42,10 @@ Befehle:
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N]                                 Flugplätze und Route auflisten
+  theater-new [--name NAME] [--seed N] [--size KM] [--grid N] --out DATEI.ron
+                                                       Einsatzgebiet aus einem Seed anlegen
+  theater-png [--theater DATEI.ron] [--size PX] [--out DATEI.png]
+                                                       Vorschau eines Gebiets (Seiten, Plätze, Ziele)
   sound    [--out VERZEICHNIS]                         Klänge als WAV-Hörproben rendern
   bench    [--seconds S]                               Ticks pro Sekunde messen
 ";
@@ -104,6 +110,8 @@ fn main() -> ExitCode {
         "bench" => bench(&args),
         "airfields" => airfields(&args),
         "sound" => sound(&args),
+        "theater-new" => theater_new(&args),
+        "theater-png" => theater_png(&args),
         "help" | "--help" | "-h" => {
             print!("{USAGE}");
             Ok(())
@@ -403,6 +411,91 @@ fn airfields(args: &Args) -> Result<(), String> {
     for sp in sim.route() {
         println!("  {:<8} N {:.1} km  E {:.1} km", sp.name, sp.north / 1_000.0, sp.east / 1_000.0);
     }
+    Ok(())
+}
+
+fn theater_new(args: &Args) -> Result<(), String> {
+    let name = args.opt("name").unwrap_or("NORTH COAST");
+    let t = f29_world::populate::generate(
+        name,
+        args.get("seed", 0x0F29_u64)?,
+        args.get("size", 500.0_f64)? * 1_000.0,
+        args.get("grid", 64_usize)?,
+    );
+    let out = args.opt("out").ok_or("--out fehlt")?;
+    std::fs::write(out, t.to_text()).map_err(|e| format!("{out}: {e}"))?;
+    println!("{}: {} Flugplätze, {} Objekte → {out}", t.name, t.airfields.len(), t.objects.len());
+    Ok(())
+}
+
+/// Vorschau: Satellitenbild, feindliches Gebiet rötlich, neutrales
+/// gelblich getönt; Ziele als Punkte (rot militärisch, weiß zivil, gelb
+/// Radar), Flugplätze als Quadrate.
+fn theater_png(args: &Args) -> Result<(), String> {
+    use f29_render::map_raster::{MapRaster, MapStyle};
+    use f29_world::{Side, Theater};
+    let t = match args.opt("theater") {
+        Some(path) => Theater::parse(&std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?)
+            .map_err(|e| e.to_string())?,
+        None => Theater::builtin().clone(),
+    };
+    let size = args.get("size", 1_024_usize)?;
+    let out = args.opt("out").unwrap_or("theater.png");
+    let terrain = f29_world::Terrain::from_theater(&t);
+    let map = MapRaster::build(&terrain, [0.0, 0.0], t.size_m * 0.5, size, MapStyle::Satellite);
+    let mut rgb = vec![0_u8; size * size * 3];
+    let px = |n: f64, e: f64| {
+        let col = ((e - map.origin[1]) / map.spacing).round() as i64;
+        let row = size as i64 - 1 - ((n - map.origin[0]) / map.spacing).round() as i64;
+        (row, col)
+    };
+    for row in 0..size {
+        for col in 0..size {
+            let p = [
+                map.origin[0] + (size - 1 - row) as f64 * map.spacing,
+                map.origin[1] + col as f64 * map.spacing,
+            ];
+            let tint = match t.side_at(p[0], p[1]) {
+                Side::Hostile => [1.15, 0.85, 0.85],
+                Side::Neutral => [1.0, 1.0, 0.8],
+                Side::Friendly => [1.0, 1.0, 1.0],
+            };
+            let c = map.sample(p);
+            for k in 0..3 {
+                rgb[(row * size + col) * 3 + k] = (f64::from(c[k]) * tint[k]).min(255.0) as u8;
+            }
+        }
+    }
+    let mut dot = |(row, col): (i64, i64), r: i64, c: [u8; 3]| {
+        for dr in -r..=r {
+            for dc in -r..=r {
+                let (y, x) = (row + dr, col + dc);
+                if (0..size as i64).contains(&y) && (0..size as i64).contains(&x) {
+                    let i = (y as usize * size + x as usize) * 3;
+                    rgb[i..i + 3].copy_from_slice(&c);
+                }
+            }
+        }
+    };
+    for o in &t.objects {
+        let c = if o.civilian {
+            [255, 255, 255]
+        } else if o.class.is_radar() {
+            [255, 230, 0]
+        } else {
+            [230, 20, 20]
+        };
+        dot(px(o.north, o.east), 1, c);
+    }
+    for a in &t.airfields {
+        let c = if a.kind == f29_world::AirfieldKind::Home { [40, 120, 255] } else { [200, 0, 200] };
+        dot(px(a.north, a.east), 4, c);
+    }
+    let file = std::fs::File::create(out).map_err(|e| format!("{out}: {e}"))?;
+    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), size as u32, size as u32);
+    enc.set_color(png::ColorType::Rgb);
+    enc.write_header().and_then(|mut w| w.write_image_data(&rgb)).map_err(|e| format!("{out}: {e}"))?;
+    println!("{}: {size}×{size} px, {:.0} km → {out}", t.name, t.size_m / 1_000.0);
     Ok(())
 }
 

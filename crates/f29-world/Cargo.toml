@@ -1,0 +1,16 @@
+[package]
+name = "f29-world"
+description = "Einsatzgebiete für F-29 Silent Sniper: Datenformat, Gelände, Flugplätze, Objektklassen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+ron = "0.12"

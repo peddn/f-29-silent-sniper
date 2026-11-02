@@ -9,11 +9,9 @@ use f29_core::nav::Steerpoint;
 use f29_core::targets::{Target, TargetClass, TargetRole};
 use f29_core::terrain::{AirfieldKind, Terrain};
 
-/// Halbe Kantenlänge des Kartengebiets um die Heimatbasis (m).
-pub const MAP_HALF_EXTENT_M: f64 = 100_000.0;
-/// Mittelpunkt des Kartengebiets: die Heimatbasis (oder der Ursprung).
-pub fn map_center(terrain: &Terrain) -> [f64; 2] {
-    terrain.runways().first().map_or([0.0, 0.0], |rw| rw.center)
+/// Halbe Kantenlänge des Kartengebiets (m): das ganze Einsatzgebiet.
+pub fn map_half_extent(terrain: &Terrain) -> f64 {
+    terrain.size_m().unwrap_or(200_000.0) * 0.5
 }
 
 /// Ein Flugplatz auf der Karte.

@@ -2,7 +2,7 @@
 resolver = "3"
 members = [
     "crates/f29-core",
-    "crates/f29-terrain",
+    "crates/f29-world",
     "crates/f29-data",
     "crates/f29-hud",
     "crates/f29-render",
@@ -14,7 +14,7 @@ members = [
 # Das Bevy-Frontend wird explizit gebaut: `cargo run -p f29-app`.
 default-members = [
     "crates/f29-core",
-    "crates/f29-terrain",
+    "crates/f29-world",
     "crates/f29-data",
     "crates/f29-hud",
     "crates/f29-render",
@@ -32,7 +32,7 @@ authors = ["F-29 Silent Sniper contributors"]
 
 [workspace.dependencies]
 f29-core = { path = "crates/f29-core" }
-f29-terrain = { path = "crates/f29-terrain" }
+f29-world = { path = "crates/f29-world" }
 f29-data = { path = "crates/f29-data" }
 f29-hud = { path = "crates/f29-hud" }
 f29-render = { path = "crates/f29-render" }

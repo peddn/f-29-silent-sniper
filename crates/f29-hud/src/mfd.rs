@@ -344,7 +344,6 @@ fn draw_map(
                 let pts = rw.corners.map(|p| proj.to_screen(p));
                 let ink = match rw.kind {
                     AirfieldKind::Home => Ink::Panel,
-                    AirfieldKind::Secret => Ink::Needle,
                     AirfieldKind::Enemy => Ink::Warning,
                 };
                 dl.polyline(&pts, true, ink);

@@ -72,13 +72,22 @@ fn wrap(a: f64) -> f64 {
 /// Rakete startete oder das Flugzeug abstürzte.
 pub fn engagement(seed: u64, kind: WeaponKind, south: f64, west: f64, m: Maneuver) -> Option<bool> {
     let probe = Sim::new(SimConfig::new(seed));
-    let i = (0..probe.targets().len()).find(|&i| targets::sam_of(probe.targets(), i) == Some(kind))?;
+    // Je Seed eine andere Stellung dieser Art.
+    let sites: Vec<usize> =
+        (0..probe.targets().len()).filter(|&i| targets::sam_of(probe.targets(), i) == Some(kind)).collect();
+    let i = *sites.get(seed as usize % sites.len().max(1))?;
     let t = &probe.targets()[i];
     let range = kind.spec().max_range_m;
-    let alt = (t.elevation + HEIGHT_M).max(probe.terrain().max_elevation() + CLEARANCE_M);
-    let mut sim = Sim::new(SimConfig {
+    // Über dem höchsten Gelände im Umkreis der Reichweite.
+    let terrain = probe.terrain();
+    let top = (-10..=10)
+        .flat_map(|a| (-10..=10).map(move |b| (f64::from(a) * 0.1, f64::from(b) * 0.1)))
+        .map(|(a, b)| terrain.elevation(t.north + a * range, t.east + b * range))
+        .fold(t.elevation, f64::max);
+    let alt = (t.elevation + HEIGHT_M).max(top + CLEARANCE_M);
+    let mut sim = Sim::new(SimConfig::with(
         seed,
-        spawn: Spawn {
+        Spawn {
             north: t.north - south * range,
             east: t.east - west * range,
             altitude: alt,
@@ -89,7 +98,7 @@ pub fn engagement(seed: u64, kind: WeaponKind, south: f64, west: f64, m: Maneuve
             visible: true,
             ..Spawn::default()
         },
-    });
+    ));
     // Nur diese Stellung schießt.
     for k in 0..sim.targets().len() {
         if k != i && sim.targets()[k].class.is_radar() {

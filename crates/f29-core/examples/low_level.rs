@@ -7,16 +7,16 @@ fn main() {
     let a: Vec<f64> = std::env::args().skip(1).map(|s| s.parse().unwrap()).collect();
     let (agl_ft, kt) = (a[0], a[1]);
     let flap = if a.get(2).copied().unwrap_or(0.0) > 0.5 { flags::FLAPS } else { 0 };
-    let mut sim = Sim::new(SimConfig {
-        seed: 0x0F29,
-        spawn: Spawn {
+    let mut sim = Sim::new(SimConfig::with(
+        0x0F29,
+        Spawn {
             altitude: 0.0,
             min_clearance: units::ft_to_m(agl_ft),
             speed: units::kt_to_mps(kt),
             throttle: 0.6,
             ..Spawn::default()
         },
-    });
+    ));
     let (mut max_roll, mut max_pitch_dev) = (0.0_f64, 0.0_f64);
     let p0 = sim.flight_data().pitch;
     for _ in 0..(10 * 120) {

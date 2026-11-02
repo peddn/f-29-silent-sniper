@@ -18,7 +18,7 @@ f29-core.workspace = true
 f29-audio.workspace = true
 f29-hud.workspace = true
 f29-render.workspace = true
-f29-terrain.workspace = true
+f29-world.workspace = true
 
 # Nur die benötigten Teile von Bevy: 2D (HUD-Overlay) und 3D, ohne UI und Audio.
 bevy = { version = "0.20", default-features = false, features = ["2d", "3d", "bevy_audio"] }

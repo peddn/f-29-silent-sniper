@@ -1,7 +1,6 @@
-//! Flugplätze: eine Heimatbasis, geheime Pisten und zwei feindliche
-//! Fliegerhorste (Jäger, M-022).
+//! Flugplätze: eigene Basen und feindliche Fliegerhorste (Jäger, M-022),
+//! aus der Gebietsdatei.
 //!
-//! Die Plätze werden aus dem Seed deterministisch auf flachem Land gewählt.
 //! Das Gelände wird unter der Bahn auf eine Höhe eingeebnet und weich in die
 //! Umgebung übergeblendet. Weil die Einebnung Teil der Höhenfunktion ist,
 //! gelten Kollision, Radarhöhe und Darstellung automatisch auch für die Bahn.
@@ -11,14 +10,13 @@
 //! braucht keine Winkelfunktionen (bitgenauer Determinismus).
 
 use crate::noise::{mix64, smoothstep};
+use serde::{Deserialize, Serialize};
 
 /// Art des Flugplatzes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AirfieldKind {
-    /// Heimatbasis: lange, voll markierte Bahn mit Anflughilfe.
+    /// Eigene Basis: lange, voll markierte Bahn mit Anflughilfe.
     Home,
-    /// Geheime Piste: kurz, schmal, kaum markiert, unbefeuert.
-    Secret,
     /// Feindlicher Fliegerhorst: Heimat der Jäger.
     Enemy,
 }
@@ -38,6 +36,8 @@ pub struct Runway {
     pub width_m: f64,
     /// Höhe der eingeebneten Bahn über dem Meer.
     pub elevation_m: f64,
+    /// Feindlicher Horst: Jäger MiG-21 und MiG-29 (M-022).
+    pub fighters: [u8; 2],
 }
 
 /// Eben bleibender Rand seitlich der Bahn (m).
@@ -47,14 +47,15 @@ pub const FLAT_END_M: f64 = 200.0;
 /// Breite des Übergangs vom ebenen Rand ins Gelände (m).
 pub const BLEND_M: f64 = 600.0;
 
-const HOME_LENGTH_M: f64 = 3_000.0;
-const HOME_WIDTH_M: f64 = 45.0;
-const SECRET_LENGTH_M: f64 = 1_500.0;
-const SECRET_WIDTH_M: f64 = 30.0;
-const ENEMY_LENGTH_M: f64 = 2_500.0;
-const ENEMY_WIDTH_M: f64 = 40.0;
+/// Bahnlänge und -breite je Art (m).
+pub fn dimensions(kind: AirfieldKind) -> (f64, f64) {
+    match kind {
+        AirfieldKind::Home => (3_000.0, 45.0),
+        AirfieldKind::Enemy => (2_500.0, 40.0),
+    }
+}
 /// Bahnen nicht tiefer (Strand, Wasser) und nicht höher als das.
-const MIN_SITE_M: f64 = 12.0;
+pub(crate) const MIN_SITE_M: f64 = 12.0;
 const MAX_SITE_M: f64 = 900.0;
 
 /// Richtungen in 22,5°-Schritten als (Nord, Ost).
@@ -205,78 +206,59 @@ fn best_site(
     best
 }
 
-fn runway_from(site: &Site, kind: AirfieldKind, name: &'static str, len: f64, width: f64) -> Runway {
-    Runway {
-        kind,
-        name,
-        center: site.center,
-        dir: DIRECTIONS[site.dir_index],
-        heading_deg: site.dir_index as f64 * 22.5,
-        length_m: len,
-        width_m: width,
-        elevation_m: site.elevation,
+impl Runway {
+    /// Bahn der Art `kind` bei `center`, Richtung `heading_deg` (gerundet auf
+    /// 22,5°-Schritte), auf Höhe `elevation_m`.
+    pub fn new(
+        kind: AirfieldKind,
+        name: &'static str,
+        center: [f64; 2],
+        heading_deg: f64,
+        elevation_m: f64,
+    ) -> Self {
+        let dir_index = ((heading_deg / 22.5).round() as i64).rem_euclid(8) as usize;
+        let (length_m, width_m) = dimensions(kind);
+        Runway {
+            kind,
+            name,
+            center,
+            dir: DIRECTIONS[dir_index],
+            heading_deg: dir_index as f64 * 22.5,
+            length_m,
+            width_m,
+            elevation_m,
+            fighters: [0, 0],
+        }
     }
 }
 
-/// Wählt die Flugplätze für einen Seed. `raw` ist die Geländehöhe ohne Einebnung.
-pub(crate) fn place_airfields(seed: u64, raw: impl Fn(f64, f64) -> f64) -> Vec<Runway> {
-    let mut out = Vec::new();
-    // Heimatbasis nahe dem Ursprung; kleine Strafe für Entfernung.
-    let home_area = 15_000.0;
-    let home = best_site(
+/// Sucht einen flachen Bauplatz für eine Bahn der Art `kind` im Umkreis
+/// `radius` um `around` (`raw`: Geländehöhe ohne Einebnung). Liefert Mitte,
+/// Richtung (Grad) und Höhe – für die Erstbefüllung von Gebieten.
+pub fn find_site(
+    raw: impl Fn(f64, f64) -> f64,
+    seed: u64,
+    kind: AirfieldKind,
+    around: [f64; 2],
+    radius: f64,
+) -> Option<([f64; 2], f64, f64)> {
+    let (len, width) = dimensions(kind);
+    let site = best_site(
         &raw,
         seed,
-        0x484f_4d45,
-        48,
+        0x5349_5445,
+        64,
         |k, a, b| {
-            let c =
-                if k == 0 { [0.0, 0.0] } else { [(a * 2.0 - 1.0) * home_area, (b * 2.0 - 1.0) * home_area] };
-            let d = (c[0] * c[0] + c[1] * c[1]).sqrt();
-            Some((c, d / 1_000.0 * 1.5))
+            let c = if k == 0 {
+                around
+            } else {
+                [around[0] + (a * 2.0 - 1.0) * radius, around[1] + (b * 2.0 - 1.0) * radius]
+            };
+            let (dx, dy) = (c[0] - around[0], c[1] - around[1]);
+            Some((c, (dx * dx + dy * dy).sqrt() / 1_000.0))
         },
-        HOME_LENGTH_M,
-        HOME_WIDTH_M,
-    );
-    let Some(home) = home else {
-        return out;
-    };
-    out.push(runway_from(&home, AirfieldKind::Home, "HOME", HOME_LENGTH_M, HOME_WIDTH_M));
-
-    // Geheime Pisten: 22–60 km von der Basis, untereinander mindestens
-    // 20 km; danach die feindlichen Fliegerhorste 45–75 km von der Basis,
-    // mindestens 25 km von allen anderen.
-    let plan = [
-        (AirfieldKind::Secret, "STRIP A", SECRET_LENGTH_M, SECRET_WIDTH_M, 22_000.0, 60_000.0, 20_000.0),
-        (AirfieldKind::Secret, "STRIP B", SECRET_LENGTH_M, SECRET_WIDTH_M, 22_000.0, 60_000.0, 20_000.0),
-        (AirfieldKind::Enemy, "RED 1", ENEMY_LENGTH_M, ENEMY_WIDTH_M, 45_000.0, 75_000.0, 25_000.0),
-        (AirfieldKind::Enemy, "RED 2", ENEMY_LENGTH_M, ENEMY_WIDTH_M, 45_000.0, 75_000.0, 25_000.0),
-    ];
-    for (i, (kind, name, len, width, near, far, apart)) in plan.into_iter().enumerate() {
-        let others: Vec<[f64; 2]> = out.iter().map(|r| r.center).collect();
-        let hc = home.center;
-        let site = best_site(
-            &raw,
-            seed,
-            0x5354_5250 + (i as u64) * 0x1_0000,
-            64,
-            |_, a, b| {
-                let c = [hc[0] + (a * 2.0 - 1.0) * far, hc[1] + (b * 2.0 - 1.0) * far];
-                let dist = |p: [f64; 2]| {
-                    let (dx, dy) = (c[0] - p[0], c[1] - p[1]);
-                    (dx * dx + dy * dy).sqrt()
-                };
-                let dh = dist(hc);
-                if !(near..=far).contains(&dh) || others.iter().any(|p| dist(*p) < apart) {
-                    return None;
-                }
-                Some((c, 0.0))
-            },
-            len,
-            width,
-        );
-        if let Some(site) = site {
-            out.push(runway_from(&site, kind, name, len, width));
-        }
-    }
-    out
+        len,
+        width,
+    )?;
+    Some((site.center, site.dir_index as f64 * 22.5, site.elevation))
 }

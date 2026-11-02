@@ -20,7 +20,7 @@
 
 use crate::detmath;
 use crate::math::DVec3;
-use f29_terrain::Terrain;
+use f29_world::Terrain;
 
 /// Reichweite des Radars (m, Spielerentscheidung v0.2.7), Tag wie Nacht.
 pub const RADAR_RANGE_M: f64 = 50_000.0;

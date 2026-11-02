@@ -21,6 +21,7 @@ pub mod fighters;
 pub mod flight;
 pub mod gun;
 pub mod math;
+pub mod mission;
 pub mod nav;
 pub mod radar;
 pub mod replay;
@@ -38,9 +39,10 @@ pub use controls::ControlFrame;
 pub use math::{DQuat, DVec3};
 pub use sim::{
     BlastInfo, BlastKind, BombAim, CrashCause, DT, DecoyInfo, FighterInfo, FlightData, GunAim, GunInfo, Mark,
-    MarkKind, MunitionInfo, PickedInfo, PingInfo, RadarSiteInfo, Side, Sim, SimConfig, SpawnKind, Stage,
-    Status, StoresInfo, TICK_HZ, TargetInfo, ThreatInfo, ThreatSite, Touchdown, WeaponCam, WeaponMessage,
+    MarkKind, MunitionInfo, PickedInfo, PingInfo, RadarSiteInfo, Sim, SimConfig, SpawnKind, Stage, Status,
+    StoresInfo, TICK_HZ, TargetInfo, ThreatInfo, ThreatSite, Touchdown, WeaponCam, WeaponMessage,
 };
 
 pub use f29_data as data;
-pub use f29_terrain as terrain;
+pub use f29_world as terrain;
+pub use f29_world::Side;

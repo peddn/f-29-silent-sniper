@@ -72,7 +72,7 @@ fn scripted_landing(seed: u64) -> Replay {
         invulnerable: false,
         conflict: Default::default(),
     };
-    let mut sim = Sim::new(SimConfig { seed, spawn });
+    let mut sim = Sim::new(SimConfig::with(seed, spawn));
     let mut replay = Replay::new(sim.config().clone());
     let mut ap = Approach::new(rw);
     let mut phase_tick = None;

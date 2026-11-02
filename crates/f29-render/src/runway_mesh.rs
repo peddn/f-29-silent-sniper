@@ -10,7 +10,7 @@
 
 use crate::mesh::{MeshData, face_normal};
 use crate::palette;
-use f29_terrain::{AirfieldKind, Runway};
+use f29_world::{AirfieldKind, Runway};
 
 /// Höhe der Bahnoberfläche über dem (eingeebneten) Gelände, gegen Z-Fighting.
 const SURFACE_Y: f32 = 0.35;
@@ -133,24 +133,6 @@ pub fn runway(rw: &Runway) -> MeshData {
                 }
             }
         }
-        AirfieldKind::Secret => {
-            // Unbefestigte Schneise in Erdfarben, nur Eck- und wenige Randmarken.
-            p.rect(-hl, hl, -hw, hw, SURFACE_Y, palette::mix(11, 12, 0.5));
-            for su in [-1.0, 1.0] {
-                for sv in [-1.0, 1.0] {
-                    let u = su * (hl - 3.0);
-                    let v = sv * (hw - 1.5);
-                    p.rect(u - 2.0, u + 2.0, v - 1.0, v + 1.0, MARK_Y, white);
-                }
-            }
-            let mut u = -hl + 250.0;
-            while u < hl - 200.0 {
-                for sv in [-1.0, 1.0] {
-                    p.rect(u - 1.0, u + 1.0, sv * hw - 1.0, sv * hw, MARK_Y, palette::mix(6, 11, 0.4));
-                }
-                u += 250.0;
-            }
-        }
     }
     p.mesh
 }
@@ -238,11 +220,11 @@ pub fn light_box(srgb: [f32; 3]) -> MeshData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use f29_terrain::Terrain;
+    use f29_world::Terrain;
 
     #[test]
     fn runway_meshes_cover_the_runway_and_face_up() {
-        let t = Terrain::new(0x0F29);
+        let t = Terrain::from_theater(f29_world::Theater::builtin());
         for rw in t.runways() {
             let m = runway(rw);
             assert!(m.triangle_count() >= 2);
@@ -258,7 +240,7 @@ mod tests {
 
     #[test]
     fn papi_shows_two_white_two_red_on_glide_path() {
-        let t = Terrain::new(0x0F29);
+        let t = Terrain::from_theater(f29_world::Theater::builtin());
         let rw = &t.runways()[0];
         let lights = papi_lights(rw);
         assert_eq!(lights.len(), 8);
@@ -278,7 +260,7 @@ mod tests {
 
     #[test]
     fn digits_are_drawn() {
-        let t = Terrain::new(3);
+        let t = Terrain::from_theater(f29_world::Theater::builtin());
         let rw = &t.runways()[0];
         let mut p = Painter { rw, mesh: MeshData::default() };
         p.number(8, 1.0, 45.0);

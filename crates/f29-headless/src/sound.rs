@@ -95,7 +95,7 @@ fn landing_demo() -> Vec<f32> {
         invulnerable: false,
         conflict: Default::default(),
     };
-    let mut sim = Sim::new(SimConfig { seed: 0x0F29, spawn });
+    let mut sim = Sim::new(SimConfig::with(0x0F29, spawn));
     let mut ap = Approach::new(rw);
     let ticks_per_frame = (TICK_HZ as f32 / FPS) as usize;
     render(60.0, Mix::default(), |_| {

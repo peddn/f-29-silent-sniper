@@ -118,16 +118,10 @@ fn sink_marks_fit_the_scale() {
 fn landing_aids_and_ground_messages_stay_on_screen() {
     use f29_core::controls::flags;
     use f29_core::sim::Spawn;
-    let mut sim = Sim::new(SimConfig {
-        seed: 0x0F29,
-        spawn: Spawn {
-            altitude: 600.0,
-            min_clearance: 300.0,
-            speed: 80.0,
-            throttle: 0.5,
-            ..Spawn::default()
-        },
-    });
+    let mut sim = Sim::new(SimConfig::with(
+        0x0F29,
+        Spawn { altitude: 600.0, min_clearance: 300.0, speed: 80.0, throttle: 0.5, ..Spawn::default() },
+    ));
     for _ in 0..(7 * 120) {
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, 0.5, flags::GEAR | flags::FLAPS));
     }
@@ -858,11 +852,11 @@ fn signature_gauge_and_radar_circles() {
     assert!(red_in(&alarmed, m.center) >= 12, "Alarmlampen");
     // Karte: Kreis um eine Stellung mit Alarmstufe
     let mut on_map = hidden.clone();
-    let t = &sim.targets()[0];
+    let me = sim.aircraft().position;
     on_map.threat.sites = vec![f29_core::RadarSiteInfo {
         target: 0,
-        pos: [t.north, t.east],
-        range_m: 30_000.0,
+        pos: [me.x + 2_000.0, me.y],
+        range_m: 4_000.0,
         kind: RadarKind::Doppler,
         alert: 3,
     }];

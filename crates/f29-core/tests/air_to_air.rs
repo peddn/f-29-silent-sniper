@@ -33,7 +33,7 @@ fn duel_in(kind: WeaponKind, jet: usize, ahead: f64, base: Spawn) -> Sim {
         loadout: Loadout([Some(kind), None, None, None]),
         ..base
     };
-    let mut sim = Sim::new(SimConfig { seed: SEED, spawn });
+    let mut sim = Sim::new(SimConfig::with(SEED, spawn));
     no_air_defense(&mut sim);
     let a = sim.aircraft().position;
     sim.fighters_mut().put_in_air(jet, a + DVec3::new(ahead, 0.0, 0.0), std::f64::consts::PI);
@@ -193,14 +193,21 @@ fn cold_war_fighters_fire_only_over_hostile_territory() {
     use f29_core::rules::Conflict;
     let probe = Sim::new(SimConfig::new(SEED));
     let home = probe.terrain().runways()[0].center;
-    let fires = |conflict: Conflict, north: f64| {
-        let base = Spawn { north, east: home[1], visible: true, conflict, ..Spawn::default() };
+    let foe = probe
+        .terrain()
+        .runways()
+        .iter()
+        .find(|r| r.kind == f29_core::terrain::AirfieldKind::Enemy)
+        .unwrap()
+        .center;
+    let fires = |conflict: Conflict, at: [f64; 2]| {
+        let base = Spawn { north: at[0], east: at[1], visible: true, conflict, ..Spawn::default() };
         let mut sim = duel_in(WeaponKind::Sidewinder, 3, 30_000.0, base);
-        let hostile = sim.flight_data().over_hostile;
+        let hostile = sim.flight_data().territory == f29_core::Side::Hostile;
         (first_air_launch(&mut sim, 20.0).is_some(), hostile)
     };
-    assert_eq!(fires(Conflict::ColdWar, home[0]), (false, false), "über eigenem Gebiet geschossen");
-    assert_eq!(fires(Conflict::War, home[0]), (true, false), "offener Krieg: schießt überall");
-    let far = home[0] + if home[0] > 0.0 { -90_000.0 } else { 90_000.0 };
+    assert_eq!(fires(Conflict::ColdWar, home), (false, false), "über eigenem Gebiet geschossen");
+    assert_eq!(fires(Conflict::War, home), (true, false), "offener Krieg: schießt überall");
+    let far = [foe[0] - 20_000.0, foe[1]];
     assert_eq!(fires(Conflict::ColdWar, far), (true, true), "über feindlichem Gebiet nicht geschossen");
 }

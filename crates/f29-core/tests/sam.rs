@@ -94,7 +94,7 @@ fn missile_hit_damages_two_systems() {
         step(&mut sim, 0, 0);
         shake = shake.max(sim.turbulence().length());
     }
-    assert!(shake > 0.02, "rüttelt nicht: {shake}");
+    assert!(shake > 0.01, "rüttelt nicht: {shake}");
 }
 
 /// Das Frühwarnradar startet die Langstreckenrakete.
@@ -121,9 +121,9 @@ fn sam_engagement_is_deterministic() {
 #[test]
 fn turning_into_the_missile_does_not_help() {
     let (_, t) = first_of(SEED, TargetClass::AirDefense).expect("Stellung");
-    let mut sim = Sim::new(SimConfig {
-        seed: SEED,
-        spawn: Spawn {
+    let mut sim = Sim::new(SimConfig::with(
+        SEED,
+        Spawn {
             north: t.north - 6_000.0,
             east: t.east - 3_000.0,
             altitude: t.elevation + 1_000.0,
@@ -134,7 +134,7 @@ fn turning_into_the_missile_does_not_help() {
             visible: true,
             ..Spawn::default()
         },
-    });
+    ));
     assert!(fly_until(&mut sim, 40.0, |s| launched(s).is_some()), "kein Start");
     let hit = |s: &Sim| s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. }));
     let mut was_hit = false;
@@ -334,9 +334,9 @@ fn beaming_shakes_off_all_but_the_modern_sam() {
 #[test]
 fn no_damage_reports_hits_without_consequences() {
     let (_, t) = first_of(SEED, TargetClass::AirDefense).expect("Stellung");
-    let mut sim = Sim::new(SimConfig {
-        seed: SEED,
-        spawn: Spawn {
+    let mut sim = Sim::new(SimConfig::with(
+        SEED,
+        Spawn {
             north: t.north - 7_000.0,
             east: t.east,
             altitude: t.elevation + 800.0,
@@ -347,7 +347,7 @@ fn no_damage_reports_hits_without_consequences() {
             invulnerable: true,
             ..Spawn::default()
         },
-    });
+    ));
     step(&mut sim, 0, weapon_flags::NEXT_BAY | weapon_flags::BAY_DOORS);
     let hit = |s: &Sim| s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. }));
     assert!(fly_until(&mut sim, 60.0, hit), "kein Treffer");

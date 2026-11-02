@@ -2626,7 +2626,7 @@ dependencies = [
  "f29-core",
  "f29-hud",
  "f29-render",
- "f29-terrain",
+ "f29-world",
 ]
 
 [[package]]
@@ -2641,7 +2641,7 @@ name = "f29-core"
 version = "0.1.0"
 dependencies = [
  "f29-data",
- "f29-terrain",
+ "f29-world",
 ]
 
 [[package]]
@@ -2655,7 +2655,9 @@ dependencies = [
  "f29-audio",
  "f29-core",
  "f29-hud",
- "f29-terrain",
+ "f29-render",
+ "f29-world",
+ "png",
 ]
 
 [[package]]
@@ -2670,13 +2672,17 @@ name = "f29-render"
 version = "0.1.0"
 dependencies = [
  "f29-core",
- "f29-terrain",
+ "f29-world",
  "naga",
 ]
 
 [[package]]
-name = "f29-terrain"
+name = "f29-world"
 version = "0.1.0"
+dependencies = [
+ "ron",
+ "serde",
+]
 
 [[package]]
 name = "fastrand"

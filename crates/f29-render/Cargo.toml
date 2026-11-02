@@ -10,7 +10,7 @@ authors.workspace = true
 
 [dependencies]
 f29-core.workspace = true
-f29-terrain.workspace = true
+f29-world.workspace = true
 
 [lints]
 workspace = true

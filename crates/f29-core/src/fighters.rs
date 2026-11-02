@@ -36,10 +36,8 @@ use crate::gun::Gun;
 use crate::math::DVec3;
 use crate::radar::{Exposure, RadarKind, RadarSpec};
 use crate::weapons::{DecoyKind, WeaponKind};
-use f29_terrain::{AirfieldKind, Terrain};
+use f29_world::{AirfieldKind, Terrain};
 
-/// Jäger je feindlichem Platz.
-pub const PER_BASE: usize = 5;
 /// Ein Radarkontakt eines Jägers gilt so lange als frisch (s).
 const CONTACT_S: f64 = 15.0;
 /// Mindesthöhe über Grund im Flug (m).
@@ -349,13 +347,16 @@ pub struct Fighters {
 }
 
 impl Fighters {
-    /// [`PER_BASE`] Jäger auf jedem feindlichen Platz bereit: drei MiG-21,
-    /// zwei MiG-29.
+    /// Die Jäger der feindlichen Plätze laut Gebiet ([`Runway::fighters`]:
+    /// MiG-21, MiG-29) bereit.
     pub fn new(terrain: &Terrain, seed: u64, max_airborne: usize) -> Self {
         let mut list = Vec::new();
-        for (base, _) in terrain.runways().iter().enumerate().filter(|(_, r)| r.kind == AirfieldKind::Enemy) {
-            for k in 0..PER_BASE {
-                let kind = if k < 3 { FighterKind::MiG21 } else { FighterKind::MiG29 };
+        for (base, rw) in terrain.runways().iter().enumerate().filter(|(_, r)| r.kind == AirfieldKind::Enemy)
+        {
+            let [mig21, mig29] = rw.fighters;
+            let kinds = std::iter::repeat_n(FighterKind::MiG21, mig21.into())
+                .chain(std::iter::repeat_n(FighterKind::MiG29, mig29.into()));
+            for kind in kinds {
                 list.push(Fighter::parked(list.len() as u32, kind, base, terrain));
             }
         }
@@ -509,7 +510,7 @@ mod tests {
     const TICK: f64 = DT;
 
     fn setup() -> (Terrain, Fighters) {
-        let terrain = Terrain::new(0x0F29);
+        let terrain = Terrain::from_theater(f29_world::Theater::builtin());
         let f = Fighters::new(&terrain, 1, 6);
         (terrain, f)
     }
@@ -543,13 +544,14 @@ mod tests {
     }
 
     #[test]
-    fn two_bases_with_five_fighters_each_wait_for_an_alert() {
+    fn fighters_of_the_theater_wait_for_an_alert() {
         let (terrain, mut f) = setup();
-        assert_eq!(f.list.len(), 2 * PER_BASE);
+        let per_kind = |k: usize| terrain.runways().iter().map(|r| usize::from(r.fighters[k])).sum::<usize>();
+        assert_eq!(f.list.len(), per_kind(0) + per_kind(1));
         for base in f.list.iter().map(|x| x.base) {
             assert_eq!(terrain.runways()[base].kind, AirfieldKind::Enemy);
         }
-        assert_eq!(f.list.iter().filter(|x| x.kind == FighterKind::MiG29).count(), 4);
+        assert_eq!(f.list.iter().filter(|x| x.kind == FighterKind::MiG29).count(), per_kind(1));
         run(&mut f, &terrain, 30.0, None, None);
         assert!(f.list.iter().all(|x| x.mode == Mode::Ready), "ohne Alarm bleibt alles am Boden");
     }
@@ -560,18 +562,26 @@ mod tests {
     fn alert_scrambles_one_after_another_up_to_the_limit() {
         let (terrain, mut f) = setup();
         let rw = &terrain.runways()[f.list[0].base];
-        let alert = Some(DVec3::new(rw.center[0] + 20_000.0, rw.center[1], -3_000.0));
+        let alert = DVec3::new(rw.center[0] + 20_000.0, rw.center[1], -3_000.0);
         let mut max_rolling = 0;
         for t in 1..(300.0 / TICK) as u64 {
-            f.step(t, TICK, &terrain, alert, None);
-            for base in [f.list[0].base, f.list[PER_BASE].base] {
+            f.step(t, TICK, &terrain, Some(alert), None);
+            for base in f.list.iter().map(|x| x.base) {
                 let rolling = f.list.iter().filter(|x| x.base == base && x.mode == Mode::Takeoff).count();
                 max_rolling = max_rolling.max(rolling);
             }
             assert!(f.list.iter().filter(|x| x.airborne()).count() <= f.max_airborne);
         }
         assert_eq!(max_rolling, 1, "je Platz rollt nur einer");
-        assert_eq!(f.list.iter().filter(|x| x.airborne()).count(), f.max_airborne);
+        let in_reach = f
+            .list
+            .iter()
+            .filter(|x| {
+                let (a, c) = (alert, terrain.runways()[x.base].center);
+                (a.x - c[0]).hypot(a.y - c[1]) <= x.spec().cruise_mps * x.spec().endurance_s * 0.5
+            })
+            .count();
+        assert_eq!(f.list.iter().filter(|x| x.airborne()).count(), f.max_airborne.min(in_reach));
         assert!(f.list.iter().all(|x| -x.position.z > terrain.elevation(x.position.x, x.position.y) - 1.0));
     }
 
@@ -581,8 +591,8 @@ mod tests {
     fn fighters_intercept_find_and_pursue() {
         let (terrain, mut f) = setup();
         let rw = &terrain.runways()[f.list[0].base];
-        let at = DVec3::new(rw.center[0] + 20_000.0, rw.center[1] + 5_000.0, -3_000.0);
-        run(&mut f, &terrain, 150.0, Some(at), None);
+        let (n, e) = (rw.center[0] + 20_000.0, rw.center[1] + 5_000.0);
+        let at = DVec3::new(n, e, -terrain.elevation(n, e) - 3_000.0);
         let near = |f: &Fighters| {
             f.list
                 .iter()
@@ -590,17 +600,26 @@ mod tests {
                 .map(|x| (x.position - at).length())
                 .fold(f64::MAX, f64::min)
         };
-        assert!(near(&f) < 8_000.0, "nicht am Kontaktort: {:.0} m", near(&f));
+        // Am Kontaktort gewesen (danach Rennbahn mit langen Schenkeln).
+        let mut closest = f64::MAX;
+        for t in 1..=(150.0 / TICK) as u64 {
+            f.step(t, TICK, &terrain, Some(at), None);
+            closest = closest.min(near(&f));
+        }
+        assert!(closest < ARRIVE_M, "nicht am Kontaktort: {closest:.0} m");
         assert!(f.list.iter().any(|x| x.mode == Mode::Patrol), "patrouilliert nicht");
         let x = visible(at);
         let t0 = (150.0 / TICK) as u64;
-        // Eine Rennbahn lang (wenden außerhalb der Radarreichweite).
+        // Eine Rennbahn lang (wenden außerhalb der Radarreichweite): Die
+        // Jäger verfolgen und kommen heran.
+        let mut pursued = f64::MAX;
         for t in t0..t0 + (120.0 / TICK) as u64 {
             f.step(t, TICK, &terrain, Some(at), Some(&x));
+            if f.list.iter().any(|x| x.mode == Mode::Pursue) {
+                pursued = pursued.min(near(&f));
+            }
         }
-        assert!(f.list.iter().any(|x| x.mode == Mode::Pursue), "verfolgt nicht");
-        let near_now = near(&f);
-        assert!(near_now < 10_000.0, "verfolgt, aber nicht dran: {near_now:.0} m");
+        assert!(pursued < 3_000.0, "verfolgt nicht oder nicht dran: {pursued:.0} m");
         assert!(f.events.iter().any(|(_, e)| matches!(e, FighterEvent::Contact { .. })));
         assert!(f.contact.is_some());
     }
