@@ -2031,4 +2031,19 @@ Format jedes Eintrags:
      einen Schacht) gegen eine bessere tauschen.
   7. Nach dem Flug: Nachbesprechung, Beförderung und Orden (M-030), dann
      zurück zum Dienstplan.
+- **Unser Design (Spielerentscheidungen v0.3, noch nicht gebaut):** Ablauf
+  eins zu eins in vier Stufen – S1 Menügerüst, Auftrag, Briefingtext,
+  Schlussauswahl mit „neue Mission“; S2 Bewaffnung mit Zusatztank; S3
+  Lagebesprechungskarte; S4 Dienstplan mit Pilotenakten.
+  - **Flugzeugerkennung** bleibt als Gimmick: zunächst ein Platzhalter im
+    Ablauf, das Rätsel selbst später.
+  - **Gebiet:** Liste bleibt (später vier Gebiete), vorerst ein Eintrag.
+  - **Missionsart:** Liste bleibt (später Flugzeuge als Missionsziele).
+  - **Gegnerqualität:** vorbereiten; entspricht dem Pilotenkönnen der
+    Jäger (M-022).
+  - **Flugverhalten:** bezieht sich auf die Landung; über die
+    Landegrenzwerte umsetzen.
+  - **Zusatztank:** wird wie eine Waffe einem Schacht zugewiesen, auch in
+    mehreren Schächten. Im NAV-Modus erscheint er als „Waffe“ und wird ohne
+    Öffnen der Klappen „verbraucht“; der Schacht ist danach leer.
 - **Status:** gelesen (v0.3); Umsetzung offen
