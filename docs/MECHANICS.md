@@ -1792,6 +1792,25 @@ Format jedes Eintrags:
     (Alarmanstieg, Zivil- und Eigenbeschuss) kommen mit ihr.
 - **Status:** umgesetzt (v0.3)
 
+### M-034 Zeitraffer
+
+- **Verhalten (Original):** Per Taste läuft die Simulation doppelt so
+  schnell, eine zweite Taste schaltet zurück; im Cockpit steht ein Hinweis.
+  Der Raffer endet von selbst beim Ausfahren des Fahrwerks, beim Start einer
+  feindlichen Rakete und wenn eine Bedrohung stark genug wird.
+- **Referenzstelle:** f19re `src/egkeys.c` (`recalcTimeScale`,
+  `exitTimeAccel`, Tastenbehandlung), `src/egcombat.c` (Abbruch bei
+  Bedrohung und Raketenstart), `src/egtacmap.c` (Anzeige).
+- **Unser Design (v0.3, Spielerentscheidungen):** Shift+T schaltet 1× → 2×
+  → 4× → 1× (Joystick: `time_warp`); Anzeige „2X“/„4X“. Das Frontend
+  rechnet je Echtzeit-Takt entsprechend mehr 120-Hz-Takte – die Simulation
+  selbst bleibt unverändert, Replays spielen in Normalzeit. Abbruch
+  (`Sim::interrupts_time_warp`): Fahrwerk draußen (dann auch kein
+  Einschalten), Raketenstart gegen das Flugzeug (SAM oder Jäger), steigende
+  Alarmstufe einer Radarstellung, Treffer (Rakete oder Kanone), Ende des
+  Flugs.
+- **Status:** umgesetzt (v0.3)
+
 ### M-030 Karriere, Szenarien, Orden
 
 - **Verhalten:** Ein Pilot fliegt eine Folge von Missionen in mehreren Einsatzgebieten

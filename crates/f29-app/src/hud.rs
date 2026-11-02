@@ -107,9 +107,10 @@ fn draw_hud(
             ink_color(line.ink),
         );
     }
-    if state.paused {
+    let banner = if state.paused { "PAUSE".to_string() } else { format!("{}X", state.time_scale) };
+    if state.paused || state.time_scale > 1 {
         let mut pause = f29_hud::DisplayList::new();
-        pause.text_mid([0.0, 0.25], 0.03, f29_hud::Align::Center, "PAUSE", Ink::Warning);
+        pause.text_mid([0.0, 0.25], 0.03, f29_hud::Align::Center, &banner, Ink::Warning);
         for line in &pause.lines {
             gizmos.line_2d(Vec2::from_array(line.a) * h, Vec2::from_array(line.b) * h, ink_color(line.ink));
         }

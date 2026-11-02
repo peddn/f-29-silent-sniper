@@ -354,3 +354,20 @@ fn no_damage_reports_hits_without_consequences() {
     assert!(System::ALL.iter().all(|s| sim.systems().get(*s).is_ok()), "Schaden trotz --no-damage");
     assert_eq!(sim.systems().hits, 0);
 }
+
+/// Zeitraffer (M-034): Im ruhigen Flug kein Abbruch; der Start einer SAM
+/// beendet ihn; mit ausgefahrenem Fahrwerk gibt es keinen.
+#[test]
+fn time_warp_ends_on_launch_and_gear() {
+    let (mut sim, _) = toward_site(TargetClass::AirDefense, 7_000.0, 800.0);
+    assert!(!sim.interrupts_time_warp());
+    let mut stopped = false;
+    assert!(fly_until(&mut sim, 30.0, |s| {
+        stopped |= s.interrupts_time_warp();
+        launched(s).is_some()
+    }));
+    assert!(stopped, "Start ohne Abbruch");
+    // Auf der Bahn ist das Fahrwerk draußen: kein Zeitraffer.
+    let quiet = Sim::new(SimConfig::runway(SEED));
+    assert!(quiet.interrupts_time_warp(), "Fahrwerk");
+}

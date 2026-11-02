@@ -70,6 +70,8 @@ impl Pose {
 pub struct SimState {
     pub sim: Sim,
     pub paused: bool,
+    /// Zeitraffer: Simulationstakte je Echtzeit-Takt (1, 2 oder 4; M-034).
+    pub time_scale: u32,
     accumulator: f64,
     prev: Pose,
     curr: Pose,
@@ -81,7 +83,17 @@ impl SimState {
         let sim = Sim::new(config);
         let pose = Pose::of(&sim);
         let recorder = Replay::new(sim.config().clone());
-        Self { sim, paused: false, accumulator: 0.0, prev: pose, curr: pose, recorder }
+        Self { sim, paused: false, time_scale: 1, accumulator: 0.0, prev: pose, curr: pose, recorder }
+    }
+
+    /// Zeitraffer weiterschalten: 1× → 2× → 4× → 1×; nicht, solange ein
+    /// Grund zum Abbruch besteht (z. B. Fahrwerk draußen).
+    pub fn cycle_time_scale(&mut self) {
+        self.time_scale = match self.time_scale {
+            1 if !self.sim.interrupts_time_warp() => 2,
+            2 => 4,
+            _ => 1,
+        };
     }
 
     /// Zwischen den letzten beiden Ticks interpolierte Lage für die Darstellung.
@@ -128,7 +140,7 @@ fn step_simulation(
         return;
     }
     let state = &mut *state;
-    state.accumulator += time.delta_secs_f64().min(0.25);
+    state.accumulator += time.delta_secs_f64().min(0.25) * f64::from(state.time_scale);
     let mut steps = 0;
     while state.accumulator >= DT && steps < MAX_STEPS_PER_FRAME {
         // Beschädigtes Triebwerk: Der Hebel fällt auf den verfügbaren
@@ -142,6 +154,10 @@ fn step_simulation(
         state.curr = Pose::of(&state.sim);
         state.accumulator -= DT;
         steps += 1;
+        if state.time_scale > 1 && state.sim.interrupts_time_warp() {
+            state.time_scale = 1;
+            state.accumulator = state.accumulator.min(DT);
+        }
     }
     if steps == MAX_STEPS_PER_FRAME {
         // Rückstand verwerfen statt ihn aufzuholen

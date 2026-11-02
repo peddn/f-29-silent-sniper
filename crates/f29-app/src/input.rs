@@ -188,6 +188,7 @@ pub(crate) fn flight_input(keys: Res<ButtonInput<KeyCode>>, time: Res<Time>, mut
 
     // Waffen: Leertaste auslösen, O Schacht auf/zu, Tab nächste Waffe (GUN,
     // BAY 1–4); C Düppel, T Fackel, M Störsender ein/aus, U Infrarotstörer
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     for (key, flag) in [
         (KeyCode::Space, weapon_flags::RELEASE),
         (KeyCode::KeyO, weapon_flags::BAY_DOORS),
@@ -197,7 +198,7 @@ pub(crate) fn flight_input(keys: Res<ButtonInput<KeyCode>>, time: Res<Time>, mut
         (KeyCode::KeyM, weapon_flags::ECM),
         (KeyCode::KeyU, weapon_flags::IR_JAMMER),
     ] {
-        if keys.just_pressed(key) {
+        if keys.just_pressed(key) && !(shift && key == KeyCode::KeyT) {
             pilot.weapons |= flag;
         }
     }
@@ -218,6 +219,10 @@ fn hotkeys(
     }
     if keys.just_pressed(KeyCode::KeyP) {
         state.paused = !state.paused;
+    }
+    // Zeitraffer 1× → 2× → 4× (Shift+T; T allein wirft Fackeln)
+    if keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) && keys.just_pressed(KeyCode::KeyT) {
+        state.cycle_time_scale();
     }
     if keys.just_pressed(KeyCode::KeyR) {
         state.restart();

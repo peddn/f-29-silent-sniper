@@ -601,6 +601,26 @@ impl Sim {
         &self.fighters
     }
 
+    /// Beendet der letzte Tick den Zeitraffer (M-034)? Wie im Original:
+    /// Fahrwerk draußen, Raketenstart gegen das Flugzeug, steigende
+    /// Alarmstufe; dazu Treffer und Ende des Flugs.
+    pub fn interrupts_time_warp(&self) -> bool {
+        let now = self.tick;
+        self.aircraft.gear > 0.0
+            || self.status != Status::Flying
+            || self.stores.events.iter().any(|(t, e)| {
+                *t == now
+                    && matches!(
+                        e,
+                        WeaponEvent::SamLaunch { .. }
+                            | WeaponEvent::AirLaunch { .. }
+                            | WeaponEvent::AircraftHit { .. }
+                    )
+            })
+            || self.radar.events.recent(now, 0).any(|(_, e)| matches!(e, RadarEvent::Alert { .. }))
+            || self.fighters.events.recent(now, 0).any(|(_, e)| matches!(e, FighterEvent::GunHit { .. }))
+    }
+
     /// Feindliche Jäger zum Verändern – Zugang für Tests.
     pub fn fighters_mut(&mut self) -> &mut Fighters {
         &mut self.fighters

@@ -220,6 +220,7 @@ fn joystick_input(
                     }
                 }
                 Action::Pause => state.paused = !state.paused,
+                Action::TimeWarp => state.cycle_time_scale(),
             }
         }
     }

@@ -80,10 +80,11 @@ pub enum Action {
     HudMode,
     View,
     Pause,
+    TimeWarp,
 }
 
 impl Action {
-    pub const ALL: [(Action, &'static str); 25] = [
+    pub const ALL: [(Action, &'static str); 26] = [
         (Action::Gun, "gun"),
         (Action::Fire, "fire"),
         (Action::NextWeapon, "next_weapon"),
@@ -109,6 +110,7 @@ impl Action {
         (Action::HudMode, "hud_mode"),
         (Action::View, "view"),
         (Action::Pause, "pause"),
+        (Action::TimeWarp, "time_warp"),
     ];
 
     pub fn name(self) -> &'static str {

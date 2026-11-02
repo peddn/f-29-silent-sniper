@@ -103,6 +103,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | F4 | 11 | Rechtes MFD: nächste Seite (Mission → Ziel → Waffenkamera → Waffen → Triebwerk → Horizont → Systeme) |
 | Y / X | 10 (reihum) | Karte näher / weiter (0,6 bis 640 km, je Stufe doppelt; außerhalb des Gebiets schwarz) |
 | P | | Pause |
+| Shift+T | | Zeitraffer 1× → 2× → 4× → 1×; endet bei Fahrwerk, Raketenstart, steigender Alarmstufe, Treffer |
 | F12 | | Screenshot nach `screenshots/` |
 | R | | Neustart (Flug wird als Replay gesichert) |
 | Esc | | Beenden (Flug wird als Replay gesichert) |
