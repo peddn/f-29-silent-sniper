@@ -1797,8 +1797,20 @@ Format jedes Eintrags:
   - MSN-Seite: Auftrag (ATK/RCN) und erledigt je Ziel.
   - Klang beim Auslösen: Rakete (Zündknall, Fauchen), Bombe (Ausklinken),
     Kamera (Verschluss).
-- **Status:** Auftragsarten, Kamera, Beladung umgesetzt (v0.3); Flugprotokoll,
-  Ausgang und Wertung folgen
+  - **Flugprotokoll** (`f29_core::flightlog`): Start, erreichte Wegpunkte
+    (3 km), Radar-ID, Jägerkontakt, zerstörte Ziele (mit Rolle bzw. zivil),
+    Fotos, Abschüsse, Treffer am Flugzeug, ROE-Verletzungen, Landung,
+    Ausstieg, Absturz – mit Tick, deterministisch.
+  - **Missionsende:** Nach einem Flug auf einer Bahn zum Stehen gekommen –
+    die Mission endet von selbst; das Gebiet unter dem Flugzeug entscheidet
+    (eigen: MISSION COMPLETE, neutral: internationaler Zwischenfall,
+    feindlich: gefangen). **Schleudersitz** Strg+E: gerettet bis 450 kt und
+    60° Quer- bzw. Längsneigung in jede Richtung, sonst tödlich; danach
+    wieder das Gebiet. Absturz wie bisher.
+  - Ergebnistafel statt HUD: Ausgang, Auftrag je Ziel, Protokoll; R startet
+    neu.
+- **Status:** Auftragsarten, Kamera, Beladung, Flugprotokoll und Ausgang
+  umgesetzt (v0.3); Wertung und Nachbesprechung folgen
 
 ### M-033 Regelsets (Konfliktlage)
 

@@ -55,7 +55,7 @@ fn fly_approach(sim: &mut Sim, ap: &mut Approach, seconds: f64) {
 fn crash_cause(sim: &Sim) -> Option<CrashCause> {
     match sim.status() {
         Status::Crashed { cause, .. } => Some(cause),
-        Status::Flying => None,
+        _ => None,
     }
 }
 
@@ -112,9 +112,16 @@ fn autopilot_lands_on_home_runway() {
     let mut sim = on_final(SEED, &rw, 8_000.0, 0.0, 0.5);
     let mut ap = Approach::new(rw.clone());
     fly_approach(&mut sim, &mut ap, 240.0);
-    assert_eq!(sim.status(), Status::Flying, "Absturz: {:?}", crash_cause(&sim));
+    // Die Landung beendet die Mission (M-032): eigenes Gebiet.
+    assert!(
+        matches!(sim.status(), Status::Landed { side: f29_core::Side::Friendly, .. }),
+        "{:?} / {:?}",
+        sim.status(),
+        crash_cause(&sim)
+    );
     let fd = sim.flight_data();
     assert!(fd.stopped_on_runway, "steht nicht auf der Bahn");
+    assert!(fd.debrief.iter().any(|l| l.contains("LANDED")), "{:?}", fd.debrief);
     let td = fd.touchdown.expect("Aufsetzen nicht erfasst");
     assert!(!td.hard, "harte Landung: {} m/s", td.sink_mps);
     assert!(td.sink_mps > 0.0 && td.sink_mps < 2.5, "Sinkrate {}", td.sink_mps);
@@ -122,14 +129,9 @@ fn autopilot_lands_on_home_runway() {
 }
 
 #[test]
-fn land_turn_around_and_take_off_again() {
+fn taxi_to_the_end_turn_around_and_take_off() {
     let rw = runway(SEED, AirfieldKind::Home);
-    let mut sim = on_final(SEED, &rw, 6_000.0, 0.0, 0.45);
-    let mut ap = Approach::new(rw.clone());
-    fly_approach(&mut sim, &mut ap, 240.0);
-    assert!(sim.flight_data().stopped_on_runway, "Landung auf der Piste: {:?}", sim.status());
-    let landed_u = rw.local(sim.aircraft().position.x, sim.aircraft().position.y).0;
-    assert!(landed_u < rw.length_m * 0.5, "über das Ende hinaus");
+    let mut sim = Sim::new(SimConfig::runway(SEED));
 
     // Zum Ende rollen, auf der Stelle wenden …
     let to_end = |sim: &Sim| {
@@ -140,8 +142,9 @@ fn land_turn_around_and_take_off_again() {
             break;
         }
         let v = sim.aircraft().velocity.length();
-        let thr = if v < 10.0 { 0.25 } else { 0.0 };
-        let brake = if v > 12.0 { flags::AIRBRAKE } else { 0 };
+        let slow = to_end(&sim) < 400.0;
+        let thr = if v < (if slow { 8.0 } else { 25.0 }) { 0.4 } else { 0.0 };
+        let brake = if v > (if slow { 10.0 } else { 28.0 }) { flags::AIRBRAKE } else { 0 };
         sim.step(ControlFrame::from_analog(0.0, 0.0, 0.0, thr, flags::GEAR | brake));
     }
     for _ in 0..ticks(15.0) {

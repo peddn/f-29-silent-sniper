@@ -164,3 +164,19 @@ fn camera_needs_open_bay_and_flight() {
     step(&mut air, 0, weapon_flags::RELEASE);
     assert_eq!(air.stores().photos, 2);
 }
+
+/// Schleudersitz (Strg+E): bis 450 kt gerettet – das Gebiet entscheidet –,
+/// schneller tödlich; das Protokoll hält es fest.
+#[test]
+fn ejection_depends_on_speed_and_territory() {
+    let eject = |speed: f64| {
+        let mut sim = Sim::new(SimConfig::with(1, Spawn { speed, ..Spawn::default() }));
+        step(&mut sim, 0, weapon_flags::EJECT);
+        sim
+    };
+    let slow = eject(200.0);
+    let side = slow.territory(slow.aircraft().position);
+    assert_eq!(slow.status(), f29_core::Status::Ejected { tick: 1, side, survived: true });
+    assert!(slow.flight_data().debrief.iter().any(|l| l.contains("EJECTED")));
+    assert!(matches!(eject(260.0).status(), f29_core::Status::Ejected { survived: false, .. }));
+}

@@ -105,6 +105,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | F4 | 11 | Rechtes MFD: nächste Seite (Mission → Ziel → Waffenkamera → Waffen → Triebwerk → Horizont → Systeme) |
 | Y / X | 10 (reihum) | Karte näher / weiter (0,6 bis 640 km, je Stufe doppelt; außerhalb des Gebiets schwarz) |
 | P | | Pause |
+| Strg+E | | Schleudersitz (bis 450 kt und 60° Quer-/Längsneigung; das Gebiet entscheidet: gerettet, Zwischenfall, gefangen) |
 | Shift+T | | Zeitraffer 1× → 2× → 4× → 1×; endet bei Fahrwerk, Raketenstart, steigender Alarmstufe, Treffer |
 | F12 | | Screenshot nach `screenshots/` |
 | R | | Neustart (Flug wird als Replay gesichert) |
@@ -298,6 +299,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Sichtlinie, Bildkreis im HUD, Kamerabild auf der TGT-Seite); vorgeschlagene Beladung; Aufklärung bei
       Tag; Kalter Krieg: Angriff nur auf Ziele, die uns entdeckt haben, sonst
       ROE VIOLATION (v0.3)
+- [x] Flugprotokoll und Missionsende: Landung beendet die Mission,
+      Schleudersitz (Strg+E), Gebiet entscheidet über Rettung,
+      Zwischenfall oder Gefangenschaft; Ergebnistafel (v0.3)
 - [ ] Planquadrate auf Karte und Missionsseite; Geländeart als Radarfaktor
 - [ ] Missionsdaten: Primär- und Sekundärziel, Route, Bedrohungslage
 - [ ] Bewaffnung und Betankung vor dem Start (Zusatztanks), Missionsauswertung

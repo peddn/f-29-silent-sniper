@@ -198,6 +198,7 @@ fn joystick_input(
                 Action::Flare => pilot.weapons |= weapon_flags::FLARE,
                 Action::Ecm => pilot.weapons |= weapon_flags::ECM,
                 Action::IrJammer => pilot.weapons |= weapon_flags::IR_JAMMER,
+                Action::Eject => pilot.weapons |= weapon_flags::EJECT,
                 Action::Radar => pilot.radar_toggle = true,
                 Action::NextSteerpoint => pilot.next_steerpoint = true,
                 Action::LookForward => pilot.look = LookDir::Forward.code(),

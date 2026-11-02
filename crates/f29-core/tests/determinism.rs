@@ -48,8 +48,8 @@ fn scripted_patrol(seed: u64) -> Replay {
     replay
 }
 
-/// Endanflug, Landung, Ausrollen, Lenken im Stand und erneuter Start: deckt Fahrwerk,
-/// Klappen, Bodenmodus, Aufsetzbewertung und Treibstoff ab.
+/// Endanflug, Landung und Ausrollen bis zum Missionsende: deckt Fahrwerk,
+/// Klappen, Bodenmodus, Aufsetzbewertung, Treibstoff und Flugprotokoll ab.
 fn scripted_landing(seed: u64) -> Replay {
     let rw = Sim::new(SimConfig::new(seed)).terrain().runways()[0].clone();
     let dist = 6_000.0;
@@ -81,29 +81,16 @@ fn scripted_landing(seed: u64) -> Replay {
         if phase_tick.is_none() && fd.stopped_on_runway {
             phase_tick = Some(t);
         }
+        // Nach der Landung endet die Mission (M-032); danach nur Leerlauf.
         let c = match phase_tick {
             None => ap.control(sim.spec(), &fd, DT),
-            // Auf der Stelle 3 s nach links und 3 s zurück lenken, dann
-            // geradeaus Vollgas und abheben.
-            Some(t0) if t - t0 < 6 * f29_core::TICK_HZ => {
-                let steer = if t - t0 < 3 * f29_core::TICK_HZ { -1.0 } else { 1.0 };
-                ControlFrame::from_analog(0.0, steer, 0.0, 0.0, flags::GEAR | flags::AIRBRAKE)
-            }
-            Some(_) => {
-                // rotieren und etwa 12° Nicklage halten
-                let pull = if fd.tas_mps > 1.1 * fd.stall_speed_mps {
-                    ((0.21 - fd.pitch) * 4.0).clamp(-0.5, 0.6)
-                } else {
-                    0.0
-                };
-                ControlFrame::from_analog(pull, 0.0, 0.0, 1.0, flags::GEAR | flags::FLAPS)
-            }
+            Some(_) => ControlFrame::from_analog(0.0, 0.0, 0.0, 0.0, flags::GEAR | flags::AIRBRAKE),
         };
         sim.step(c);
         replay.push(c);
     }
     assert!(phase_tick.is_some(), "Golden-Landung: nicht zum Stehen gekommen");
-    assert_eq!(sim.status(), f29_core::Status::Flying);
+    assert!(matches!(sim.status(), f29_core::Status::Landed { .. }), "{:?}", sim.status());
     replay.final_hash = Some(sim.state_hash());
     replay
 }

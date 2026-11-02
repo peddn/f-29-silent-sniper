@@ -5,6 +5,7 @@ use crate::detmath;
 use crate::events::EventLog;
 use crate::fighters::{self, FighterEvent, Fighters};
 use crate::flight::{self, AeroData, AircraftState};
+use crate::flightlog::LogEntry;
 use crate::gun::{self, Gun, GunEvent};
 use crate::math::{DQuat, DVec3};
 use crate::mission::{self, Mission, MissionEvent, Task};
@@ -219,8 +220,49 @@ pub struct Touchdown {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     Flying,
-    Crashed { tick: u64, cause: CrashCause },
+    Crashed {
+        tick: u64,
+        cause: CrashCause,
+    },
+    /// Gelandet und auf einer Bahn zum Stehen gekommen: Missionsende.
+    Landed {
+        tick: u64,
+        side: Side,
+    },
+    /// Mit dem Schleudersitz ausgestiegen; `survived`: Fahrt und Lage ließen
+    /// es zu.
+    Ejected {
+        tick: u64,
+        side: Side,
+        survived: bool,
+    },
 }
+
+impl Status {
+    /// Ausgang der Mission für die Ergebnistafel (M-032).
+    pub fn outcome(self) -> String {
+        let fate = |side: Side| match side {
+            Side::Friendly => "RESCUED",
+            Side::Neutral => "INTERNATIONAL INCIDENT",
+            Side::Hostile => "CAPTURED",
+        };
+        match self {
+            Status::Flying => String::new(),
+            Status::Crashed { cause, .. } => format!("CRASHED - {}", cause.label()),
+            Status::Landed { side: Side::Friendly, .. } => "MISSION COMPLETE - LANDED".into(),
+            Status::Landed { side, .. } => format!("LANDED - {}", fate(side)),
+            Status::Ejected { survived: false, .. } => "EJECTION FAILED - KILLED".into(),
+            Status::Ejected { side, .. } => format!("EJECTED - {}", fate(side)),
+        }
+    }
+}
+
+/// Der Schleudersitz rettet bis zu dieser Fahrt (m/s, 450 kt) …
+pub const EJECT_MAX_TAS_MPS: f64 = 231.5;
+/// … und bis zu dieser Quer- bzw. Längsneigung in jede Richtung (rad, 60°).
+pub const EJECT_MAX_ANGLE_RAD: f64 = std::f64::consts::FRAC_PI_3;
+/// Ein Wegpunkt gilt in diesem Umkreis als erreicht (m).
+const WAYPOINT_REACHED_M: f64 = 3_000.0;
 
 /// So viele Ziele prüft die eigene Erfassung je Erfassungstakt (reihum).
 const CONTACTS_PER_UPDATE: usize = 4;
@@ -301,6 +343,10 @@ pub struct Sim {
     detected_us: Vec<bool>,
     roe_violations: u32,
     mission_events: EventLog<MissionEvent>,
+    /// Flugprotokoll (M-032).
+    log: Vec<(u64, LogEntry)>,
+    /// Schon in der Luft gewesen (Landung beendet dann die Mission).
+    has_flown: bool,
 }
 
 /// Gewähltes Ziel je Zielart; der HUD-Modus bestimmt, welche Auswahl die
@@ -371,6 +417,7 @@ impl Sim {
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
         let targets_len = targets.len();
+        let aircraft_on_ground = aircraft.on_ground;
         let mut sim = Self {
             config,
             spec,
@@ -404,6 +451,8 @@ impl Sim {
             mission: plan,
             photographed: [false; 2],
             roe_violations: 0,
+            log: Vec::new(),
+            has_flown: !aircraft_on_ground,
             mission_events: EventLog::default(),
         };
         sim.ground_seen = vec![Seen::default(); sim.targets.len()];
@@ -467,6 +516,11 @@ impl Sim {
             self.update_mission();
             return;
         }
+        if controls.has_weapon(weapon_flags::EJECT) {
+            self.eject();
+            self.update_mission();
+            return;
+        }
         self.update_weapon_controls(&controls);
         self.update_sensors(&controls);
         self.update_turbulence();
@@ -479,6 +533,7 @@ impl Sim {
         }
         self.update_height_agl();
         self.aero = flight::aero_data(&self.spec, &self.aircraft);
+        self.check_landed();
         let exposure = self.exposure();
         self.radar.step(self.tick, &self.targets, Some(&exposure));
         self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), Some(&exposure));
@@ -513,6 +568,7 @@ impl Sim {
         }
         let mut ground = Vec::new();
         let mut air = Vec::new();
+        let mut log = Vec::new();
         for &(_, e) in self.stores.events.recent(now, 0) {
             match e {
                 WeaponEvent::Photo { target: Some(i), .. } => {
@@ -522,20 +578,30 @@ impl Sim {
                         if o == Some(i) && task == Task::Recon && !self.photographed[k] {
                             self.photographed[k] = true;
                             self.mission_events.push(now, MissionEvent::Photographed(k));
+                            log.push(LogEntry::Photographed(k));
                         }
                     }
                 }
                 WeaponEvent::Impact {
                     result: ImpactResult::Destroyed { target: i, .. } | ImpactResult::Damaged(i),
                     ..
-                } => ground.push(i),
+                } => {
+                    ground.push(i);
+                    if !self.targets[i].is_intact() {
+                        log.push(LogEntry::Destroyed(i));
+                    }
+                }
                 WeaponEvent::FighterHit { fighter, .. } => air.push(fighter),
+                WeaponEvent::AircraftHit { .. } => log.push(LogEntry::Hit),
                 _ => {}
             }
         }
         for &(_, e) in self.gun.events.recent(now, 0) {
             match e {
-                GunEvent::Destroyed(i) => ground.push(i),
+                GunEvent::Destroyed(i) => {
+                    ground.push(i);
+                    log.push(LogEntry::Destroyed(i));
+                }
                 GunEvent::AirHit(f) => air.push(f),
                 GunEvent::Empty => {}
             }
@@ -546,6 +612,64 @@ impl Sim {
         {
             self.roe_violations += 1;
             self.mission_events.push(now, MissionEvent::RoeViolation);
+            log.push(LogEntry::RoeViolation);
+        }
+        for &(_, e) in self.radar.events.recent(now, 0) {
+            if let RadarEvent::Alert { site, level: 3 } = e {
+                log.push(LogEntry::RadarId(self.radar.sites[site].target));
+            }
+        }
+        for &(_, e) in self.fighters.events.recent(now, 0) {
+            match e {
+                FighterEvent::Contact { kind } => log.push(LogEntry::FighterContact(kind)),
+                FighterEvent::Destroyed { kind } => log.push(LogEntry::FighterKill(kind)),
+                FighterEvent::GunHit { .. } => log.push(LogEntry::Hit),
+                _ => {}
+            }
+        }
+        // Wegpunkte der Route (ohne Start- und Landeplatz) beim ersten Mal.
+        if self.status == Status::Flying {
+            let p = self.aircraft.position;
+            for k in 1..self.route.len().saturating_sub(1) {
+                let sp = &self.route[k];
+                let reached = self.log.iter().any(|(_, e)| *e == LogEntry::Waypoint(k));
+                if !reached && (sp.north - p.x).hypot(sp.east - p.y) < WAYPOINT_REACHED_M {
+                    log.push(LogEntry::Waypoint(k));
+                }
+            }
+        }
+        self.log.extend(log.into_iter().map(|e| (now, e)));
+    }
+
+    /// Flugprotokoll (M-032).
+    pub fn log(&self) -> &[(u64, LogEntry)] {
+        &self.log
+    }
+
+    /// Ein Protokolleintrag als Text (Ergebnistafel, Nachbesprechung).
+    pub fn log_text(&self, e: LogEntry) -> String {
+        let name = |i: usize| self.targets[i].name;
+        let role = |i: usize| match self.targets[i].role {
+            TargetRole::Primary => "PRIMARY ",
+            TargetRole::Secondary => "SECONDARY ",
+            TargetRole::None if self.targets[i].civilian => "CIVILIAN ",
+            TargetRole::None => "",
+        };
+        match e {
+            LogEntry::Takeoff => "TAKEOFF".into(),
+            LogEntry::Waypoint(k) => format!("WAYPOINT {} {}", k + 1, self.route[k].name),
+            LogEntry::RadarId(i) => format!("RADAR ID - {}", name(i)),
+            LogEntry::FighterContact(kind) => format!("{} RADAR CONTACT", kind.spec().label),
+            LogEntry::Destroyed(i) => format!("{}{} DESTROYED", role(i), name(i)),
+            LogEntry::Photographed(0) => "PRIMARY PHOTOGRAPHED".into(),
+            LogEntry::Photographed(_) => "SECONDARY PHOTOGRAPHED".into(),
+            LogEntry::FighterKill(kind) => format!("{} SHOT DOWN", kind.spec().label),
+            LogEntry::Hit => "AIRCRAFT HIT".into(),
+            LogEntry::RoeViolation => "ROE VIOLATION".into(),
+            LogEntry::Landed(side) => format!("LANDED - {}", side.label()),
+            LogEntry::Ejected { side, survived: true } => format!("EJECTED - {}", side.label()),
+            LogEntry::Ejected { .. } => "EJECTION FAILED".into(),
+            LogEntry::Crashed(cause) => format!("CRASHED - {}", cause.label()),
         }
     }
 
@@ -980,10 +1104,45 @@ impl Sim {
         a.height_agl_m = (a.altitude() - ground - self.spec.gear_height_m).max(0.0);
     }
 
+    /// Schleudersitz: gelingt bis [`EJECT_MAX_TAS_MPS`] und
+    /// [`EJECT_MAX_ANGLE_RAD`] Quer- und Längsneigung; das Gebiet entscheidet
+    /// über Rettung, Zwischenfall oder Gefangenschaft.
+    fn eject(&mut self) {
+        let (_, pitch, roll) = self.aircraft.attitude.to_euler();
+        let survived = self.aero.tas <= EJECT_MAX_TAS_MPS
+            && roll.abs() <= EJECT_MAX_ANGLE_RAD
+            && pitch.abs() <= EJECT_MAX_ANGLE_RAD;
+        let side = self.territory(self.aircraft.position);
+        self.status = Status::Ejected { tick: self.tick, side, survived };
+        self.log.push((self.tick, LogEntry::Ejected { side, survived }));
+    }
+
+    /// Nach einem Flug auf einer Bahn zum Stehen gekommen: Missionsende.
+    fn check_landed(&mut self) {
+        let a = &self.aircraft;
+        if self.status != Status::Flying {
+            return;
+        }
+        if !a.on_ground {
+            if !self.has_flown {
+                self.log.push((self.tick, LogEntry::Takeoff));
+            }
+            self.has_flown = true;
+        } else if self.has_flown
+            && a.velocity.length() < STOPPED_SPEED
+            && self.terrain.runway_at(a.position.x, a.position.y).is_some()
+        {
+            let side = self.territory(a.position);
+            self.status = Status::Landed { tick: self.tick, side };
+            self.log.push((self.tick, LogEntry::Landed(side)));
+        }
+    }
+
     fn crash(&mut self, cause: CrashCause) {
         let p = self.aircraft.position;
         let ground = self.terrain.elevation(p.x, p.y);
         self.status = Status::Crashed { tick: self.tick, cause };
+        self.log.push((self.tick, LogEntry::Crashed(cause)));
         self.aircraft.position.z = -ground;
         self.aircraft.velocity = DVec3::ZERO;
         self.aircraft.body_rates = DVec3::ZERO;

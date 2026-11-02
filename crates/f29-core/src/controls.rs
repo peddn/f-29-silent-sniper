@@ -50,6 +50,8 @@ pub mod weapon_flags {
     /// die Art seines Modus (AA, NAV, AG).
     pub const PICK_AIR: u16 = 1 << 9;
     pub const PICK_RUNWAY: u16 = 1 << 10;
+    /// Schleudersitz (Flanke, M-032).
+    pub const EJECT: u16 = 1 << 11;
 }
 
 /// Ein Tick Steuereingabe, quantisiert.

@@ -4,7 +4,7 @@
 //! die Startbedingungen exakt erhalten bleiben):
 //!
 //! ```text
-//! F29REPLAY 10
+//! F29REPLAY 11
 //! seed 3881
 //! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
 //! loadout <fall,chute,lgb,agm|auto>
@@ -30,7 +30,7 @@ use crate::weapons::Loadout;
 use f29_world::Theater;
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 10";
+pub const MAGIC: &str = "F29REPLAY 11";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replay {

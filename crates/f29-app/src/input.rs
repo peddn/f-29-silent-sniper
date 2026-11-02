@@ -202,6 +202,10 @@ pub(crate) fn flight_input(keys: Res<ButtonInput<KeyCode>>, time: Res<Time>, mut
             pilot.weapons |= flag;
         }
     }
+    // Schleudersitz: Strg+E (M-032)
+    if keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) && keys.just_pressed(KeyCode::KeyE) {
+        pilot.weapons |= weapon_flags::EJECT;
+    }
 }
 
 fn hotkeys(

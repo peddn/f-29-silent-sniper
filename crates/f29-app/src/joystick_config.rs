@@ -81,10 +81,11 @@ pub enum Action {
     View,
     Pause,
     TimeWarp,
+    Eject,
 }
 
 impl Action {
-    pub const ALL: [(Action, &'static str); 26] = [
+    pub const ALL: [(Action, &'static str); 27] = [
         (Action::Gun, "gun"),
         (Action::Fire, "fire"),
         (Action::NextWeapon, "next_weapon"),
@@ -111,6 +112,7 @@ impl Action {
         (Action::View, "view"),
         (Action::Pause, "pause"),
         (Action::TimeWarp, "time_warp"),
+        (Action::Eject, "eject"),
     ];
 
     pub fn name(self) -> &'static str {

@@ -83,18 +83,24 @@ fn ladder_moves_down_when_nose_goes_up() {
     assert!(horizon_y(&fd) < c[1] - 0.01);
 }
 
+/// Missionsende (M-032): Die Ergebnistafel ersetzt das HUD – Absturz rot,
+/// Landung auf eigenem Gebiet in HUD-Farbe.
 #[test]
-fn crash_screen_replaces_hud() {
-    let mut fd = sample();
-    fd.warnings.crashed = true;
+fn mission_end_replaces_hud() {
+    use f29_core::{CrashCause, Side, Status};
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
-    let dl = build(
-        &fd,
-        &layout,
-        &HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() },
-        None,
-    );
-    assert!(dl.lines.iter().all(|l| l.ink == Ink::HudWarning));
+    let opts =
+        HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() };
+    let flying = build(&sample(), &layout, &opts, None).lines.len();
+    let end = |status: Status| {
+        let fd = f29_core::FlightData { status, debrief: vec!["00:10 TAKEOFF".into()], ..sample() };
+        build(&fd, &layout, &opts, None).lines
+    };
+    let crashed = end(Status::Crashed { tick: 1, cause: CrashCause::Terrain });
+    assert!(crashed.len() < flying, "Tafel statt HUD");
+    assert!(crashed.iter().any(|l| l.ink == Ink::HudWarning));
+    let landed = end(Status::Landed { tick: 1, side: Side::Friendly });
+    assert!(landed.iter().all(|l| l.ink != Ink::HudWarning), "gelungene Landung nicht rot");
 }
 
 #[test]

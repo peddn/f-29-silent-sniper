@@ -19,6 +19,7 @@ pub mod envelope;
 pub mod events;
 pub mod fighters;
 pub mod flight;
+pub mod flightlog;
 pub mod gun;
 pub mod math;
 pub mod mission;

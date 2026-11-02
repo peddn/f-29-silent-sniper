@@ -227,6 +227,8 @@ pub struct FlightData {
     pub objectives: [Option<(Task, bool)>; 2],
     /// Verletzungen der Einsatzregeln bisher.
     pub roe_violations: u32,
+    /// Nach dem Missionsende: das Flugprotokoll als Zeilen „MM:SS TEXT“.
+    pub debrief: Vec<String>,
     /// Jüngstes Auslösen (Tick, Art; die Kamera für ein Foto) – für den Klang.
     pub last_release: Option<(u64, WeaponKind)>,
     /// Kamera gewählt (M-032): Fotos bisher und ob das gewählte Ziel jetzt
@@ -819,6 +821,17 @@ impl Sim {
                     .map(|_| (self.mission.tasks[k], self.objective_done(k)))
             }),
             roe_violations: self.roe_violations,
+            debrief: if self.status == Status::Flying {
+                Vec::new()
+            } else {
+                self.log
+                    .iter()
+                    .map(|&(tick, e)| {
+                        let s = (tick as f64 * DT) as u64;
+                        format!("{:02}:{:02} {}", s / 60, s % 60, self.log_text(e))
+                    })
+                    .collect()
+            },
             last_release: self.stores.events.iter().rev().find_map(|&(tick, e)| match e {
                 WeaponEvent::Released { kind, .. } => Some((tick, kind)),
                 WeaponEvent::Photo { .. } => Some((tick, WeaponKind::Camera)),
