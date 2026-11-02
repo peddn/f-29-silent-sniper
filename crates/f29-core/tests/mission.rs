@@ -166,7 +166,8 @@ fn camera_needs_open_bay_and_flight() {
 }
 
 /// Schleudersitz (Strg+E): bis 450 kt gerettet – das Gebiet entscheidet –,
-/// schneller tödlich; das Protokoll hält es fest.
+/// schneller tödlich. Der Pilot fliegt mit dem Sitz nach oben, sinkt am
+/// Schirm; das Flugzeug stürzt allein ab; die Mission endet am Boden.
 #[test]
 fn ejection_depends_on_speed_and_territory() {
     let eject = |speed: f64| {
@@ -174,9 +175,39 @@ fn ejection_depends_on_speed_and_territory() {
         step(&mut sim, 0, weapon_flags::EJECT);
         sim
     };
-    let slow = eject(200.0);
-    let side = slow.territory(slow.aircraft().position);
-    assert_eq!(slow.status(), f29_core::Status::Ejected { tick: 1, side, survived: true });
-    assert!(slow.flight_data().debrief.iter().any(|l| l.contains("EJECTED")));
-    assert!(matches!(eject(260.0).status(), f29_core::Status::Ejected { survived: false, .. }));
+    let mut sim = eject(200.0);
+    let side = sim.territory(sim.aircraft().position);
+    assert_eq!(sim.status(), f29_core::Status::Ejected { tick: 1, side, survived: true });
+    assert!(!sim.mission_over() && sim.flight_data().debrief.is_empty(), "am Schirm noch kein Ende");
+    let start = sim.pilot().unwrap().position;
+    let mut peak = start.z;
+    let mut wreck = None;
+    for _ in 0..ticks(900.0) {
+        step(&mut sim, 0, 0);
+        peak = peak.min(sim.pilot().unwrap().position.z);
+        wreck = wreck.or(sim.wreck_tick());
+        if sim.mission_over() {
+            break;
+        }
+        let fd = sim.flight_data();
+        if fd.pilot.unwrap().chute >= 1.0 {
+            let sink = sim.pilot().unwrap().velocity.z;
+            assert!((4.0..8.0).contains(&sink) || fd.pilot.unwrap().seconds < 6.0, "Sinken {sink:.1} m/s");
+        }
+        assert!(!sim.interrupts_time_warp(), "Zeitraffer am Schirm erlaubt");
+    }
+    assert!(peak < start.z - 10.0, "Sitz schießt nach oben");
+    assert!(sim.mission_over(), "Pilot nicht unten");
+    assert!(wreck.is_some(), "Flugzeug nicht abgestürzt");
+    let debrief = sim.flight_data().debrief;
+    for line in ["EJECTED", "AIRCRAFT LOST", "PILOT ON THE GROUND"] {
+        assert!(debrief.iter().any(|l| l.contains(line)), "{line}: {debrief:?}");
+    }
+
+    let mut failed = eject(260.0);
+    assert!(matches!(failed.status(), f29_core::Status::Ejected { survived: false, .. }));
+    assert!(!failed.mission_over(), "Ausschuss noch zu sehen");
+    fly(&mut failed, 1.6, 0, 0);
+    assert!(failed.mission_over());
+    assert_eq!(failed.flight_data().pilot.unwrap().chute, 0.0, "kein Schirm");
 }

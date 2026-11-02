@@ -93,7 +93,12 @@ fn mission_end_replaces_hud() {
         HudOptions { show_panel: false, hud_mode: crate::HudMode::AirToGround, ..HudOptions::default() };
     let flying = build(&sample(), &layout, &opts, None).lines.len();
     let end = |status: Status| {
-        let fd = f29_core::FlightData { status, debrief: vec!["00:10 TAKEOFF".into()], ..sample() };
+        let fd = f29_core::FlightData {
+            status,
+            mission_over: true,
+            debrief: vec!["00:10 TAKEOFF".into()],
+            ..sample()
+        };
         build(&fd, &layout, &opts, None).lines
     };
     let crashed = end(Status::Crashed { tick: 1, cause: CrashCause::Terrain });
@@ -879,4 +884,25 @@ fn wide_view_drops_the_panel_at_the_same_scale() {
     let fd = sample();
     let lines = |l: &ScreenLayout| build(&fd, l, &HudOptions::default(), None).lines.len();
     assert!(lines(&wide) < lines(&cockpit), "Brett gezeichnet");
+}
+
+/// Ausgestiegen: kein HUD, nur der Schirm, sobald er sich öffnet.
+#[test]
+fn ejected_pilot_sees_only_the_chute() {
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let opts = HudOptions { show_panel: false, ..HudOptions::default() };
+    let with = |chute: f64| {
+        let pilot = f29_core::PilotInfo {
+            position: f29_core::DVec3::ZERO,
+            heading: 0.0,
+            seconds: 3.0,
+            chute,
+            speed: 6.0,
+        };
+        let fd = f29_core::FlightData { pilot: Some(pilot), ..sample() };
+        build(&fd, &layout, &opts, None).lines.len()
+    };
+    assert_eq!(with(0.0), 0, "im Sitz: nichts");
+    let chute = with(1.0);
+    assert!(chute > 10 && chute < build(&sample(), &layout, &opts, None).lines.len(), "{chute}");
 }

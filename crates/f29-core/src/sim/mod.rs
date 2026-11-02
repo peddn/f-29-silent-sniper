@@ -261,6 +261,29 @@ impl Status {
 pub const EJECT_MAX_TAS_MPS: f64 = 231.5;
 /// … und bis zu dieser Quer- bzw. Längsneigung in jede Richtung (rad, 60°).
 pub const EJECT_MAX_ANGLE_RAD: f64 = std::f64::consts::FRAC_PI_3;
+/// Der Sitz stößt den Piloten mit dieser Geschwindigkeit (m/s) nach oben
+/// aus dem Flugzeug; bis zum Öffnen des Schirms bremst ihn die Luft.
+const SEAT_PUSH_MPS: f64 = 30.0;
+const SEAT_DRAG: f64 = 0.004;
+/// Der Schirm öffnet sich nach so vielen Sekunden; der Pilot sinkt dann
+/// mit dieser Geschwindigkeit (m/s).
+pub const CHUTE_DELAY_S: f64 = 2.0;
+const CHUTE_SINK_MPS: f64 = 6.0;
+/// Nach einem misslungenen Ausstieg endet die Mission nach so vielen
+/// Sekunden (man sieht noch den Ausschuss).
+const FAILED_EJECTION_S: f64 = 1.5;
+
+/// Der ausgestiegene Pilot (M-032): Sitz, dann Fallschirm.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Pilot {
+    pub position: DVec3,
+    pub velocity: DVec3,
+    /// Kurs beim Ausstieg (rad).
+    pub heading: f64,
+    pub ejected_tick: u64,
+    pub landed_tick: Option<u64>,
+}
+
 /// Ein Wegpunkt gilt in diesem Umkreis als erreicht (m).
 const WAYPOINT_REACHED_M: f64 = 3_000.0;
 
@@ -347,6 +370,10 @@ pub struct Sim {
     log: Vec<(u64, LogEntry)>,
     /// Schon in der Luft gewesen (Landung beendet dann die Mission).
     has_flown: bool,
+    /// Nach dem Ausstieg: der Pilot; und wann das verlassene Flugzeug
+    /// aufschlug.
+    pilot: Option<Pilot>,
+    wreck_tick: Option<u64>,
 }
 
 /// Gewähltes Ziel je Zielart; der HUD-Modus bestimmt, welche Auswahl die
@@ -453,6 +480,8 @@ impl Sim {
             roe_violations: 0,
             log: Vec::new(),
             has_flown: !aircraft_on_ground,
+            pilot: None,
+            wreck_tick: None,
             mission_events: EventLog::default(),
         };
         sim.ground_seen = vec![Seen::default(); sim.targets.len()];
@@ -513,6 +542,8 @@ impl Sim {
             self.gun.trigger(self.tick, false, DVec3::ZERO, DVec3::ZERO, DQuat::IDENTITY, DT);
             self.radar.step(self.tick, &self.targets, None);
             self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), None);
+            self.step_unmanned();
+            self.step_pilot();
             self.update_mission();
             return;
         }
@@ -669,6 +700,8 @@ impl Sim {
             LogEntry::Landed(side) => format!("LANDED - {}", side.label()),
             LogEntry::Ejected { side, survived: true } => format!("EJECTED - {}", side.label()),
             LogEntry::Ejected { .. } => "EJECTION FAILED".into(),
+            LogEntry::PilotDown => "PILOT ON THE GROUND".into(),
+            LogEntry::AircraftLost => "AIRCRAFT LOST".into(),
             LogEntry::Crashed(cause) => format!("CRASHED - {}", cause.label()),
         }
     }
@@ -814,8 +847,11 @@ impl Sim {
     /// Alarmstufe; dazu Treffer und Ende des Flugs.
     pub fn interrupts_time_warp(&self) -> bool {
         let now = self.tick;
+        if self.status != Status::Flying {
+            // Am Schirm darf gerafft werden; das Ende unterbricht.
+            return self.mission_over();
+        }
         self.aircraft.gear > 0.0
-            || self.status != Status::Flying
             || self.stores.events.iter().any(|(t, e)| {
                 *t == now
                     && matches!(
@@ -1112,9 +1148,84 @@ impl Sim {
         let survived = self.aero.tas <= EJECT_MAX_TAS_MPS
             && roll.abs() <= EJECT_MAX_ANGLE_RAD
             && pitch.abs() <= EJECT_MAX_ANGLE_RAD;
-        let side = self.territory(self.aircraft.position);
+        let a = &self.aircraft;
+        let side = self.territory(a.position);
         self.status = Status::Ejected { tick: self.tick, side, survived };
         self.log.push((self.tick, LogEntry::Ejected { side, survived }));
+        let up = a.attitude.rotate(DVec3::new(0.0, 0.0, -1.0));
+        self.pilot = Some(Pilot {
+            position: a.position + up * 2.0,
+            velocity: a.velocity + up * SEAT_PUSH_MPS,
+            heading: a.attitude.to_euler().0,
+            ejected_tick: self.tick,
+            landed_tick: None,
+        });
+    }
+
+    /// Das verlassene Flugzeug kippt ab und stürzt in einer steilen
+    /// Spirale ab; am Boden bleibt das Wrack liegen.
+    fn step_unmanned(&mut self) {
+        if self.pilot.is_none() || self.wreck_tick.is_some() || self.aircraft.on_ground {
+            return;
+        }
+        let controls = ControlFrame::from_analog(-0.4, 0.7, 0.0, self.aircraft.engine, 0);
+        flight::step(&self.spec, &mut self.aircraft, &controls, DVec3::ZERO, DT);
+        let a = &mut self.aircraft;
+        let ground = self.terrain.elevation(a.position.x, a.position.y);
+        if !a.is_finite() || a.altitude() - ground <= self.spec.belly_height_m {
+            a.position.z = -ground;
+            a.velocity = DVec3::ZERO;
+            a.body_rates = DVec3::ZERO;
+            self.wreck_tick = Some(self.tick);
+            self.log.push((self.tick, LogEntry::AircraftLost));
+        }
+    }
+
+    /// Sitz: Ausschuss nach oben, die Luft bremst; dann der Schirm mit
+    /// gleichmäßigem Sinken, bis der Pilot den Boden erreicht.
+    fn step_pilot(&mut self) {
+        let Some(p) = self.pilot.as_mut().filter(|p| p.landed_tick.is_none()) else {
+            return;
+        };
+        let t = (self.tick - p.ejected_tick) as f64 * DT;
+        if t < CHUTE_DELAY_S {
+            let drag = p.velocity * (p.velocity.length() * SEAT_DRAG);
+            p.velocity += (DVec3::new(0.0, 0.0, crate::atmosphere::G0) - drag) * DT;
+        } else {
+            let k = 1.0 - (-DT / 0.7).exp();
+            p.velocity += (DVec3::new(0.0, 0.0, CHUTE_SINK_MPS) - p.velocity) * k;
+        }
+        p.position += p.velocity * DT;
+        let ground = self.terrain.elevation(p.position.x, p.position.y);
+        if t > 0.5 && -p.position.z <= ground {
+            p.position.z = -ground;
+            p.velocity = DVec3::ZERO;
+            p.landed_tick = Some(self.tick);
+            self.log.push((self.tick, LogEntry::PilotDown));
+        }
+    }
+
+    /// Der ausgestiegene Pilot, falls es einen gibt.
+    pub fn pilot(&self) -> Option<&Pilot> {
+        self.pilot.as_ref()
+    }
+
+    /// Ist die Mission vorbei (Ergebnistafel)? Nach einem Ausstieg erst, wenn
+    /// der Pilot unten ist – nach einem misslungenen kurz nach dem Ausschuss.
+    pub fn mission_over(&self) -> bool {
+        match (self.status, self.pilot) {
+            (Status::Flying, _) => false,
+            (Status::Ejected { survived: true, .. }, Some(p)) => p.landed_tick.is_some(),
+            (Status::Ejected { .. }, Some(p)) => {
+                (self.tick - p.ejected_tick) as f64 * DT >= FAILED_EJECTION_S
+            }
+            _ => true,
+        }
+    }
+
+    /// Wann das verlassene Flugzeug aufschlug (Explosion, Klang).
+    pub fn wreck_tick(&self) -> Option<u64> {
+        self.wreck_tick
     }
 
     /// Nach einem Flug auf einer Bahn zum Stehen gekommen: Missionsende.

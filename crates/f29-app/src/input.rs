@@ -2,7 +2,7 @@
 
 use crate::mfd::MfdView;
 use crate::sim::{SimState, SimSystems};
-use crate::view::{ViewMode, ViewSettings};
+use crate::view::{CockpitLook, ViewMode, ViewSettings};
 use bevy::app::AppExit;
 use bevy::input::keyboard::Key;
 use bevy::prelude::*;
@@ -170,13 +170,15 @@ pub(crate) fn flight_input(keys: Res<ButtonInput<KeyCode>>, time: Res<Time>, mut
     if keys.just_pressed(KeyCode::KeyV) {
         pilot.radar_toggle = true;
     }
+    // (mit Strg: Blick aus dem Cockpit, siehe `hotkeys`)
+    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
     for (key, dir) in [
         (KeyCode::KeyI, LookDir::Forward),
         (KeyCode::KeyL, LookDir::Right),
         (KeyCode::KeyK, LookDir::Aft),
         (KeyCode::KeyJ, LookDir::Left),
     ] {
-        if keys.just_pressed(key) {
+        if keys.just_pressed(key) && !ctrl {
             pilot.look = dir.code();
         }
     }
@@ -236,6 +238,20 @@ fn hotkeys(
     let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     if shift && keys.just_pressed(KeyCode::F1) {
         view.mode = ViewMode::Cockpit;
+        view.look = CockpitLook::Front;
+    }
+    // Blick aus dem Cockpit: Strg+I/J/K/L vorn/links/hinten/rechts
+    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    for (key, look) in [
+        (KeyCode::KeyI, CockpitLook::Front),
+        (KeyCode::KeyJ, CockpitLook::Left),
+        (KeyCode::KeyK, CockpitLook::Back),
+        (KeyCode::KeyL, CockpitLook::Right),
+    ] {
+        if ctrl && keys.just_pressed(key) {
+            view.mode = ViewMode::Cockpit;
+            view.look = look;
+        }
     }
     if shift && keys.just_pressed(KeyCode::F2) {
         view.mode = ViewMode::Chase;

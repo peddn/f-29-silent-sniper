@@ -1807,6 +1807,14 @@ Format jedes Eintrags:
     feindlich: gefangen). **Schleudersitz** Strg+E: gerettet bis 450 kt und
     60° Quer- bzw. Längsneigung in jede Richtung, sonst tödlich; danach
     wieder das Gebiet. Absturz wie bisher.
+  - **Ausstieg in Bildern:** HUD und Brett verschwinden, die Kamera hängt am
+    Piloten. Der Sitz stößt ihn mit 30 m/s nach oben, die Luft bremst, er
+    taumelt; nach 2 s öffnet sich der Schirm (Kappe und Leinen oben im
+    Bild), dann sinkt er mit 6 m/s und pendelt leicht (kein Wind). Das
+    verlassene Flugzeug kippt ab und stürzt in einer Spirale ab (Rauch,
+    Explosion). Die Mission endet erst, wenn der Pilot unten ist; am Schirm
+    ist Zeitraffer erlaubt. Ein misslungener Ausstieg zeigt den Ausschuss
+    und endet nach 1,5 s. Alles in der Simulation gerechnet (Replays).
   - Ergebnistafel statt HUD: Ausgang, Auftrag je Ziel, Protokoll; R startet
     neu.
 - **Status:** Auftragsarten, Kamera, Beladung, Flugprotokoll und Ausgang
@@ -1856,6 +1864,18 @@ Format jedes Eintrags:
   Einschalten), Raketenstart gegen das Flugzeug (SAM oder Jäger), steigende
   Alarmstufe einer Radarstellung, Treffer (Rakete oder Kanone), Ende des
   Flugs.
+- **Status:** umgesetzt (v0.3)
+
+### M-035 Blick aus dem Cockpit
+
+- **Verhalten (Original):** Tasten schalten den Blick aus dem Cockpit nach
+  vorn, links, rechts und hinten; die Kamera bleibt am Flugzeug und dreht
+  nur gegenüber dem Rumpf. Außer vorn kein HUD.
+- **Referenzstelle:** f19re `src/egkeys.c` (Ansichtstasten),
+  `src/egflight.c` (Kamerawinkel je Ansicht, HUD nur vorn).
+- **Unser Design (v0.3, Spielerentscheidungen):** Strg+I/J/K/L = vorn,
+  links, hinten, rechts (wie die Zieltasten angeordnet); das Brett mit
+  den MFDs bleibt; Shift+F1 setzt auf vorn zurück. Nur Darstellung.
 - **Status:** umgesetzt (v0.3)
 
 ### M-030 Karriere, Szenarien, Orden

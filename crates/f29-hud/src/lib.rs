@@ -124,8 +124,8 @@ pub fn build(
 ) -> DisplayList {
     let mut dl = DisplayList::new();
     let on = displays_on(fd);
-    // Der Absturzbildschirm erscheint immer.
-    if opts.show_hud && (on || fd.warnings.crashed) {
+    // Ergebnistafel und Schirm erscheinen immer.
+    if opts.show_hud && (on || fd.mission_over || fd.pilot.is_some()) {
         hud::draw(&mut dl, fd, layout, opts.hud_mode);
     }
     if opts.show_panel && layout.panel_fraction > 0.0 {

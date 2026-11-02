@@ -36,6 +36,30 @@ pub enum ViewMode {
     Chase,
 }
 
+/// Blick aus dem Cockpit (wie im Original vorn, links, rechts, hinten;
+/// Strg+I/J/K/L). Nur vorn mit HUD.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CockpitLook {
+    #[default]
+    Front,
+    Left,
+    Right,
+    Back,
+}
+
+impl CockpitLook {
+    /// Drehung um die Hochachse des Flugzeugs (rad, Y-up, links positiv).
+    fn yaw(self) -> f32 {
+        use std::f32::consts::{FRAC_PI_2, PI};
+        match self {
+            CockpitLook::Front => 0.0,
+            CockpitLook::Left => FRAC_PI_2,
+            CockpitLook::Right => -FRAC_PI_2,
+            CockpitLook::Back => PI,
+        }
+    }
+}
+
 #[derive(Resource, Debug, Clone)]
 pub struct ViewSettings {
     pub mode: ViewMode,
@@ -45,6 +69,9 @@ pub struct ViewSettings {
     pub retro: RetroMode,
     /// Weitwinkelsicht ohne Instrumentenbrett (Cockpit, Shift+F5).
     pub wide: bool,
+    pub look: CockpitLook,
+    /// Ausgestiegen: Blick des Piloten am Schirm, ohne Brett (M-032).
+    pub ejected: bool,
 }
 
 impl Default for ViewSettings {
@@ -55,6 +82,8 @@ impl Default for ViewSettings {
             hud_mode: f29_hud::HudMode::default(),
             retro: RetroMode::Full,
             wide: false,
+            look: CockpitLook::Front,
+            ejected: false,
         }
     }
 }
@@ -113,7 +142,7 @@ pub fn sky_for(night: bool) -> Color {
 
 pub fn layout_for(window: &Window, view: &ViewSettings) -> ScreenLayout {
     let aspect = window.width() / window.height().max(1.0);
-    if view.wide && view.mode == ViewMode::Cockpit {
+    if (view.wide && view.mode == ViewMode::Cockpit) || view.ejected {
         ScreenLayout::wide(aspect)
     } else {
         ScreenLayout::cockpit(aspect)
@@ -210,7 +239,7 @@ fn update_viewport(
 pub fn update_camera_and_aircraft(
     time: Res<Time>,
     state: Res<SimState>,
-    view: Res<ViewSettings>,
+    mut view: ResMut<ViewSettings>,
     mut origin: ResMut<WorldOrigin>,
     mut chase: ResMut<ChaseCamera>,
     mut camera: Single<
@@ -237,11 +266,23 @@ pub fn update_camera_and_aircraft(
 
     let (cam, retro, fog) = &mut *camera;
     fog.color = if night { night_sky_color() } else { haze_color() };
+    let pilot = state.sim.flight_data().pilot;
+    view.ejected = pilot.is_some();
+    if let Some(p) = pilot {
+        // Am Piloten: Weltursprung dort, das Flugzeug fliegt allein weiter.
+        origin.0 = p.position;
+        ac_transform.translation = place(pose.position, origin.0);
+        **ac_visibility = Visibility::Visible;
+        cam.translation = Vec3::ZERO;
+        cam.rotation = rotation(pilot_attitude(&p));
+        **retro = RetroEffect::from_mode(view.retro).with_night(night);
+        return;
+    }
     match view.mode {
         ViewMode::Cockpit => {
             **ac_visibility = Visibility::Hidden;
             cam.translation = rot * EYE_OFFSET;
-            cam.rotation = rot;
+            cam.rotation = rot * Quat::from_rotation_y(view.look.yaw());
         }
         ViewMode::Chase => {
             **ac_visibility = Visibility::Visible;
@@ -256,6 +297,16 @@ pub fn update_camera_and_aircraft(
         }
     }
     **retro = RetroEffect::from_mode(view.retro).with_night(night);
+}
+
+/// Blick des ausgestiegenen Piloten: in Flugrichtung beim Ausstieg, etwas
+/// nach unten; im Sitz taumelnd, am Schirm leicht pendelnd.
+fn pilot_attitude(p: &f29_core::PilotInfo) -> f29_core::DQuat {
+    let t = p.seconds;
+    let tumble = (1.0 - p.chute) * (-t * 0.8).exp();
+    let pitch = -0.15 + tumble * 0.5 * (t * 7.0).sin() + p.chute * 0.04 * (t * 0.9).sin();
+    let roll = tumble * 0.6 * (t * 5.0).sin() + p.chute * 0.07 * (t * 1.3).sin();
+    f29_core::DQuat::from_euler(p.heading + tumble * 0.3 * (t * 3.0).sin(), pitch, roll)
 }
 
 /// Fahrwerk zeigen, sobald es halb draußen ist.

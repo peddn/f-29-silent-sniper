@@ -40,8 +40,8 @@ pub use controls::ControlFrame;
 pub use math::{DQuat, DVec3};
 pub use sim::{
     BlastInfo, BlastKind, BombAim, CameraInfo, CrashCause, DT, DecoyInfo, FighterInfo, FlightData, GunAim,
-    GunInfo, Mark, MarkKind, MunitionInfo, PickedInfo, PingInfo, RadarSiteInfo, Sim, SimConfig, SpawnKind,
-    Stage, Status, StoresInfo, TICK_HZ, TargetInfo, ThreatInfo, ThreatSite, Touchdown, WeaponCam,
+    GunInfo, Mark, MarkKind, MunitionInfo, PickedInfo, PilotInfo, PingInfo, RadarSiteInfo, Sim, SimConfig,
+    SpawnKind, Stage, Status, StoresInfo, TICK_HZ, TargetInfo, ThreatInfo, ThreatSite, Touchdown, WeaponCam,
     WeaponMessage,
 };
 

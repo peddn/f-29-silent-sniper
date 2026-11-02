@@ -128,6 +128,9 @@ pub struct AudioInput {
     pub blast: Option<BlastCue>,
     /// Jüngstes Auslösen einer eigenen Waffe bzw. Foto.
     pub release: Option<ReleaseCue>,
+    /// Ausgestiegen: Sekunden seit dem Ausschuss und ob der Schirm offen ist
+    /// (das Triebwerk ist dann nicht mehr zu hören).
+    pub ejection: Option<(f32, bool)>,
     pub crashed: bool,
     /// Pause: alles verstummt weich.
     pub paused: bool,
@@ -135,6 +138,21 @@ pub struct AudioInput {
 
 impl AudioInput {
     pub fn from_flight(fd: &FlightData, paused: bool) -> Self {
+        let input = Self::cockpit(fd, paused);
+        match fd.pilot {
+            // Am Schirm: kein Triebwerk, keine Bordsysteme, keine Warnungen.
+            Some(p) => Self {
+                ejection: Some((p.seconds as f32, p.chute > 0.0)),
+                blast: input.blast,
+                crashed: false,
+                paused,
+                ..Self::default()
+            },
+            None => input,
+        }
+    }
+
+    fn cockpit(fd: &FlightData, paused: bool) -> Self {
         Self {
             engine: fd.engine as f32,
             running: !fd.warnings.flameout,
@@ -169,6 +187,7 @@ impl AudioInput {
                 },
             }),
             crashed: matches!(fd.status, Status::Crashed { .. }),
+            ejection: None,
             paused,
         }
     }
@@ -260,6 +279,8 @@ pub struct Synth {
     last_ping: Option<u64>,
     last_blast: Option<u64>,
     last_release: Option<u64>,
+    /// Ausstieg: Ausschuss bzw. Schirm schon erklungen.
+    eject_heard: (bool, bool),
     crashed: bool,
     pull_up_timer: f32,
     missile_timer: f32,
@@ -308,6 +329,7 @@ impl Synth {
             last_ping: None,
             last_blast: None,
             last_release: None,
+            eject_heard: (false, false),
             crashed: false,
             pull_up_timer: 0.0,
             missile_timer: 0.0,
@@ -438,6 +460,21 @@ impl Synth {
                     ReleaseSound::Shutter => self.shots.push(OneShot::Shutter { t: 0.0 }),
                 }
             }
+        }
+        // Ausstieg: Knall und Fahrtwind, dann der Schirm mit Ruck und Flattern.
+        match input.ejection {
+            Some((_, chute)) => {
+                if !self.eject_heard.0 && !first {
+                    self.shots.push(OneShot::Thump { t: 0.0, freq: 55.0, gain: 0.7, decay: 0.12 });
+                    self.shots.push(OneShot::Hiss { t: 0.0, gain: 0.35, dur: 2.0, lp: OnePole::default() });
+                }
+                if chute && !self.eject_heard.1 && !first {
+                    self.shots.push(OneShot::Thump { t: 0.0, freq: 40.0, gain: 0.5, decay: 0.1 });
+                    self.shots.push(OneShot::Hiss { t: 0.0, gain: 0.25, dur: 0.5, lp: OnePole::default() });
+                }
+                self.eject_heard = (true, chute);
+            }
+            None => self.eject_heard = (false, false),
         }
         if input.crashed && !self.crashed && !first {
             self.shots.push(OneShot::Crash { t: 0.0, lp: OnePole::default() });

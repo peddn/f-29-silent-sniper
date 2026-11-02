@@ -133,6 +133,17 @@ pub struct CameraInfo {
     pub in_frame: bool,
 }
 
+/// Der ausgestiegene Pilot (Anzeige, Klang).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PilotInfo {
+    pub position: DVec3,
+    pub heading: f64,
+    pub seconds: f64,
+    /// Fallschirm offen 0..1.
+    pub chute: f64,
+    pub speed: f64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct FlightData {
     pub tick: u64,
@@ -227,8 +238,13 @@ pub struct FlightData {
     pub objectives: [Option<(Task, bool)>; 2],
     /// Verletzungen der Einsatzregeln bisher.
     pub roe_violations: u32,
+    /// Mission vorbei: Ergebnistafel (nach einem Ausstieg erst am Boden).
+    pub mission_over: bool,
     /// Nach dem Missionsende: das Flugprotokoll als Zeilen „MM:SS TEXT“.
     pub debrief: Vec<String>,
+    /// Ausgestiegener Pilot: Ort, Kurs beim Ausstieg, Sekunden seither und
+    /// Schirm offen 0..1.
+    pub pilot: Option<PilotInfo>,
     /// Jüngstes Auslösen (Tick, Art; die Kamera für ein Foto) – für den Klang.
     pub last_release: Option<(u64, WeaponKind)>,
     /// Kamera gewählt (M-032): Fotos bisher und ob das gewählte Ziel jetzt
@@ -821,7 +837,19 @@ impl Sim {
                     .map(|_| (self.mission.tasks[k], self.objective_done(k)))
             }),
             roe_violations: self.roe_violations,
-            debrief: if self.status == Status::Flying {
+            mission_over: self.mission_over(),
+            pilot: self.pilot().map(|p| {
+                let seconds = (self.tick - p.ejected_tick) as f64 * DT;
+                let survived = matches!(self.status, Status::Ejected { survived: true, .. });
+                PilotInfo {
+                    position: p.position,
+                    heading: p.heading,
+                    seconds,
+                    chute: if survived { ((seconds - CHUTE_DELAY_S) / 0.6).clamp(0.0, 1.0) } else { 0.0 },
+                    speed: p.velocity.length(),
+                }
+            }),
+            debrief: if !self.mission_over() {
                 Vec::new()
             } else {
                 self.log
@@ -958,21 +986,36 @@ impl Sim {
     /// Fehlschuss (auch feindliche Raketen) oder Treffer am eigenen Flugzeug.
     fn blast(&self) -> Option<BlastInfo> {
         let recent = self.tick.saturating_sub((0.5 / DT) as u64);
-        self.stores.events.iter().rev().take_while(|(t, _)| *t >= recent).find_map(|&(tick, e)| {
-            let (id, kind, at) = match e {
-                WeaponEvent::Impact { id, position, result, .. } => {
-                    let hit = matches!(result, ImpactResult::Destroyed { .. } | ImpactResult::Damaged(_));
-                    (id, if hit { BlastKind::TargetHit } else { BlastKind::Miss }, position)
-                }
-                WeaponEvent::AircraftHit { id, .. } => (id, BlastKind::AircraftHit, self.aircraft.position),
-                WeaponEvent::FighterHit { id, fighter, .. } => {
-                    (id, BlastKind::TargetHit, self.fighters.list[fighter].position)
-                }
-                _ => return None,
-            };
-            let distance_m = (at - self.aircraft.position).length();
-            Some(BlastInfo { id: tick << 16 | u64::from(id & 0xFFFF), kind, distance_m })
-        })
+        let weapons =
+            self.stores.events.iter().rev().take_while(|(t, _)| *t >= recent).find_map(|&(tick, e)| {
+                let (id, kind, at) = match e {
+                    WeaponEvent::Impact { id, position, result, .. } => {
+                        let hit = matches!(result, ImpactResult::Destroyed { .. } | ImpactResult::Damaged(_));
+                        (id, if hit { BlastKind::TargetHit } else { BlastKind::Miss }, position)
+                    }
+                    WeaponEvent::AircraftHit { id, .. } => {
+                        (id, BlastKind::AircraftHit, self.aircraft.position)
+                    }
+                    WeaponEvent::FighterHit { id, fighter, .. } => {
+                        (id, BlastKind::TargetHit, self.fighters.list[fighter].position)
+                    }
+                    _ => return None,
+                };
+                let distance_m = (at - self.listener()).length();
+                Some(BlastInfo { id: tick << 16 | u64::from(id & 0xFFFF), kind, distance_m })
+            });
+        // Aufschlag des verlassenen Flugzeugs
+        let wreck = self.wreck_tick().filter(|&t| t >= recent).map(|t| BlastInfo {
+            id: t << 16 | 0xFFFF,
+            kind: BlastKind::TargetHit,
+            distance_m: (self.aircraft.position - self.listener()).length(),
+        });
+        wreck.or(weapons)
+    }
+
+    /// Wo gehört wird: im Flugzeug bzw. beim ausgestiegenen Piloten.
+    fn listener(&self) -> DVec3 {
+        self.pilot().map_or(self.aircraft.position, |p| p.position)
     }
 
     /// Zielhilfe aus der zuletzt berechneten Aufschlagvorhersage.

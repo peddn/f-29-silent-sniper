@@ -34,5 +34,9 @@ pub enum LogEntry {
         side: Side,
         survived: bool,
     },
+    /// Der Pilot ist am Schirm gelandet.
+    PilotDown,
+    /// Das verlassene Flugzeug ist aufgeschlagen.
+    AircraftLost,
     Crashed(CrashCause),
 }

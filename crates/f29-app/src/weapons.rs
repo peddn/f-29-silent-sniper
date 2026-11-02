@@ -80,6 +80,8 @@ struct WeaponVisuals {
     flare: Handle<StandardMaterial>,
     /// Täuschkörper, die schon eine Wolke haben.
     decoys_seen: Vec<u32>,
+    /// Aufschlag des verlassenen Flugzeugs schon gezeigt (Tick).
+    wreck_shown: Option<u64>,
 }
 
 #[derive(Component)]
@@ -218,9 +220,13 @@ fn spawn_puffs(mut commands: Commands, state: Res<SimState>, mut visuals: ResMut
     // dicker und länger stehend.
     let missiles = state.sim.weapons_in_flight().iter().filter(|w| w.kind.spec().cruise_mps > 0.0);
     let falling = state.sim.fighters().list.iter().filter(|f| f.mode == f29_core::fighters::Mode::Falling);
+    // Das verlassene eigene Flugzeug raucht ebenfalls bis zum Aufschlag.
+    let unmanned = (state.sim.pilot().is_some() && state.sim.wreck_tick().is_none())
+        .then(|| (smoke_key(true, u32::MAX), state.sim.aircraft().position, SMOKE_M * 2.0, SMOKE_S * 2.5));
     let sources: Vec<(u64, DVec3, f32, f32)> = missiles
         .map(|w| (smoke_key(false, w.id), w.position, SMOKE_M, SMOKE_S))
         .chain(falling.map(|f| (smoke_key(true, f.id), f.position, SMOKE_M * 2.0, SMOKE_S * 2.5)))
+        .chain(unmanned)
         .collect();
     visuals.smoke_at.retain(|k, _| sources.iter().any(|s| s.0 == *k));
     for (key, at, radius, life) in sources {
@@ -379,6 +385,23 @@ fn spawn_blasts(
         }
     }
     visuals.last_event_tick = newest;
+    // Aufschlag des verlassenen Flugzeugs: großer Blitz.
+    let wreck = state.sim.wreck_tick();
+    if wreck.is_some() && wreck != visuals.wreck_shown {
+        commands.spawn((
+            Mesh3d(visuals.sphere.clone()),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: color(15),
+                emissive: LinearRgba::rgb(4.0, 1.6, 0.4),
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            })),
+            Transform::from_scale(Vec3::splat(0.1)),
+            Blast { at: state.sim.aircraft().position, age: 0.0, radius: BLAST_RADIUS_M * 2.0 },
+        ));
+    }
+    visuals.wreck_shown = wreck;
 }
 
 fn animate_blasts(

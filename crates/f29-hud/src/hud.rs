@@ -67,8 +67,13 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
     // hoch, damit Daten und Symbole nach außen rücken (v0.2.8).
     let glass = Rect::from_center(c, [vh * 0.56, vh * 0.38]);
 
-    if fd.status != f29_core::Status::Flying {
+    if fd.mission_over {
         mission_end(dl, fd, &glass);
+        return;
+    }
+    // Ausgestiegen: kein HUD, oben der Schirm mit seinen Leinen.
+    if let Some(p) = fd.pilot {
+        parachute(dl, &view, p.chute as f32);
         return;
     }
 
@@ -487,6 +492,29 @@ fn picked_target(dl: &mut DisplayList, t: Option<&PickedInfo>, layout: &ScreenLa
         dashed: false,
     };
     picked_marker(dl, layout, glass, vh, &frame);
+}
+
+/// Fallschirm aus Sicht des Piloten: Kappe oben im Bild, Leinen zu den
+/// Schultern; `open` 0..1 entfaltet ihn.
+fn parachute(dl: &mut DisplayList, view: &Rect, open: f32) {
+    if open <= 0.0 {
+        return;
+    }
+    let (c, w, h) = (view.center(), view.max[0] - view.min[0], view.max[1] - view.min[1]);
+    let half = w * 0.42 * open;
+    // Kuppel von innen: Mitte oben am Bildrand, die Ränder tiefer.
+    let arc: Vec<[f32; 2]> = (0..=16)
+        .map(|k| {
+            let u = k as f32 / 16.0 * 2.0 - 1.0;
+            [c[0] + u * half, view.max[1] - h * (0.03 + 0.17 * u * u * open)]
+        })
+        .collect();
+    dl.polyline(&arc, false, Ink::Hud);
+    let shoulders = [[c[0] - w * 0.08, view.min[1]], [c[0] + w * 0.08, view.min[1]]];
+    for (k, p) in arc.iter().enumerate().step_by(4) {
+        let s = shoulders[usize::from(k > 8)];
+        dl.line(*p, s, Ink::HudDim);
+    }
 }
 
 /// Ergebnistafel nach dem Missionsende (M-032): Ausgang, Auftrag je Ziel und

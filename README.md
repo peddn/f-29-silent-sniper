@@ -105,6 +105,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | F4 | 11 | Rechtes MFD: nächste Seite (Mission → Ziel → Waffenkamera → Waffen → Triebwerk → Horizont → Systeme) |
 | Y / X | 10 (reihum) | Karte näher / weiter (0,6 bis 640 km, je Stufe doppelt; außerhalb des Gebiets schwarz) |
 | P | | Pause |
+| Strg+I / J / K / L | | Blick aus dem Cockpit: vorn / links / hinten / rechts (nur vorn mit HUD) |
 | Strg+E | | Schleudersitz (bis 450 kt und 60° Quer-/Längsneigung; das Gebiet entscheidet: gerettet, Zwischenfall, gefangen) |
 | Shift+T | | Zeitraffer 1× → 2× → 4× → 1×; endet bei Fahrwerk, Raketenstart, steigender Alarmstufe, Treffer |
 | F12 | | Screenshot nach `screenshots/` |

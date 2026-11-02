@@ -3,7 +3,7 @@
 use crate::HUD_LAYER;
 use crate::mfd::{MapAssets, MfdView};
 use crate::sim::{SimState, SimSystems};
-use crate::view::{ViewMode, ViewSettings, layout_for};
+use crate::view::{CockpitLook, ViewMode, ViewSettings, layout_for};
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -92,8 +92,11 @@ fn draw_hud(
 
     let fd = state.sim.flight_data();
     // Ein optisch erfasstes Ziel zeigt die Zielkamera (tgt_camera.rs) statt des Drahtgitters.
+    // Ausgestiegen bzw. Missionsende: Schirm bzw. Ergebnistafel immer.
+    let pilot_view = fd.pilot.is_some() || fd.mission_over;
     let opts = HudOptions {
-        show_hud: view.hud && view.mode == ViewMode::Cockpit,
+        show_hud: pilot_view
+            || (view.hud && view.mode == ViewMode::Cockpit && view.look == CockpitLook::Front),
         hud_mode: view.hud_mode,
         show_panel: true,
         mfd: mfd.0,
