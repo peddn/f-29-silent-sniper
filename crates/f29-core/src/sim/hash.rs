@@ -137,7 +137,7 @@ impl Sim {
             }
         }
         for g in std::iter::once(&self.gun).chain(&self.fighters.guns) {
-            h.u64(u64::from(g.rounds) | u64::from(g.trigger) << 16);
+            h.u64(g.rounds.map_or(1 << 17, u64::from) | u64::from(g.trigger) << 16);
             h.f64(g.pending());
             let (gs, gi) = g.rng_state();
             h.u64(gs);

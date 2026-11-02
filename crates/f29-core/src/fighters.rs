@@ -426,7 +426,7 @@ impl Fighters {
             }
         }
         let guns = (0..list.len() as u64)
-            .map(|k| Gun::with_stream(list[k as usize].spec().gun, seed, STREAM_GUNS + k))
+            .map(|k| Gun::unlimited(list[k as usize].spec().gun, seed, STREAM_GUNS + k))
             .collect();
         Self { list, guns, max_airborne: rules.max_airborne, contact: None, events: EventLog::default() }
     }

@@ -21,17 +21,17 @@ fn hold(sim: &mut Sim, seconds: f64, w: u16) {
 fn gun_fires_without_bay_doors() {
     let mut sim = air();
     assert!(sim.stores().door < 1e-9, "Schacht zu");
-    assert_eq!(sim.flight_data().gun.rounds, gun::M61A1.rounds);
+    assert_eq!(sim.flight_data().gun.rounds, gun::ROUNDS);
     hold(&mut sim, 1.0, weapon_flags::GUN);
     let fd = sim.flight_data();
     assert!(fd.gun.firing);
-    let fired = gun::M61A1.rounds - fd.gun.rounds;
+    let fired = gun::ROUNDS - fd.gun.rounds;
     assert!((49..=51).contains(&fired), "{fired}");
     assert!(!sim.gun().in_flight.is_empty(), "Patronen im Flug");
     // Loslassen: Feuer hört auf.
     hold(&mut sim, 0.5, 0);
     assert!(!sim.flight_data().gun.firing);
-    assert_eq!(sim.flight_data().gun.rounds, gun::M61A1.rounds - fired);
+    assert_eq!(sim.flight_data().gun.rounds, gun::ROUNDS - fired);
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn no_gun_on_the_ground() {
         sim.step(c);
     }
     assert!(sim.aircraft().on_ground);
-    assert_eq!(sim.flight_data().gun.rounds, gun::M61A1.rounds);
+    assert_eq!(sim.flight_data().gun.rounds, gun::ROUNDS);
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn trigger_fires_the_selected_gun() {
     assert!(sim.stores().gun_selected);
     hold(&mut sim, 0.5, weapon_flags::TRIGGER | weapon_flags::RELEASE);
     let after = sim.flight_data().gun.rounds;
-    assert!(after < gun::M61A1.rounds - 20, "{after}");
+    assert!(after < gun::ROUNDS - 20, "{after}");
     assert!(sim.weapons_in_flight().is_empty(), "keine Schachtwaffe");
     hold(&mut sim, 0.1, 0);
     hold(&mut sim, 1.0 / f64::from(TICK_HZ), weapon_flags::NEXT_BAY);

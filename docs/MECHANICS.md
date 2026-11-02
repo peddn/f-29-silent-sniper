@@ -1104,11 +1104,15 @@ Format jedes Eintrags:
 - **Kanonen je Flugzeugmuster (v0.3, eigene Werte):** Alle mit 1000 m/s
   Mündungsgeschwindigkeit und 3 s Flugzeit (≈ 3 km).
 
-  | | Muster | Schuss | Schuss/s | Streuung | Stärke |
-  |---|---|---|---|---|---|
-  | F-29 | M61A1 | 600 | 50 | 5 mrad | 0,125 |
-  | MiG-21 | GSh-23L | 200 | 50 | 8 mrad | 0,15 |
-  | MiG-29 | GSh-30-1 | 150 | 25 | 6 mrad | 0,3 |
+  | | Muster | Schuss/s | Streuung | Stärke |
+  |---|---|---|---|---|
+  | F-29 | M61A1 | 50 | 5 mrad | 0,125 |
+  | MiG-21 | GSh-23L | 50 | 8 mrad | 0,15 |
+  | MiG-29 | GSh-30-1 | 25 | 6 mrad | 0,3 |
+
+  Munition: die F-29 600 Schuss (12 s Dauerfeuer); die Jäger wie im Original
+  unbegrenzt – wie ihre Raketen. Ihr Dauerfeuer begrenzen die Feuerstöße
+  (Pilotenkönnen, M-022).
 
   Gegen Bodenziele 0,16 Schaden je Stärke (M61A1: 2 % je Treffer, 50
   Treffer zerstören jedes Ziel).

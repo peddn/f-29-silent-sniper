@@ -606,7 +606,7 @@ impl Sim {
         if self.tick.is_multiple_of(BOMB_AIM_TICKS) || new_lock {
             self.update_bomb_prediction();
             let a = &self.aircraft;
-            self.gun_prediction = if a.on_ground || self.gun.rounds == 0 {
+            self.gun_prediction = if a.on_ground || self.gun.rounds == Some(0) {
                 None
             } else {
                 gun::predict_impact(a.position, a.velocity, a.attitude, &self.terrain)
@@ -807,7 +807,6 @@ impl Sim {
             .radar
             .events
             .iter()
-            .filter(|(t, _)| *t == self.tick)
             .filter_map(|(_, e)| match e {
                 RadarEvent::Fire { site } => Some(self.radar.sites[*site].target),
                 _ => None,
@@ -867,8 +866,7 @@ impl Sim {
             let gun = &mut self.fighters.guns[i];
             gun.trigger(self.tick, fire, f.position, f.velocity(), f.attitude(), DT);
             gun.step(self.tick, &self.terrain, &mut [], &[(0, a)], f.position, DT);
-            let hits =
-                gun.events.iter().filter(|&&(t, e)| t == self.tick && e == GunEvent::AirHit(0)).count();
+            let hits = gun.events.take().iter().filter(|(_, e)| *e == GunEvent::AirHit(0)).count();
             let strength = gun.spec.strength;
             for _ in 0..hits {
                 self.fighters.events.push(self.tick, FighterEvent::GunHit { kind: f.kind });
@@ -1056,7 +1054,7 @@ impl Sim {
         let jets: Vec<(usize, DVec3)> =
             self.fighters.list.iter().filter(|f| f.airborne()).map(|f| (f.id as usize, f.position)).collect();
         self.gun.step(self.tick, &self.terrain, &mut self.targets, &jets, self.aircraft.position, DT);
-        for (_, e) in self.gun.events.iter().filter(|(t, _)| *t == self.tick) {
+        for (_, e) in self.gun.events.iter() {
             if let GunEvent::AirHit(i) = *e {
                 self.fighters.hit(self.tick, i, self.gun.spec.strength);
             }
@@ -1089,8 +1087,7 @@ impl Sim {
         self.stores.step(&mut world);
         // Raketentreffer: am Jäger zerstörend, am Flugzeug über die
         // Bordsysteme (M-015).
-        let now: Vec<_> =
-            self.stores.events.iter().filter(|(t, _)| *t == self.tick).map(|&(_, e)| e).collect();
+        let now: Vec<_> = self.stores.events.iter().map(|&(_, e)| e).collect();
         for e in now {
             match e {
                 WeaponEvent::FighterHit { fighter, .. } => self.fighters.hit(self.tick, fighter, 1.0),

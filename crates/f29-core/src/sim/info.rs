@@ -878,7 +878,7 @@ impl Sim {
                 .collect(),
             bomb_aim: self.bomb_aim(),
             gun: GunInfo {
-                rounds: self.gun.rounds,
+                rounds: self.gun.rounds.unwrap_or(u16::MAX),
                 firing: self.gun.trigger,
                 lead: self
                     .picks

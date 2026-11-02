@@ -5,7 +5,8 @@
 //! deterministisch gewürfelter Streuung. Jedes Flugzeugmuster hat seine
 //! Kanone ([`GunSpec`]: Vorrat, Feuerrate, Streuung, Trefferstärke). Die
 //! Trefferstärke zählt in Raketentreffern (eine Rakete = 1) und gilt für
-//! alle Ziele gleich; kritische Treffer gibt es nicht.
+//! alle Ziele gleich; kritische Treffer gibt es nicht. Munition zählt nur die
+//! eigene Kanone, die der Jäger ist wie im Original unbegrenzt.
 
 use crate::atmosphere::G0;
 use crate::detmath;
@@ -18,12 +19,12 @@ use f29_world::Terrain;
 
 /// Eigener Zufallsstrom der Kanone (Streuung).
 pub const STREAM_GUN: u64 = 0x4755_4E53;
+/// Munition der eigenen Kanone beim Start: 12 s Dauerfeuer.
+pub const ROUNDS: u16 = 600;
+
 /// Kenngrößen einer Bordkanone (reale Vorbilder, eigene Werte).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GunSpec {
-    pub label: &'static str,
-    /// Munition beim Start.
-    pub rounds: u16,
     /// Feuerrate (Schuss/s).
     pub rate_hz: f64,
     /// Streuung (halber Kegelwinkel, rad).
@@ -32,15 +33,12 @@ pub struct GunSpec {
     pub strength: f64,
 }
 
-/// F-29: 600 Schuss reichen für 12 s Dauerfeuer.
-pub const M61A1: GunSpec =
-    GunSpec { label: "M61A1", rounds: 600, rate_hz: 50.0, dispersion_rad: 0.005, strength: 0.125 };
+/// F-29.
+pub const M61A1: GunSpec = GunSpec { rate_hz: 50.0, dispersion_rad: 0.005, strength: 0.125 };
 /// MiG-21: schnell feuernd, kleines Kaliber, streut stark.
-pub const GSH_23L: GunSpec =
-    GunSpec { label: "GSH-23L", rounds: 200, rate_hz: 50.0, dispersion_rad: 0.008, strength: 0.15 };
+pub const GSH_23L: GunSpec = GunSpec { rate_hz: 50.0, dispersion_rad: 0.008, strength: 0.15 };
 /// MiG-29: langsamer, schweres Kaliber.
-pub const GSH_30_1: GunSpec =
-    GunSpec { label: "GSH-30-1", rounds: 150, rate_hz: 25.0, dispersion_rad: 0.006, strength: 0.3 };
+pub const GSH_30_1: GunSpec = GunSpec { rate_hz: 25.0, dispersion_rad: 0.006, strength: 0.3 };
 
 /// Mündungsgeschwindigkeit (m/s, alle Kanonen).
 pub const MUZZLE_MPS: f64 = 1_000.0;
@@ -99,7 +97,8 @@ pub enum GunEvent {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Gun {
     pub spec: &'static GunSpec,
-    pub rounds: u16,
+    /// Restliche Munition; `None` = unbegrenzt (Jäger).
+    pub rounds: Option<u16>,
     pub in_flight: Vec<Round>,
     /// Bruchteil des nächsten Schusses.
     pending: f64,
@@ -111,16 +110,16 @@ pub struct Gun {
 }
 
 impl Gun {
-    /// Die Kanone der F-29.
+    /// Die Kanone der F-29 mit [`ROUNDS`] Schuss.
     pub fn new(seed: u64) -> Self {
-        Self::with_stream(&M61A1, seed, STREAM_GUN)
+        Self { rounds: Some(ROUNDS), ..Self::unlimited(&M61A1, seed, STREAM_GUN) }
     }
 
-    /// Mit eigenem Zufallsstrom (die Kanonen der Jäger).
-    pub fn with_stream(spec: &'static GunSpec, seed: u64, stream: u64) -> Self {
+    /// Ohne Munitionsgrenze, mit eigenem Zufallsstrom (die Kanonen der Jäger).
+    pub fn unlimited(spec: &'static GunSpec, seed: u64, stream: u64) -> Self {
         Self {
             spec,
-            rounds: spec.rounds,
+            rounds: None,
             in_flight: Vec::new(),
             pending: 0.0,
             trigger: false,
@@ -154,7 +153,7 @@ impl Gun {
             self.pending = 0.0;
             return;
         }
-        if self.rounds == 0 {
+        if self.rounds == Some(0) {
             if pressed {
                 self.events.push(tick, GunEvent::Empty);
             }
@@ -169,9 +168,9 @@ impl Gun {
         let bore = attitude.rotate(DVec3::X);
         let right = attitude.rotate(DVec3::Y);
         let down = attitude.rotate(DVec3::Z);
-        while self.pending >= 1.0 && self.rounds > 0 {
+        while self.pending >= 1.0 && self.rounds != Some(0) {
             self.pending -= 1.0;
-            self.rounds -= 1;
+            self.rounds = self.rounds.map(|r| r - 1);
             // Gleichverteilt im Streukegel (Fläche): Radius ~ √u.
             let r = self.spec.dispersion_rad * self.rng.next_f64().sqrt();
             let (s, c) = detmath::sin_cos(self.rng.range_f64(0.0, std::f64::consts::TAU));
@@ -353,18 +352,18 @@ mod tests {
         for tick in 0..120 {
             gun.trigger(tick, true, p, v, a, DT);
         }
-        let fired = M61A1.rounds - gun.rounds;
+        let fired = ROUNDS - gun.rounds.unwrap();
         assert!((49..=51).contains(&fired), "{fired} Schuss in 1 s");
         // Kurzer Druck: genau ein Schuss sofort.
         gun.trigger(200, false, p, v, a, DT);
-        let before = gun.rounds;
+        let before = gun.rounds.unwrap();
         gun.trigger(201, true, p, v, a, DT);
-        assert_eq!(gun.rounds, before - 1);
+        assert_eq!(gun.rounds, Some(before - 1));
         // Leer schießen; ein neuer Druck meldet „leer“.
         for tick in 300..(300 + 120 * 13) {
             gun.trigger(tick, true, p, v, a, DT);
         }
-        assert_eq!(gun.rounds, 0);
+        assert_eq!(gun.rounds, Some(0));
         assert!(gun.events.iter().all(|e| e.1 != GunEvent::Empty), "nur beim neuen Druck");
         gun.trigger(5_000, false, p, v, a, DT);
         gun.trigger(5_001, true, p, v, a, DT);
@@ -385,18 +384,18 @@ mod tests {
             let mut hits = 0;
             while targets[0].is_intact() && tick < 120 * 20 {
                 tick += 1;
-                gun.trigger(tick, gun.rounds > 0, p, v, a, DT);
+                gun.trigger(tick, gun.rounds != Some(0), p, v, a, DT);
                 gun.step(tick, &terrain, &mut targets, &[], p, DT);
                 hits = gun.impacts.iter().filter(|i| i.hit).count().max(hits);
             }
             assert!(
                 !targets[0].is_intact(),
                 "{class:?} nicht zerstört ({hits} Treffer, {} Schuss)",
-                M61A1.rounds - gun.rounds
+                ROUNDS - gun.rounds.unwrap()
             );
             assert!(gun.events.iter().any(|e| e.1 == GunEvent::Destroyed(0)));
             // Mindestens 50 Treffer waren nötig.
-            assert!(M61A1.rounds - gun.rounds >= 50);
+            assert!(ROUNDS - gun.rounds.unwrap() >= 50);
         }
     }
 
