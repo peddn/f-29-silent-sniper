@@ -23,7 +23,7 @@ pub const WEAPON_STATIONS: usize = 4;
 /// Darstellungsart der Karte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MapMode {
-    /// Höhenbild in Graustufen (Wasser schwarz, Rasterbild des Frontends)
+    /// Höhenbild in Graustufen (Wasser dunkelblau, Rasterbild des Frontends)
     /// mit Kartengitter – wie im Original eine dunkle Fläche mit Gitter.
     #[default]
     Grid,

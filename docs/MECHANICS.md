@@ -549,7 +549,7 @@ Format jedes Eintrags:
     Hintergrund berechnet, pro Bild kursbezogen und pixelig ausgeschnitten.
     *v0.2.9 (Spielerwunsch, nach dem Original: dunkle Fläche mit Gitter und
     Symbolen):* Die Höhenlinien des Gittermodus sind ersetzt durch das
-    Höhenbild – Wasser schwarz, Land gedämpft grau, je höher, desto heller
+    Höhenbild – Wasser dunkelblau, außerhalb des Gebiets schwarz, Land gedämpft grau, je höher, desto heller
     (nach der Wurzel der Höhe, damit auch das Flachland Relief zeigt). Die
     Zielsymbole sind größer und einfacher: Quadrat (Fahrzeuge), Quadrat mit
     Kreuz (Bauwerke, Bunker, Brücken), Dreieck (Flugabwehr; Frühwarnradar mit
@@ -1690,7 +1690,7 @@ Format jedes Eintrags:
     überblendet und mit verzerrten Zellgrenzen, darüber das Detailrauschen.
   - Missionsgenerator (`f29_core::mission`): wählt aus den militärischen
     Objekten des Gebiets zwei Ziele in einem Entfernungsband von der
-    Heimatbasis (80–220 km), 5–80 km auseinander; das nähere ist das Primärziel. Route:
+    Heimatbasis (80–220 km), 20–80 km auseinander; das nähere ist das Primärziel. Route:
     Startbasis → Primärziel → Sekundärziel → Landebasis (die Startbasis).
     Gelandet werden darf wie im Original auf jedem Platz im eigenen Gebiet.
   - Seiten (eigen/neutral/feindlich) kommen aus dem Raster.

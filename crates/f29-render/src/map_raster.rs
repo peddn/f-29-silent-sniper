@@ -3,7 +3,7 @@
 //! Einmal pro Seed entsteht ein nordausgerichtetes Farbraster des
 //! Kartengebiets – als Satellitenbild (Oberflächenfarben der Palette mit
 //! eingebackener Hangschattierung) oder als Höhenbild in Graustufen (Wasser
-//! schwarz, je höher, desto heller; gedämpft, damit Gitter und Symbole
+//! dunkelblau, je höher, desto heller; gedämpft, damit Gitter und Symbole
 //! darüber gut lesbar bleiben). Für jedes Bild wird daraus ein kursbezogener Ausschnitt
 //! um das Flugzeug gezogen – mit Nächster-Nachbar-Abtastung, damit es pixelig
 //! im Retro-Stil bleibt.
@@ -36,7 +36,7 @@ pub enum MapStyle {
 /// (dazwischen nach der Wurzel der Höhe, damit das Flachland Relief zeigt).
 const HEIGHT_GRAY: [f32; 2] = [0.16, 0.42];
 /// Wasser im Höhenbild.
-const HEIGHT_WATER: [u8; 3] = [0, 0, 0];
+const HEIGHT_WATER: [u8; 3] = [10, 22, 60];
 
 /// Farbe außerhalb des Rasters (kein Kartenbild): schwarz.
 const OUTSIDE: [u8; 3] = [0, 0, 0];
@@ -183,14 +183,14 @@ mod tests {
         assert_ne!(water, OUTSIDE);
     }
 
-    /// Höhenbild: Wasser schwarz, an Land grau und je höher, desto heller.
+    /// Höhenbild: Wasser dunkelblau, an Land grau und je höher, desto heller.
     #[test]
     fn height_map_is_gray_and_brighter_uphill() {
         let t = Terrain::new(0x0F29);
         let (c, half, n) = ([0.0, 0.0], 60_000.0, 96);
         let map = MapRaster::build(&t, c, half, n, MapStyle::Height);
         let grid = t.height_grid(c, half, n);
-        assert!(map.pixels.iter().all(|p| p[0] == p[1] && p[1] == p[2]));
+        assert!(map.pixels.iter().all(|p| *p == HEIGHT_WATER || (p[0] == p[1] && p[1] == p[2])));
         let mut land: Vec<(f64, u8)> = Vec::new();
         for (k, &h) in grid.heights.iter().enumerate() {
             if h <= 0.0 {

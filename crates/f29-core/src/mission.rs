@@ -19,7 +19,7 @@ pub const STREAM_MISSION: u64 = 0x4d53_4e00;
 pub const MIN_RANGE_M: f64 = 80_000.0;
 pub const MAX_RANGE_M: f64 = 220_000.0;
 /// Primär- und Sekundärziel so weit auseinander (m).
-pub const MIN_APART_M: f64 = 5_000.0;
+pub const MIN_APART_M: f64 = 20_000.0;
 pub const MAX_APART_M: f64 = 80_000.0;
 /// Klassen, die Missionsziele sein können.
 const MISSION_CLASSES: [TargetClass; 6] = [
