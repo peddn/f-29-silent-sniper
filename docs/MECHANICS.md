@@ -1779,7 +1779,8 @@ Format jedes Eintrags:
     Kalter Krieg alles, begrenzter Konflikt etwa die Hälfte, offener Krieg
     etwa ein Fünftel.
   - **Kamera** (`cam`): bleibt im Schacht, Klappen müssen offen sein, der
-    Auslöser macht ein Foto („PHOTO n“), unbegrenzt. Sie blickt 10° unter die
+    Auslöser macht ein Foto („PHOTO n“), unbegrenzt, höchstens alle 0,8 s.
+    Sie blickt 10° unter die
     Rumpflängsachse; ihre Sichtlinie mit einem Bildkreis von 5° ist im
     AG-HUD das Zielinstrument. Ein Foto zählt, wenn das gewählte Ziel
     steht, optisch entdeckt ist, höchstens 2 km entfernt und im Bildkreis

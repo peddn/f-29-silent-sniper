@@ -506,6 +506,8 @@ pub struct Stores {
     pub countermeasures: Countermeasures,
     /// Gemachte Fotos.
     pub photos: u32,
+    /// Vor diesem Tick löst die Kamera nicht aus (Verschluss, M-032).
+    pub photo_ready_tick: u64,
     next_id: u32,
     rng: Pcg32,
     /// Letzte Ereignisse mit Tick, neueste zuletzt.
@@ -555,6 +557,8 @@ pub struct Launch<'a> {
     pub dt: f64,
 }
 
+/// Frühestens nach so vielen Sekunden das nächste Foto (Spielerwunsch v0.3).
+pub const PHOTO_INTERVAL_S: f64 = 0.8;
 /// Ein Foto zählt bis zu dieser Entfernung zum Ziel (m; Spielerwunsch v0.3).
 pub const PHOTO_RANGE_M: f64 = 2_000.0;
 /// … und so weit (rad) um die Sichtlinie der Kamera (Spielerwunsch v0.3).
@@ -657,6 +661,7 @@ impl Stores {
             in_flight: Vec::new(),
             countermeasures: Countermeasures::default(),
             photos: 0,
+            photo_ready_tick: 0,
             next_id: 0,
             rng: Pcg32::new(seed, STREAM_WEAPONS),
             events: EventLog::default(),
@@ -716,8 +721,11 @@ impl Stores {
             Some(_) if bay.count == 0 => Some(WeaponEvent::BayEmpty),
             None => Some(WeaponEvent::BayEmpty),
             _ if roll.abs() > MAX_RELEASE_BANK_RAD => Some(WeaponEvent::BankLimit),
+            // Während der Verschluss noch arbeitet: nichts.
+            Some(WeaponKind::Camera) if l.tick < self.photo_ready_tick => return 0.0,
             Some(WeaponKind::Camera) => {
                 self.photos += 1;
+                self.photo_ready_tick = l.tick + (PHOTO_INTERVAL_S / l.dt).round() as u64;
                 Some(WeaponEvent::Photo { n: self.photos, target: photo_target(l) })
             }
             _ if self.in_flight.iter().filter(|w| w.owner.is_none()).count() >= MAX_IN_FLIGHT => {

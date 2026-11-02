@@ -156,4 +156,11 @@ fn camera_needs_open_bay_and_flight() {
     }
     assert!(air.flight_data().camera.unwrap().active);
     assert!(!ground.flight_data().camera.unwrap().active, "am Boden");
+    // Verschluss: Ein zweiter Druck kurz danach macht kein Foto.
+    step(&mut air, 0, weapon_flags::RELEASE);
+    step(&mut air, 0, weapon_flags::RELEASE);
+    assert_eq!(air.stores().photos, 1);
+    fly(&mut air, f29_core::weapons::PHOTO_INTERVAL_S, 0, 0);
+    step(&mut air, 0, weapon_flags::RELEASE);
+    assert_eq!(air.stores().photos, 2);
 }
