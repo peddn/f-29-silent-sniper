@@ -1690,7 +1690,7 @@ Format jedes Eintrags:
     überblendet und mit verzerrten Zellgrenzen, darüber das Detailrauschen.
   - Missionsgenerator (`f29_core::mission`): wählt aus den militärischen
     Objekten des Gebiets zwei Ziele in einem Entfernungsband von der
-    Heimatbasis, nah beieinander; das nähere ist das Primärziel. Route:
+    Heimatbasis (80–220 km), 5–80 km auseinander; das nähere ist das Primärziel. Route:
     Startbasis → Primärziel → Sekundärziel → Landebasis (die Startbasis).
     Gelandet werden darf wie im Original auf jedem Platz im eigenen Gebiet.
   - Seiten (eigen/neutral/feindlich) kommen aus dem Raster.
@@ -1700,7 +1700,8 @@ Format jedes Eintrags:
     gesucht, Seiten nach Nähe, Objekte verteilt) und ist ab jetzt Daten;
     `theater-png` zeigt eine Vorschau. Ein grafischer Editor folgt.
   - Das MFD-Kartenbild (4096²) deckt das ganze Gebiet ab und wird parallel
-    berechnet.
+    berechnet. Kartenstufen 0,6–640 km (die weiteste zeigt das ganze Gebiet),
+    außerhalb des Gebiets schwarz.
   - Offen: Planquadrate, Geländeart als Radarfaktor.
 - **Status:** umgesetzt (v0.3)
 

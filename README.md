@@ -101,7 +101,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | Shift+F5 | | Weitwinkelsicht: ohne Instrumentenbrett, Ansicht übers ganze Fenster (Luftkampf) |
 | F3 | | Karte (linkes MFD): Gitter ↔ Satellitenbild |
 | F4 | 11 | Rechtes MFD: nächste Seite (Mission → Ziel → Waffenkamera → Waffen → Triebwerk → Horizont → Systeme) |
-| Y / X | 10 (reihum) | Karte näher / weiter (5, 10, 20, 40, 80 km) |
+| Y / X | 10 (reihum) | Karte näher / weiter (0,6 bis 640 km, je Stufe doppelt; außerhalb des Gebiets schwarz) |
 | P | | Pause |
 | F12 | | Screenshot nach `screenshots/` |
 | R | | Neustart (Flug wird als Replay gesichert) |

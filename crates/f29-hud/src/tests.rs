@@ -685,7 +685,7 @@ fn awacs_shows_targets_beyond_own_sensors() {
     let mut fd = sim.flight_data();
     fd.own_contacts.clear();
     let mut opts = HudOptions { show_hud: false, ..HudOptions::default() };
-    opts.mfd.map_zoom = 4;
+    opts.mfd.map_zoom = 7;
     let lines = |awacs: bool| {
         let mut f = fd.clone();
         f.awacs = awacs;

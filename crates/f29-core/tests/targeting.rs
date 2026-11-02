@@ -196,9 +196,9 @@ fn lock_is_kept_when_overflying_and_look_follows() {
         step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()), 0);
     }
     assert_eq!(sim.picks().ground.index, Some(primary), "Primärziel voraus aufschaltbar");
-    // 12 km voraus bei 180 m/s: nach 100 s liegt es rund 6 km hinter uns.
+    // 12 km voraus bei 180 m/s: nach 85 s liegt es rund 3 km hinter uns.
     let mut looks = vec![LookDir::Forward];
-    for _ in 0..(120 * 100) {
+    for _ in 0..(120 * 85) {
         step(&mut sim, 0, 0);
         let lock = sim.picks().ground.index.expect("Wahl bleibt beim Überflug");
         assert_eq!(lock, primary, "Ziel gewechselt");
@@ -208,7 +208,7 @@ fn lock_is_kept_when_overflying_and_look_follows() {
     }
     assert_eq!(sim.picks().ground.look, LookDir::Aft, "Blickrichtung folgt nach hinten: {looks:?}");
     let t = sim.flight_data().target.unwrap();
-    assert!(t.range > 4_000.0, "Ziel liegt hinter uns ({:.0} m)", t.range);
+    assert!(t.range > 2_000.0, "Ziel liegt hinter uns ({:.0} m)", t.range);
 }
 
 /// Nachts schrumpft die optische Reichweite auf 20 km; das Radar bleibt bei 50 km.

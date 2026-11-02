@@ -16,9 +16,10 @@ use f29_world::{AirfieldKind, Terrain};
 /// RNG-Strom des Auftrags.
 pub const STREAM_MISSION: u64 = 0x4d53_4e00;
 /// Ziele so weit von der Startbasis (m).
-pub const MIN_RANGE_M: f64 = 100_000.0;
-pub const MAX_RANGE_M: f64 = 260_000.0;
-/// Primär- und Sekundärziel höchstens so weit auseinander (m).
+pub const MIN_RANGE_M: f64 = 80_000.0;
+pub const MAX_RANGE_M: f64 = 220_000.0;
+/// Primär- und Sekundärziel so weit auseinander (m).
+pub const MIN_APART_M: f64 = 5_000.0;
 pub const MAX_APART_M: f64 = 80_000.0;
 /// Klassen, die Missionsziele sein können.
 const MISSION_CLASSES: [TargetClass; 6] = [
@@ -56,8 +57,11 @@ pub fn plan(terrain: &Terrain, targets: &[Target], seed: u64) -> Mission {
     let first = pick(&band);
     let second = first.and_then(|a| {
         let at = [targets[a].north, targets[a].east];
-        let near: Vec<usize> =
-            band.iter().copied().filter(|&b| b != a && dist(at, &targets[b]) <= MAX_APART_M).collect();
+        let near: Vec<usize> = band
+            .iter()
+            .copied()
+            .filter(|&b| (MIN_APART_M..=MAX_APART_M).contains(&dist(at, &targets[b])))
+            .collect();
         pick(&near)
     });
     let (primary, secondary) = match (first, second) {

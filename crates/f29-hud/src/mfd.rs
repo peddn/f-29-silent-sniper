@@ -14,9 +14,9 @@ use f29_core::targets::{TargetClass, TargetRole};
 use f29_core::terrain::AirfieldKind;
 use f29_core::{FlightData, Mark, Stage};
 
-/// Kartenbereiche: Entfernung von der Mitte bis zum Rand in Seemeilen.
-/// Kartenbereiche (Mitte bis Rand) in km.
-pub const MAP_RANGES_KM: [f64; 5] = [5.0, 10.0, 20.0, 40.0, 80.0];
+/// Kartenbereiche (Mitte bis Rand) in km; die weiteste zeigt das ganze
+/// Gebiet.
+pub const MAP_RANGES_KM: [f64; 11] = [0.625, 1.25, 2.5, 5.0, 10.0, 20.0, 40.0, 80.0, 160.0, 320.0, 640.0];
 /// Anzahl Waffenschächte.
 pub const WEAPON_STATIONS: usize = 4;
 
@@ -88,7 +88,7 @@ pub struct MfdState {
 
 impl Default for MfdState {
     fn default() -> Self {
-        Self { map_mode: MapMode::Grid, map_zoom: 2, right_page: RightPage::Mission }
+        Self { map_mode: MapMode::Grid, map_zoom: 5, right_page: RightPage::Mission }
     }
 }
 
@@ -284,10 +284,10 @@ const SYMBOL: f32 = 1.0;
 
 fn grid_spacing(range_m: f64) -> f64 {
     let target = range_m / 2.5;
-    [500.0, 1_000.0, 2_000.0, 5_000.0, 10_000.0, 20_000.0, 50_000.0]
+    [100.0, 200.0, 500.0, 1_000.0, 2_000.0, 5_000.0, 10_000.0, 20_000.0, 50_000.0, 100_000.0, 200_000.0]
         .into_iter()
         .find(|&s| s >= target)
-        .unwrap_or(50_000.0)
+        .unwrap_or(200_000.0)
 }
 
 /// Karte: Flugrichtung oben, Flugzeug in der Mitte.
@@ -531,7 +531,8 @@ fn draw_map(
     };
     let top = screen.max[1] - txt * 2.6;
     dl.text_mid([screen.min[0] + txt * 0.6, top], txt, Align::Left, mode, Ink::Mfd);
-    let rng = format!("{}KM", MAP_RANGES_KM[state.map_zoom.min(MAP_RANGES_KM.len() - 1)]);
+    let km = MAP_RANGES_KM[state.map_zoom.min(MAP_RANGES_KM.len() - 1)];
+    let rng = if km < 1.0 { format!("{km:.1}KM") } else { format!("{km}KM") };
     dl.text_mid([screen.max[0] - txt * 0.6, top], txt, Align::Right, &rng, Ink::Mfd);
     dl.text_mid([c[0], top], txt, Align::Center, &format!("{:03}", heading_deg(fd.heading)), Ink::Mfd);
 }

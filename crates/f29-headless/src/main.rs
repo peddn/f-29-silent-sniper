@@ -3,7 +3,7 @@
 //! ```text
 //! f29-headless demo     [--seed N] [--seconds S] [--record DATEI]
 //! f29-headless replay   DATEI
-//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--wide 1] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
+//! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--wide 1] [--damage 1] [--bay N] [--zoom 0..10] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N]
 //! f29-headless theater-new [--name NAME] [--seed N] [--size KM] [--grid N] --out DATEI.ron
@@ -29,7 +29,7 @@ f29-headless – F-29 Silent Sniper ohne Grafik
 Befehle:
   demo     [--seed N] [--seconds S] [--record DATEI]   Autopilot fliegt die Route ab
   replay   DATEI                                       Replay abspielen und Hash prüfen
-  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--wide 1] [--damage 1] [--bay N] [--zoom 0..4] [--out DATEI]
+  hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--wide 1] [--damage 1] [--bay N] [--zoom 0..10] [--out DATEI]
                                                        HUD nach S Sekunden Demo als SVG
                                                        (SEITE des rechten MFDs: msn, tgt, wpn, eng, adi, sys;
                                                        --radar 1 schaltet am Ende das Radar ein,
@@ -38,7 +38,7 @@ Befehle:
                                                        --gun S feuert S Sekunden die Kanone,
                                                        --damage 1 beschädigt Beispielsysteme,
                                                        --bay N wählt Waffenschacht N (0 = Kanone),
-                                                       --zoom Kartenstufe 0..4 = 5..80 km)
+                                                       --zoom Kartenstufe 0..10 = 0,6..640 km)
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N]                                 Flugplätze und Route auflisten

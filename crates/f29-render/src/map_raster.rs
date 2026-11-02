@@ -38,8 +38,8 @@ const HEIGHT_GRAY: [f32; 2] = [0.16, 0.42];
 /// Wasser im Höhenbild.
 const HEIGHT_WATER: [u8; 3] = [0, 0, 0];
 
-/// Farbe außerhalb des Rasters.
-const OUTSIDE: [u8; 3] = [11, 13, 23];
+/// Farbe außerhalb des Rasters (kein Kartenbild): schwarz.
+const OUTSIDE: [u8; 3] = [0, 0, 0];
 
 fn to_u8(c: [f32; 3]) -> [u8; 3] {
     c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
