@@ -18,6 +18,7 @@
 
 mod airfield;
 mod capture;
+mod cockpit;
 mod fighters;
 mod hud;
 mod input;
@@ -125,6 +126,7 @@ fn main() {
         mfd::MfdPlugin,
         retro::RetroPlugin,
         tgt_camera::TgtCameraPlugin,
+        cockpit::CockpitPlugin,
         capture::CapturePlugin { auto: auto_capture },
     ))
     .run();

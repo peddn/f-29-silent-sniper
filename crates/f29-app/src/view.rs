@@ -142,7 +142,10 @@ pub fn sky_for(night: bool) -> Color {
 
 pub fn layout_for(window: &Window, view: &ViewSettings) -> ScreenLayout {
     let aspect = window.width() / window.height().max(1.0);
-    if (view.wide && view.mode == ViewMode::Cockpit) || view.ejected {
+    // Vollbild: Weitwinkelsicht, Blick zur Seite oder nach hinten (wie im
+    // Original ohne Brett), ausgestiegen.
+    let side_look = view.mode == ViewMode::Cockpit && view.look != CockpitLook::Front;
+    if (view.wide && view.mode == ViewMode::Cockpit) || side_look || view.ejected {
         ScreenLayout::wide(aspect)
     } else {
         ScreenLayout::cockpit(aspect)
@@ -240,6 +243,7 @@ pub fn update_camera_and_aircraft(
     time: Res<Time>,
     state: Res<SimState>,
     mut view: ResMut<ViewSettings>,
+    head: Res<crate::cockpit::HeadLook>,
     mut origin: ResMut<WorldOrigin>,
     mut chase: ResMut<ChaseCamera>,
     mut camera: Single<
@@ -274,7 +278,9 @@ pub fn update_camera_and_aircraft(
         ac_transform.translation = place(pose.position, origin.0);
         **ac_visibility = Visibility::Visible;
         cam.translation = Vec3::ZERO;
-        cam.rotation = rotation(pilot_attitude(&p));
+        cam.rotation = rotation(pilot_attitude(&p))
+            * Quat::from_rotation_y(head.yaw)
+            * Quat::from_rotation_x(head.pitch);
         **retro = RetroEffect::from_mode(view.retro).with_night(night);
         return;
     }

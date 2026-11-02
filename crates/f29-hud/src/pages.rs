@@ -272,7 +272,7 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
             Some(t) => {
                 let (dn, de) = (t.pos[0] - fd.position.x, t.pos[1] - fd.position.y);
                 (
-                    t.name.chars().take(11).collect(),
+                    t.name.chars().take(10).collect(),
                     format!("{:.1} KM", units::m_to_km((dn * dn + de * de).sqrt())),
                 )
             }
