@@ -29,6 +29,8 @@ fn main() {
         visible: false,
         invulnerable: false,
         conflict: Default::default(),
+        opponents: Default::default(),
+        landings: Default::default(),
     };
     let mut sim = Sim::new(SimConfig::with(seed, spawn));
     let mut ap = Approach::new(rw.clone());

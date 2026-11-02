@@ -12,7 +12,7 @@ use crate::mission::{self, Mission, Task};
 use crate::nav::Steerpoint;
 use crate::radar::{Exposure, RadarEvent, RadarKind, RadarNet};
 use crate::rng::Pcg32;
-use crate::rules::{Conflict, Rules};
+use crate::rules::{Conflict, Landings, Opponents, Rules};
 use crate::sensors::{self, LookDir, Pick, Seen, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
@@ -24,6 +24,7 @@ use f29_data::{AircraftSpec, F29_SPEC};
 use f29_world::{AirfieldKind, Side, Terrain, Theater};
 use std::sync::Arc;
 
+mod briefing;
 mod hash;
 mod info;
 mod score;
@@ -116,6 +117,9 @@ pub struct Spawn {
     pub invulnerable: bool,
     /// Konfliktlage und damit das Regelset (`--rules`).
     pub conflict: Conflict,
+    /// Gegnerqualität und Flugverhalten (Menü „Auftrag“, M-036).
+    pub opponents: Opponents,
+    pub landings: Landings,
 }
 
 impl Default for Spawn {
@@ -136,6 +140,8 @@ impl Default for Spawn {
             visible: false,
             invulnerable: false,
             conflict: Conflict::War,
+            opponents: Opponents::default(),
+            landings: Landings::default(),
         }
     }
 }
@@ -482,7 +488,8 @@ impl Sim {
             - spec.gear_height_m)
             .max(0.0);
         let route = mission::route(&plan, &terrain, &targets);
-        let fighters = Fighters::new(&terrain, seed, sp.conflict.rules());
+        let fighters =
+            Fighters::new(&terrain, seed, sp.conflict.rules().max_airborne, sp.opponents.skill_shift());
         // Aufklärung fliegt immer bei Tag.
         let sensors = Sensors { night: sp.night && !plan.has_recon(), ..Sensors::default() };
         let aero = flight::aero_data(&spec, &aircraft);
@@ -1390,6 +1397,13 @@ impl Sim {
         }
     }
 
+    /// Sinkrate für eine harte Landung und für Bruch (m/s) nach dem
+    /// Flugverhalten; `None`: Aufsetzen auf der Bahn zerstört nie.
+    pub fn landing_limits(&self) -> Option<(f64, f64)> {
+        let k = self.config.spawn.landings.tolerance()?;
+        Some((self.spec.hard_landing_sink_mps * k, self.spec.max_landing_sink_mps * k))
+    }
+
     /// Bewertet die Bodenberührung: Bahn, Fahrwerk, Sinkrate, Querlage.
     fn evaluate_touchdown(&self) -> Result<Touchdown, CrashCause> {
         let a = &self.aircraft;
@@ -1400,23 +1414,21 @@ impl Sim {
         let Some(runway) = self.terrain.runway_at(p.x, p.y) else {
             return Err(CrashCause::Terrain);
         };
-        if !a.gear_down() {
-            return Err(CrashCause::GearUp);
-        }
         let sink = a.velocity.z;
+        let hard = self.landing_limits().map_or(self.spec.hard_landing_sink_mps, |l| l.0);
+        let td = Ok(Touchdown { tick: self.tick, runway, sink_mps: sink, hard: sink > hard });
+        // Flugverhalten „kein Absturz“: auf der Bahn geht alles gut.
+        let Some(k) = self.config.spawn.landings.tolerance() else { return td };
         let (_, pitch, roll) = a.attitude.to_euler();
-        if sink > self.spec.max_landing_sink_mps || pitch < NOSE_FIRST_PITCH {
-            return Err(CrashCause::GearCollapse);
+        if !a.gear_down() {
+            Err(CrashCause::GearUp)
+        } else if sink > self.spec.max_landing_sink_mps * k || pitch < NOSE_FIRST_PITCH * k {
+            Err(CrashCause::GearCollapse)
+        } else if roll.abs() > self.spec.max_landing_bank_rad * k {
+            Err(CrashCause::WingStrike)
+        } else {
+            td
         }
-        if roll.abs() > self.spec.max_landing_bank_rad {
-            return Err(CrashCause::WingStrike);
-        }
-        Ok(Touchdown {
-            tick: self.tick,
-            runway,
-            sink_mps: sink,
-            hard: sink > self.spec.hard_landing_sink_mps,
-        })
     }
 
     /// Turbulenz in Bodennähe: unter 500 ft über Grund, stärker je tiefer und
@@ -1426,7 +1438,9 @@ impl Sim {
         let a = &self.aircraft;
         let ground = self.terrain.elevation(a.position.x, a.position.y);
         let agl = a.altitude() - ground;
-        let depth = (1.0 - agl / TURBULENCE_CEILING_M).clamp(0.0, 1.0);
+        // Flugverhalten „kein Absturz“: kein Wackeln in Bodennähe.
+        let calm = self.config.spawn.landings == Landings::NoCrash;
+        let depth = if calm { 0.0 } else { (1.0 - agl / TURBULENCE_CEILING_M).clamp(0.0, 1.0) };
         let v = a.velocity.length();
         let speed = v / 200.0;
         let buffet = GEAR_SHAKE * a.gear
@@ -1534,4 +1548,27 @@ fn center(t: &Target) -> DVec3 {
 /// Bahnmitte (NED).
 fn runway_point(r: &f29_world::Runway) -> DVec3 {
     DVec3::new(r.center[0], r.center[1], -r.elevation_m)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Flugverhalten (M-036): Leicht verträgt das Anderthalbfache, „kein
+    /// Absturz“ auf der Bahn alles – auch ohne Fahrwerk.
+    #[test]
+    fn landings_set_the_touchdown_limits() {
+        let touch = |landings: Landings, sink: f64, gear: bool| {
+            let mut sim = Sim::new(SimConfig::with(1, Spawn { landings, ..SimConfig::runway(1).spawn }));
+            sim.aircraft.velocity.z = sink;
+            sim.aircraft.gear = if gear { 1.0 } else { 0.0 };
+            sim.evaluate_touchdown().map(|t| t.hard)
+        };
+        let max = F29_SPEC.max_landing_sink_mps;
+        assert_eq!(touch(Landings::Realistic, max * 1.2, true), Err(CrashCause::GearCollapse));
+        assert_eq!(touch(Landings::Easy, max * 1.2, true), Ok(true));
+        assert_eq!(touch(Landings::Easy, max * 1.6, true), Err(CrashCause::GearCollapse));
+        assert_eq!(touch(Landings::Realistic, 1.0, false), Err(CrashCause::GearUp));
+        assert!(touch(Landings::NoCrash, max * 3.0, false).is_ok());
+    }
 }

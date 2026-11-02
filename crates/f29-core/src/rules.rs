@@ -33,8 +33,6 @@ pub struct Rules {
     /// Angreifen nur, was uns entdeckt hat (Radarstellung mit Alarm, Jäger
     /// mit Kontakt); sonst ROE-Verletzung.
     pub attack_needs_detection: bool,
-    /// Verschiebt das gewürfelte Pilotenkönnen der Jäger (−1 = schwächer).
-    pub pilot_skill: i8,
     /// Faktor auf die Wertung (strengere Regeln sind schwerer zu fliegen).
     pub score_factor: f64,
 }
@@ -48,7 +46,6 @@ const RULES: [Rules; 3] = [
         max_airborne: 4,
         detection_penalty: 30,
         attack_needs_detection: true,
-        pilot_skill: -1,
         score_factor: 1.5,
     },
     Rules {
@@ -59,7 +56,6 @@ const RULES: [Rules; 3] = [
         max_airborne: 4,
         detection_penalty: 10,
         attack_needs_detection: false,
-        pilot_skill: 0,
         score_factor: 1.0,
     },
     Rules {
@@ -70,7 +66,6 @@ const RULES: [Rules; 3] = [
         max_airborne: 6,
         detection_penalty: 0,
         attack_needs_detection: false,
-        pilot_skill: 1,
         score_factor: 0.75,
     },
 ];
@@ -113,10 +108,85 @@ mod tests {
         assert_eq!(war.detection_penalty, 0);
         assert!(war.max_hostile_missiles > limited.max_hostile_missiles);
         assert!(war.max_airborne > limited.max_airborne);
-        assert!(cold.pilot_skill < limited.pilot_skill && limited.pilot_skill < war.pilot_skill);
         assert!(cold.score_factor > limited.score_factor && limited.score_factor > war.score_factor);
         for c in Conflict::ALL {
             assert_eq!(Conflict::from_code(c.code()), Some(c));
         }
+    }
+}
+
+/// Gegnerqualität (Menü „Auftrag“, M-036): verschiebt das ausgewürfelte
+/// Pilotenkönnen der Jäger (M-022) und die Wertung.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum Opponents {
+    Green,
+    #[default]
+    Regular,
+    Veteran,
+    /// Alle Asse.
+    Elite,
+}
+
+impl Opponents {
+    pub const ALL: [Opponents; 4] =
+        [Opponents::Green, Opponents::Regular, Opponents::Veteran, Opponents::Elite];
+
+    pub fn label(self) -> &'static str {
+        ["GREEN", "REGULAR", "VETERAN", "ELITE"][self as usize]
+    }
+
+    /// Stufen, um die das Können der Jäger verschoben wird.
+    pub fn skill_shift(self) -> i8 {
+        self as i8 - 1
+    }
+
+    pub fn score_factor(self) -> f64 {
+        [0.75, 1.0, 1.25, 1.5][self as usize]
+    }
+
+    /// Kennwort für Replays.
+    pub fn code(self) -> &'static str {
+        ["green", "regular", "veteran", "elite"][self as usize]
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|o| o.code() == code)
+    }
+}
+
+/// Flugverhalten (Menü „Auftrag“, M-036): wie nachsichtig die Landung
+/// bewertet wird (M-005).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum Landings {
+    /// Aufsetzen auf einer Bahn zerstört nie; kein Wackeln in Bodennähe.
+    NoCrash,
+    Easy,
+    #[default]
+    Realistic,
+}
+
+impl Landings {
+    pub const ALL: [Landings; 3] = [Landings::NoCrash, Landings::Easy, Landings::Realistic];
+
+    pub fn label(self) -> &'static str {
+        ["NO CRASHES", "EASY LANDINGS", "REALISTIC LANDINGS"][self as usize]
+    }
+
+    /// Faktor auf die Landegrenzen (Sinkrate, Querlage, Nicklage); `None`:
+    /// keine Grenze.
+    pub fn tolerance(self) -> Option<f64> {
+        [None, Some(1.5), Some(1.0)][self as usize]
+    }
+
+    pub fn score_factor(self) -> f64 {
+        [0.75, 0.9, 1.0][self as usize]
+    }
+
+    pub fn code(self) -> &'static str {
+        ["nocrash", "easy", "realistic"][self as usize]
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|l| l.code() == code)
     }
 }

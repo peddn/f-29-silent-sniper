@@ -100,6 +100,9 @@ impl Sim {
         let subtotal = lines.iter().map(|l| l.points).sum::<i32>().max(0);
         let mut factors = vec![(self.status.outcome(), outcome_factor(self.status))];
         factors.push((format!("RULES {}", rules.label), rules.score_factor));
+        let sp = &self.config.spawn;
+        factors.push((format!("OPPONENTS {}", sp.opponents.label()), sp.opponents.score_factor()));
+        factors.push((sp.landings.label().to_string(), sp.landings.score_factor()));
         let start = self.logged(LogEntry::Takeoff).unwrap_or(0);
         let minutes =
             (self.status.tick().unwrap_or(self.tick).saturating_sub(start) as f64 * DT / 60.0) as u64;
@@ -186,8 +189,13 @@ mod tests {
         let rules = probe.rules().score_factor;
         let landed = Status::Landed { tick: (25.0 * 60.0 / DT) as u64, side: Side::Friendly };
         let score = sim_with(&[LogEntry::Takeoff, LogEntry::Destroyed(p)], landed).score();
-        assert_eq!(score.factors.len(), 3, "{:?}", score.factors);
+        assert_eq!(score.factors.len(), 5, "{:?}", score.factors);
         assert_eq!(score.total, (f64::from(PRIMARY) * rules * 1.1).round() as i32);
+        // Gegnerqualität und Flugverhalten zählen mit.
+        let mut sim = sim_with(&[LogEntry::Destroyed(p)], HOME);
+        sim.config.spawn.opponents = crate::rules::Opponents::Elite;
+        sim.config.spawn.landings = crate::rules::Landings::Easy;
+        assert_eq!(sim.score().total, (f64::from(PRIMARY) * rules * 1.5 * 0.9).round() as i32);
         let captured = Status::Ejected { tick: 1, side: Side::Hostile, survived: true };
         assert_eq!(sim_with(&[LogEntry::Destroyed(p)], captured).score().total, 0);
         let rescued = Status::Ejected { tick: 1, side: Side::Friendly, survived: true };

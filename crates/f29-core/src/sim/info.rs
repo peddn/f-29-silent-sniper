@@ -189,6 +189,9 @@ pub struct FlightData {
     pub stopped_on_runway: bool,
     /// Letztes Aufsetzen, solange das Flugzeug am Boden ist.
     pub touchdown: Option<Touchdown>,
+    /// Sinkrate für „hart“ und „Bruch“ nach dem Flugverhalten (m/s);
+    /// `None`: kein Bruch auf der Bahn.
+    pub sink_limits: Option<(f64, f64)>,
     /// Name der Bahn unter dem Flugzeug (am Boden).
     pub runway_name: Option<&'static str>,
     /// Entfernung zur Heimatbasis, m.
@@ -802,6 +805,7 @@ impl Sim {
             on_ground: a.on_ground,
             stopped_on_runway,
             touchdown: if a.on_ground { self.touchdown } else { None },
+            sink_limits: self.landing_limits(),
             runway_name: if a.on_ground { runway_here.map(|i| self.terrain.runways()[i].name) } else { None },
             home_range_m,
             bingo_fuel_kg: fuel_needed,

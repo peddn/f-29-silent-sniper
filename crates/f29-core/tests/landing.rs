@@ -36,6 +36,8 @@ fn on_final(seed: u64, rw: &Runway, dist: f64, offset: f64, fuel: f64) -> Sim {
         visible: false,
         invulnerable: false,
         conflict: Default::default(),
+        opponents: Default::default(),
+        landings: Default::default(),
     };
     Sim::new(SimConfig::with(seed, spawn))
 }

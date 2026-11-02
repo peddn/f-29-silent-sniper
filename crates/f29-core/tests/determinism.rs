@@ -71,6 +71,8 @@ fn scripted_landing(seed: u64) -> Replay {
         visible: false,
         invulnerable: false,
         conflict: Default::default(),
+        opponents: Default::default(),
+        landings: Default::default(),
     };
     let mut sim = Sim::new(SimConfig::with(seed, spawn));
     let mut replay = Replay::new(sim.config().clone());

@@ -94,6 +94,8 @@ fn landing_demo() -> Vec<f32> {
         visible: false,
         invulnerable: false,
         conflict: Default::default(),
+        opponents: Default::default(),
+        landings: Default::default(),
     };
     let mut sim = Sim::new(SimConfig::with(0x0F29, spawn));
     let mut ap = Approach::new(rw);

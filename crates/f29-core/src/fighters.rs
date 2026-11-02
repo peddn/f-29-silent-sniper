@@ -31,7 +31,8 @@
 //! ihre Resistenz.
 //!
 //! **Pilotenkönnen** ([`Skill`], eigene Ergänzung – im Original wählt es nur
-//! das Manöver): je Jäger aus dem Seed gewürfelt, vom Regelset verschoben.
+//! das Manöver): je Jäger aus dem Seed gewürfelt, von der Gegnerqualität
+//! verschoben.
 //! Es bestimmt die Länge der Feuerstöße, wie früh er Täuschkörper wirft und
 //! aus welcher Entfernung er seine Rakete startet.
 
@@ -42,7 +43,6 @@ use crate::gun::{GSH_23L, GSH_30_1, Gun, GunSpec};
 use crate::math::DVec3;
 use crate::radar::{Exposure, RadarKind, RadarSpec};
 use crate::rng::Pcg32;
-use crate::rules::Rules;
 use crate::weapons::{DecoyKind, WeaponKind};
 use f29_world::{AirfieldKind, Terrain};
 
@@ -412,8 +412,10 @@ pub struct Fighters {
 
 impl Fighters {
     /// Die Jäger der feindlichen Plätze laut Gebiet ([`Runway::fighters`]:
-    /// MiG-21, MiG-29) bereit, Können und Höchstzahl nach Regelset.
-    pub fn new(terrain: &Terrain, seed: u64, rules: &Rules) -> Self {
+    /// MiG-21, MiG-29) bereit, höchstens `max_airborne` gleichzeitig in der
+    /// Luft; das gewürfelte Können um `skill_shift` Stufen verschoben
+    /// (Gegnerqualität).
+    pub fn new(terrain: &Terrain, seed: u64, max_airborne: usize, skill_shift: i8) -> Self {
         let mut rng = Pcg32::new(seed, STREAM_SKILL);
         let mut list = Vec::new();
         for (base, rw) in terrain.runways().iter().enumerate().filter(|(_, r)| r.kind == AirfieldKind::Enemy)
@@ -422,14 +424,14 @@ impl Fighters {
             let kinds = std::iter::repeat_n(FighterKind::MiG21, mig21.into())
                 .chain(std::iter::repeat_n(FighterKind::MiG29, mig29.into()));
             for kind in kinds {
-                let skill = Skill::roll(&mut rng, rules.pilot_skill);
+                let skill = Skill::roll(&mut rng, skill_shift);
                 list.push(Fighter::parked(list.len() as u32, kind, skill, base, terrain));
             }
         }
         let guns = (0..list.len() as u64)
             .map(|k| Gun::unlimited(list[k as usize].spec().gun, seed, STREAM_GUNS + k))
             .collect();
-        Self { list, guns, max_airborne: rules.max_airborne, contact: None, events: EventLog::default() }
+        Self { list, guns, max_airborne, contact: None, events: EventLog::default() }
     }
 
     /// Ein Tick. `alert` ist der jüngste Ping-Ort der Radarstellungen,
@@ -579,7 +581,7 @@ mod tests {
 
     fn setup() -> (Terrain, Fighters) {
         let terrain = Terrain::from_theater(f29_world::Theater::builtin());
-        let f = Fighters::new(&terrain, 1, crate::rules::Conflict::War.rules());
+        let f = Fighters::new(&terrain, 1, 6, 0);
         (terrain, f)
     }
 
@@ -742,22 +744,27 @@ mod tests {
         assert!(f.list.iter().filter(|x| x.airborne()).count() <= f.max_airborne);
     }
 
-    /// Das Können ist gewürfelt und folgt dem Regelset: im offenen Krieg
-    /// mehr Asse als im Kalten Krieg, dort mehr Anfänger.
+    /// Das Können ist gewürfelt und folgt der Gegnerqualität: Green mehr
+    /// Anfänger, Veteran mehr Asse, Elite nur Asse.
     #[test]
-    fn pilot_skill_follows_the_rules() {
+    fn pilot_skill_follows_the_opponents() {
+        use crate::rules::Opponents::{Elite, Green, Veteran};
         let terrain = Terrain::from_theater(f29_world::Theater::builtin());
-        let count = |c: crate::rules::Conflict, s: Skill| {
+        let count = |o: crate::rules::Opponents, s: Skill| {
             (0..20u64)
                 .map(|seed| {
-                    Fighters::new(&terrain, seed, c.rules()).list.iter().filter(|f| f.skill == s).count()
+                    Fighters::new(&terrain, seed, 6, o.skill_shift())
+                        .list
+                        .iter()
+                        .filter(|f| f.skill == s)
+                        .count()
                 })
                 .sum::<usize>()
         };
-        use crate::rules::Conflict::{ColdWar, War};
-        assert!(count(War, Skill::Ace) > count(ColdWar, Skill::Ace));
-        assert!(count(ColdWar, Skill::Rookie) > count(War, Skill::Rookie));
-        assert!(count(ColdWar, Skill::Regular) > 0 && count(War, Skill::Regular) > 0);
+        assert!(count(Veteran, Skill::Ace) > count(Green, Skill::Ace));
+        assert!(count(Green, Skill::Rookie) > count(Veteran, Skill::Rookie));
+        assert!(count(Green, Skill::Regular) > 0 && count(Veteran, Skill::Regular) > 0);
+        assert_eq!(count(Elite, Skill::Rookie) + count(Elite, Skill::Regular), 0);
     }
 
     /// Tief und waagerecht bleibt das Flugzeug für das Jägerradar unsichtbar

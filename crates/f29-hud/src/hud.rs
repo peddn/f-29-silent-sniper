@@ -760,28 +760,25 @@ fn glide_line(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout, glas
 
 /// Gleitwinkel des Anflugs in Grad.
 const GLIDE_DEG: f32 = 3.0;
-/// Sinkrate, ab der eine Landung hart wird bzw. das Fahrwerk bricht (m/s),
-/// direkt aus den Flugzeugdaten.
-pub(crate) const HARD_SINK_MPS: f32 = f29_core::data::F29_SPEC.hard_landing_sink_mps as f32;
-pub(crate) const MAX_SINK_MPS: f32 = f29_core::data::F29_SPEC.max_landing_sink_mps as f32;
-
 /// Sinkratenskala rechts im Glas (Landemodus): Balken für die Steig-/Sinkrate,
-/// Marken für „hart“ und „Bruch“ – wie die Landehilfe im Original, eigene Form.
+/// Marken für „hart“ und „Bruch“ nach dem Flugverhalten – wie die Landehilfe
+/// im Original, eigene Form; ohne Bruchgrenze keine Marken.
 fn sink_scale(dl: &mut DisplayList, fd: &FlightData, glass: &Rect) {
     // rechts neben dem Glas, damit Höhe und Pitch-Leiter frei bleiben
     let x = glass.max[0] + 0.03;
     let top = glass.center()[1] + 0.03;
-    let full = 10.0_f32; // m/s über die ganze Skala
+    let full = 12.0_f32; // m/s über die ganze Skala
     let len = 0.17_f32;
     let y_of = |mps: f32| top - (mps.clamp(0.0, full) / full) * len;
     dl.line([x, top], [x, top - len], Ink::HudDim);
-    for (mps, ink) in [(HARD_SINK_MPS, Ink::Hud), (MAX_SINK_MPS, Ink::HudWarning)] {
+    let (hard, max) = fd.sink_limits.map_or((f32::INFINITY, f32::INFINITY), |(h, m)| (h as f32, m as f32));
+    for (mps, ink) in [(hard, Ink::Hud), (max, Ink::HudWarning)].into_iter().filter(|(m, _)| m.is_finite()) {
         let y = y_of(mps);
         dl.line([x - 0.010, y], [x + 0.010, y], ink);
     }
     let sink = (-fd.vertical_speed_mps) as f32;
     let y = y_of(sink);
-    let ink = if sink > MAX_SINK_MPS { Ink::HudWarning } else { Ink::Hud };
+    let ink = if sink > max { Ink::HudWarning } else { Ink::Hud };
     dl.line([x - 0.004, top], [x - 0.004, y], ink);
     dl.line([x + 0.004, top], [x + 0.004, y], ink);
     dl.line([x - 0.006, y], [x + 0.006, y], ink);

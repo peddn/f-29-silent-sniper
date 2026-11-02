@@ -125,15 +125,6 @@ fn heading_formatting() {
     assert_eq!(heading_deg(std::f64::consts::FRAC_PI_2), 90);
 }
 
-#[test]
-fn sink_marks_fit_the_scale() {
-    // Beide Marken liegen auf der 10-m/s-Skala, hart unter Bruch.
-    const {
-        assert!(crate::hud::HARD_SINK_MPS < crate::hud::MAX_SINK_MPS);
-        assert!(crate::hud::MAX_SINK_MPS < 10.0);
-    };
-}
-
 /// Endanflug mit ausgefahrenem Fahrwerk: Landehilfen erscheinen, alles bleibt im Bild.
 #[test]
 fn landing_aids_and_ground_messages_stay_on_screen() {

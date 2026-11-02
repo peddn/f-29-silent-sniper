@@ -4,7 +4,7 @@
 //! die Startbedingungen exakt erhalten bleiben):
 //!
 //! ```text
-//! F29REPLAY 11
+//! F29REPLAY 12
 //! seed 3881
 //! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
 //! loadout <fall,chute,lgb,agm|auto>
@@ -13,6 +13,8 @@
 //! stealth <on|off>
 //! damage <on|off>
 //! rules <cold|limited|war>
+//! opponents <green|regular|veteran|elite>
+//! landings <nocrash|easy|realistic>
 //! theater <prüfsumme> <name>
 //! frames <anzahl Zeilen>
 //! <wiederholungen> <pitch> <roll> <yaw> <throttle> <flags> <waffen>
@@ -24,13 +26,13 @@
 //! Modell geändert, dieselben Eingaben ergäben einen anderen Flug.
 
 use crate::controls::ControlFrame;
-use crate::rules::Conflict;
+use crate::rules::{Conflict, Landings, Opponents};
 use crate::sim::{Sim, SimConfig, Spawn, SpawnKind};
 use crate::weapons::Loadout;
 use f29_world::Theater;
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 11";
+pub const MAGIC: &str = "F29REPLAY 12";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replay {
@@ -111,6 +113,8 @@ impl Replay {
         let _ = writeln!(s, "stealth {}", if sp.visible { "off" } else { "on" });
         let _ = writeln!(s, "damage {}", if sp.invulnerable { "off" } else { "on" });
         let _ = writeln!(s, "rules {}", sp.conflict.code());
+        let _ = writeln!(s, "opponents {}", sp.opponents.code());
+        let _ = writeln!(s, "landings {}", sp.landings.code());
         let th = &self.config.theater;
         let _ = writeln!(s, "theater {:016x} {}", th.checksum(), th.name);
         let _ = writeln!(s, "frames {}", self.frames.len());
@@ -188,6 +192,16 @@ impl Replay {
             .strip_prefix("rules ")
             .and_then(Conflict::from_code)
             .ok_or_else(|| err(ln, "erwartet `rules cold|limited|war`".into()))?;
+        let (ln, l) = next("opponents")?;
+        let opponents = l
+            .strip_prefix("opponents ")
+            .and_then(Opponents::from_code)
+            .ok_or_else(|| err(ln, "erwartet `opponents green|regular|veteran|elite`".into()))?;
+        let (ln, l) = next("landings")?;
+        let landings = l
+            .strip_prefix("landings ")
+            .and_then(Landings::from_code)
+            .ok_or_else(|| err(ln, "erwartet `landings nocrash|easy|realistic`".into()))?;
         // Bisher nur das eingebaute Gebiet; die Prüfsumme sichert, dass es
         // dasselbe ist wie bei der Aufnahme.
         let (ln, l) = next("theater")?;
@@ -254,6 +268,8 @@ impl Replay {
                     visible,
                     invulnerable,
                     conflict,
+                    opponents,
+                    landings,
                 },
             ),
             frames,

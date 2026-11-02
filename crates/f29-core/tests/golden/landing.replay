@@ -1,4 +1,4 @@
-F29REPLAY 11
+F29REPLAY 12
 seed 3881
 spawn air c1013c06a63f5164 c1025ac959c0ae9c 4078214dde4662d6 0000000000000000 4002d97c7f3321d2 4057c00000000000 3fd3333333333333 3fd999999999999a
 loadout -,-,-,-
@@ -7,6 +7,8 @@ awacs on
 stealth on
 damage on
 rules war
+opponents regular
+landings realistic
 theater ab8f65046263e6a2 NORTH COAST
 frames 12356
 36 -13107 0 0 0 12 0
@@ -12365,4 +12367,4 @@ frames 12356
 6 0 -3415 0 0 13 0
 13 0 -3416 0 0 13 0
 5381 0 0 0 0 9 0
-hash 00836787f5113b4f
+hash c166aab67f97aa1b
