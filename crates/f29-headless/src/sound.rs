@@ -93,6 +93,7 @@ fn landing_demo() -> Vec<f32> {
         awacs: true,
         visible: false,
         invulnerable: false,
+        conflict: Default::default(),
     };
     let mut sim = Sim::new(SimConfig { seed: 0x0F29, spawn });
     let mut ap = Approach::new(rw);

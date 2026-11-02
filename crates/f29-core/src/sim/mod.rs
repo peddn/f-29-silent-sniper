@@ -9,6 +9,7 @@ use crate::math::{DQuat, DVec3};
 use crate::nav::{self, Steerpoint};
 use crate::radar::{Exposure, RadarEvent, RadarKind, RadarNet};
 use crate::rng::Pcg32;
+use crate::rules::{Conflict, Rules};
 use crate::sensors::{self, LookDir, Pick, Seen, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
@@ -106,6 +107,8 @@ pub struct Spawn {
     /// Testoption: Raketentreffer werden gemeldet, richten aber keinen
     /// Schaden an (`--no-damage`); ein Absturz bleibt tödlich.
     pub invulnerable: bool,
+    /// Konfliktlage und damit das Regelset (`--rules`).
+    pub conflict: Conflict,
 }
 
 impl Default for Spawn {
@@ -125,6 +128,7 @@ impl Default for Spawn {
             awacs: true,
             visible: false,
             invulnerable: false,
+            conflict: Conflict::War,
         }
     }
 }
@@ -207,6 +211,10 @@ pub enum Status {
     Flying,
     Crashed { tick: u64, cause: CrashCause },
 }
+
+/// Übergangsregel bis zum Gebietsraster: so weit (m) um die eigenen
+/// Flugplätze ist eigenes Gebiet.
+pub const FRIENDLY_RADIUS_M: f64 = 40_000.0;
 
 /// So viele Ziele prüft die eigene Erfassung je Erfassungstakt (reihum).
 const CONTACTS_PER_UPDATE: usize = 4;
@@ -338,7 +346,7 @@ impl Sim {
             .max(0.0);
         let route = build_route(&terrain, config.seed, sp);
         let targets = targets::generate(&terrain, seed, &route);
-        let fighters = Fighters::new(&terrain, seed);
+        let fighters = Fighters::new(&terrain, seed, sp.conflict.rules().max_airborne);
         let sensors = Sensors { night: sp.night, ..Sensors::default() };
         let aero = flight::aero_data(&spec, &aircraft);
         let last_controls = ControlFrame::from_analog(0.0, 0.0, 0.0, sp.throttle, 0);
@@ -467,6 +475,9 @@ impl Sim {
     /// Radarstellungen, die in diesem Tick feuern wollen, starten ihre
     /// Boden-Luft-Rakete (M-021).
     fn launch_sams(&mut self) {
+        if !self.hostile_fire() {
+            return;
+        }
         let fire: Vec<usize> = self
             .radar
             .events
@@ -481,20 +492,24 @@ impl Sim {
             let t = &self.targets[i];
             let Some(kind) = targets::sam_of(&self.targets, i) else { continue };
             let from = DVec3::new(t.north, t.east, -t.elevation - t.class.height());
-            self.stores.launch_sam(self.tick, kind, i, from, self.aircraft.position);
+            let max = self.rules().max_hostile_missiles;
+            self.stores.launch_sam(self.tick, kind, i, from, self.aircraft.position, max);
         }
     }
 
     /// Jäger, deren Radar das Flugzeug gerade erfasst hat und es vor der Nase
     /// haben, starten ihre Luft-Luft-Rakete (M-022, wie im Original).
     fn launch_air(&mut self) {
-        let a = self.aircraft.position;
+        if !self.hostile_fire() {
+            return;
+        }
+        let (a, rules) = (self.aircraft.position, self.rules());
         for f in &self.fighters.list {
             let to = a - f.position;
             let ahead = f.velocity().normalize_or_zero().dot(to.normalize_or_zero());
             if f.airborne() && f.contact_tick == Some(self.tick) && ahead >= fighters::LAUNCH_CONE_RAD.cos() {
                 let kind = f.spec().missile;
-                self.stores.launch_air(self.tick, kind, f.id as usize, f.position, f.velocity(), a);
+                self.stores.launch_air(self.tick, kind, f.id as usize, (f.position, f.velocity()), a, rules);
             }
         }
     }
@@ -503,12 +518,13 @@ impl Sim {
     /// der Nase eines verfolgenden Jägers liegt. Jeder Treffer kostet Schub
     /// und verschlechtert mit 15 % ein zufälliges System (M-015).
     fn fighter_guns(&mut self) {
-        let a = self.aircraft.position;
+        let (a, allowed) = (self.aircraft.position, self.hostile_fire());
         for i in 0..self.fighters.list.len() {
             let f = self.fighters.list[i];
             let to = a - f.position;
             let nose = f.velocity().normalize_or_zero();
-            let fire = f.mode == fighters::Mode::Pursue
+            let fire = allowed
+                && f.mode == fighters::Mode::Pursue
                 && to.length() < fighters::GUN_RANGE_M
                 && nose.dot(to.normalize_or_zero()) >= fighters::GUN_CONE_RAD.cos();
             let gun = &mut self.fighters.guns[i];
@@ -525,6 +541,26 @@ impl Sim {
                 }
             }
         }
+    }
+
+    /// Regelset der Mission.
+    pub fn rules(&self) -> &'static Rules {
+        self.config.spawn.conflict.rules()
+    }
+
+    /// Liegt `pos` über feindlichem Gebiet? Übergangsregel bis zum
+    /// Gebietsraster (v0.3): außerhalb von [`FRIENDLY_RADIUS_M`] um die
+    /// Heimatbasis und die geheimen Pisten.
+    pub fn over_hostile(&self, pos: DVec3) -> bool {
+        let own = self.terrain.runways().iter().filter(|r| r.kind != AirfieldKind::Enemy);
+        own.into_iter()
+            .all(|r| DVec3::new(r.center[0] - pos.x, r.center[1] - pos.y, 0.0).length() > FRIENDLY_RADIUS_M)
+    }
+
+    /// Darf der Gegner gerade feuern (Regelset; im Kalten Krieg nur über
+    /// feindlichem Gebiet)?
+    fn hostile_fire(&self) -> bool {
+        !self.rules().fire_only_over_hostile || self.over_hostile(self.aircraft.position)
     }
 
     /// Was die feindlichen Radare vom Flugzeug sehen (M-020).

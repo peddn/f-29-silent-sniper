@@ -11,6 +11,7 @@
 //! f29-silent-sniper [--seed N] [--view cockpit|chase] [--start runway|air]
 //!                   [--volume 0..100] [--no-sound]
 //!                   [--loadout fall,chute,lgb,agm] [--night] [--no-awacs] [--no-stealth] [--no-damage]
+//!                   [--rules cold|limited|war]
 //!                   [--joystick DATEI] [--joystick-debug]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
@@ -62,6 +63,13 @@ fn main() {
                     "--loadout: vier Einträge aus fall, chute, lgb, agm, arm, ship, aim9, aim120 oder - erwartet"
                 )
             }
+        }
+    }
+    // Regelset (Konfliktlage): Kalter Krieg, begrenzter Konflikt, offener Krieg.
+    if let Some(text) = arg(&args, "--rules") {
+        match f29_core::rules::Conflict::from_code(&text) {
+            Some(c) => config.spawn.conflict = c,
+            None => eprintln!("--rules: cold, limited oder war erwartet"),
         }
     }
     let mut view_settings = view::ViewSettings::default();

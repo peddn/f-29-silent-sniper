@@ -28,6 +28,7 @@ fn main() {
         awacs: true,
         visible: false,
         invulnerable: false,
+        conflict: Default::default(),
     };
     let mut sim = Sim::new(SimConfig { seed, spawn });
     let mut ap = Approach::new(rw.clone());

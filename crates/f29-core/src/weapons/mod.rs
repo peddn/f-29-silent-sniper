@@ -42,6 +42,7 @@ use crate::detmath;
 use crate::events::EventLog;
 use crate::math::{DQuat, DVec3};
 use crate::rng::Pcg32;
+use crate::rules::Rules;
 use crate::sensors::{self, line_of_sight};
 use crate::systems::System;
 use crate::targets::{Target, TargetClass, TargetState};
@@ -95,9 +96,6 @@ const SEEKER_TICKS: u64 = 12;
 const GIVE_UP_RAD: f64 = 3.0 * std::f64::consts::FRAC_PI_4;
 /// Vorausberechnung: so viele Simulationsschritte auf einmal.
 const PREDICT_STEPS: f64 = 4.0;
-/// Feindliche Raketen höchstens so viele gleichzeitig in der Luft (je
-/// Stellung eine, wie im Original).
-pub const MAX_HOSTILE: usize = 4;
 /// Boden-Luft-Raketen starten mindestens so steil über der Linie zum
 /// Flugzeug (rad, 10° – innerhalb des Suchkegels).
 const SAM_DIRECT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
@@ -105,8 +103,6 @@ const SAM_DIRECT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
 const MAX_LEAD_S: f64 = 10.0;
 /// Startgeschwindigkeit der Boden-Luft-Raketen (m/s).
 const SAM_LAUNCH_MPS: f64 = 60.0;
-/// Jäger starten ihre Rakete nicht näher als so (m).
-pub const AIR_MIN_RANGE_M: f64 = 1_000.0;
 /// Störer (ECM bzw. Infrarot): Raketen der gestörten Lenkart verlieren die
 /// Lenkung, solange sie weiter als so weg sind (m) – wie im Original.
 pub const BURN_THROUGH_M: f64 = 2_000.0;
@@ -708,7 +704,7 @@ impl Stores {
     /// Startet eine Boden-Luft-Rakete der Radarstellung `site` (Index in
     /// `Sim::targets`, Startpunkt `from`) auf das Flugzeug bei `aircraft` –
     /// wenn es in Reichweite ist, die Stellung keine Rakete mehr in der Luft
-    /// hat und nicht schon [`MAX_HOSTILE`] fliegen (wie im Original).
+    /// hat und nicht schon `max` feindliche fliegen (wie im Original).
     pub fn launch_sam(
         &mut self,
         tick: u64,
@@ -716,9 +712,10 @@ impl Stores {
         site: usize,
         from: DVec3,
         aircraft: DVec3,
+        max: usize,
     ) -> bool {
         let to = aircraft - from;
-        if to.length() > kind.spec().max_range_m || !self.hostile_slot_free(Launcher::Site(site)) {
+        if to.length() > kind.spec().max_range_m || !self.hostile_slot_free(Launcher::Site(site), max) {
             return false;
         }
         // Im Startwinkel des Typs, mindestens knapp über der Linie zum
@@ -738,28 +735,28 @@ impl Stores {
     }
 
     /// Je Stellung bzw. Jäger eine Rakete in der Luft, insgesamt höchstens
-    /// [`MAX_HOSTILE`] (wie im Original).
-    fn hostile_slot_free(&self, by: Launcher) -> bool {
+    /// `max` (wie im Original; Regelset).
+    fn hostile_slot_free(&self, by: Launcher, max: usize) -> bool {
         let hostile = self.in_flight.iter().filter(|w| w.owner.is_some());
-        !hostile.clone().any(|w| w.owner == Some(by)) && hostile.count() < MAX_HOSTILE
+        !hostile.clone().any(|w| w.owner == Some(by)) && hostile.count() < max
     }
 
-    /// Startet die Luft-Luft-Rakete `kind` des Jägers `fighter` (bei `from`
-    /// mit `velocity`) auf das Flugzeug bei `aircraft` – wenn es in ihrer
-    /// Reichweite, aber nicht näher als [`AIR_MIN_RANGE_M`] ist und ein
-    /// Platz frei ist (wie im Original).
+    /// Startet die Luft-Luft-Rakete `kind` des Jägers `fighter` (Ort und
+    /// Geschwindigkeit `from`) auf das Flugzeug bei `aircraft` – wenn es in ihrer
+    /// Reichweite, aber nicht näher als die Mindestentfernung des Regelsets
+    /// ist und ein Platz frei ist (wie im Original).
     pub fn launch_air(
         &mut self,
         tick: u64,
         kind: WeaponKind,
         fighter: usize,
-        from: DVec3,
-        velocity: DVec3,
+        (from, velocity): (DVec3, DVec3),
         aircraft: DVec3,
+        rules: &Rules,
     ) -> bool {
         let range = (aircraft - from).length();
-        if !(AIR_MIN_RANGE_M..=kind.spec().max_range_m).contains(&range)
-            || !self.hostile_slot_free(Launcher::Fighter(fighter))
+        if !(rules.fighter_min_range_m..=kind.spec().max_range_m).contains(&range)
+            || !self.hostile_slot_free(Launcher::Fighter(fighter), rules.max_hostile_missiles)
         {
             return false;
         }

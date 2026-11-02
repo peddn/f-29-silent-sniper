@@ -270,6 +270,11 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
         dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &dist, Ink::Mfd);
         y -= step;
     }
+    // Regelset und Gebiet unter dem Flugzeug
+    let (side, ink) = if fd.over_hostile { ("HOSTILE", Ink::Warning) } else { ("FRIENDLY", Ink::Mfd) };
+    dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, &format!("ROE {}", fd.rules), Ink::Mfd);
+    dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, side, ink);
+    y -= step;
     y += step * 0.1;
     dl.line([f.x0, y], [f.x1, y], Ink::MfdDim);
     y -= step * 0.8;

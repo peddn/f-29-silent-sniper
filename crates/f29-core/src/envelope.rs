@@ -311,6 +311,7 @@ fn autopilot_landing() -> (f64, f64) {
         awacs: true,
         visible: false,
         invulnerable: false,
+        conflict: Default::default(),
     };
     let mut sim = Sim::new(SimConfig { seed: SEED, spawn });
     let mut ap = Approach::new(rw);

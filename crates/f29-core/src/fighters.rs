@@ -4,8 +4,8 @@
 //! und starten erst bei Alarm – wenn ein Radar am Boden das Flugzeug bis zur
 //! Stufe „verfolgt“ erfasst hat oder ein Jäger es mit seinem eigenen Radar
 //! sieht. Der Kontaktort muss vom Platz aus in Reichweite liegen. Höchstens
-//! [`MAX_AIRBORNE`] fliegen gleichzeitig, je Platz startet einer nach dem
-//! anderen.
+//! [`Fighters::max_airborne`] fliegen gleichzeitig (Regelset), je Platz
+//! startet einer nach dem anderen.
 //!
 //! **Bewegungsmodell** wie im Original statt eines Flugmodells: Die Querlage
 //! folgt einem Sollwert mit begrenzter Rollrate, die Kurve folgt der
@@ -40,8 +40,6 @@ use f29_terrain::{AirfieldKind, Terrain};
 
 /// Jäger je feindlichem Platz.
 pub const PER_BASE: usize = 5;
-/// Höchstens so viele Jäger gleichzeitig in der Luft.
-pub const MAX_AIRBORNE: usize = 6;
 /// Ein Radarkontakt eines Jägers gilt so lange als frisch (s).
 const CONTACT_S: f64 = 15.0;
 /// Mindesthöhe über Grund im Flug (m).
@@ -343,6 +341,8 @@ pub struct Fighters {
     pub list: Vec<Fighter>,
     /// Kanone je Jäger (gleicher Index).
     pub guns: Vec<Gun>,
+    /// Höchstens so viele gleichzeitig in der Luft (Regelset).
+    pub max_airborne: usize,
     /// Letzter Radarkontakt eines Jägers (Ort, Tick).
     pub contact: Option<(DVec3, u64)>,
     pub events: EventLog<FighterEvent>,
@@ -351,7 +351,7 @@ pub struct Fighters {
 impl Fighters {
     /// [`PER_BASE`] Jäger auf jedem feindlichen Platz bereit: drei MiG-21,
     /// zwei MiG-29.
-    pub fn new(terrain: &Terrain, seed: u64) -> Self {
+    pub fn new(terrain: &Terrain, seed: u64, max_airborne: usize) -> Self {
         let mut list = Vec::new();
         for (base, _) in terrain.runways().iter().enumerate().filter(|(_, r)| r.kind == AirfieldKind::Enemy) {
             for k in 0..PER_BASE {
@@ -360,7 +360,7 @@ impl Fighters {
             }
         }
         let guns = (0..list.len() as u64).map(|k| Gun::with_stream(seed, STREAM_GUNS + k)).collect();
-        Self { list, guns, contact: None, events: EventLog::default() }
+        Self { list, guns, max_airborne, contact: None, events: EventLog::default() }
     }
 
     /// Ein Tick. `alert` ist der jüngste Ping-Ort der Radarstellungen,
@@ -487,7 +487,7 @@ impl Fighters {
             let rolling = self.list.iter().any(|o| o.base == f.base && o.mode == Mode::Takeoff);
             let reach = f.spec().cruise_mps * f.spec().endurance_s * 0.5;
             let d = p - f.position;
-            if airborne >= MAX_AIRBORNE
+            if airborne >= self.max_airborne
                 || f.mode != Mode::Ready
                 || rolling
                 || DVec3::new(d.x, d.y, 0.0).length() > reach
@@ -510,7 +510,7 @@ mod tests {
 
     fn setup() -> (Terrain, Fighters) {
         let terrain = Terrain::new(0x0F29);
-        let f = Fighters::new(&terrain, 1);
+        let f = Fighters::new(&terrain, 1, 6);
         (terrain, f)
     }
 
@@ -568,10 +568,10 @@ mod tests {
                 let rolling = f.list.iter().filter(|x| x.base == base && x.mode == Mode::Takeoff).count();
                 max_rolling = max_rolling.max(rolling);
             }
-            assert!(f.list.iter().filter(|x| x.airborne()).count() <= MAX_AIRBORNE);
+            assert!(f.list.iter().filter(|x| x.airborne()).count() <= f.max_airborne);
         }
         assert_eq!(max_rolling, 1, "je Platz rollt nur einer");
-        assert_eq!(f.list.iter().filter(|x| x.airborne()).count(), MAX_AIRBORNE);
+        assert_eq!(f.list.iter().filter(|x| x.airborne()).count(), f.max_airborne);
         assert!(f.list.iter().all(|x| -x.position.z > terrain.elevation(x.position.x, x.position.y) - 1.0));
     }
 
@@ -649,7 +649,7 @@ mod tests {
         }
         assert_eq!(f.list[gun].mode, Mode::Wreck, "nicht aufgeschlagen");
         assert_eq!(f.list[missile].mode, Mode::Wreck);
-        assert!(f.list.iter().filter(|x| x.airborne()).count() <= MAX_AIRBORNE);
+        assert!(f.list.iter().filter(|x| x.airborne()).count() <= f.max_airborne);
     }
 
     /// Tief und waagerecht bleibt das Flugzeug für das Jägerradar unsichtbar

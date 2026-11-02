@@ -18,6 +18,11 @@ fn duel(kind: WeaponKind, ahead: f64) -> Sim {
 /// Wie [`duel`] mit Jäger `jet` (0 MiG-21, 3 MiG-29); `visible`: für sein
 /// Radar voll sichtbar.
 fn duel_with(kind: WeaponKind, jet: usize, ahead: f64, visible: bool) -> Sim {
+    duel_in(kind, jet, ahead, Spawn { visible, invulnerable: !visible, ..Spawn::default() })
+}
+
+/// Wie [`duel_with`] mit Startort, Regelset usw. aus `base`.
+fn duel_in(kind: WeaponKind, jet: usize, ahead: f64, base: Spawn) -> Sim {
     let probe = Sim::new(SimConfig::new(SEED));
     let alt = probe.terrain().max_elevation() + 4_000.0;
     let spawn = Spawn {
@@ -26,9 +31,7 @@ fn duel_with(kind: WeaponKind, jet: usize, ahead: f64, visible: bool) -> Sim {
         speed: 250.0,
         throttle: 0.8,
         loadout: Loadout([Some(kind), None, None, None]),
-        visible,
-        invulnerable: !visible,
-        ..Spawn::default()
+        ..base
     };
     let mut sim = Sim::new(SimConfig { seed: SEED, spawn });
     no_air_defense(&mut sim);
@@ -181,4 +184,23 @@ fn fighters_turn_away_from_missiles() {
         let turn = course(jet, WeaponKind::Sidewinder);
         assert!(turn > 0.05, "Jäger {jet} dreht nicht: {turn:.3} rad");
     }
+}
+
+/// Kalter Krieg: Über eigenem Gebiet feuert der Jäger nicht, über
+/// feindlichem sehr wohl; im offenen Krieg überall.
+#[test]
+fn cold_war_fighters_fire_only_over_hostile_territory() {
+    use f29_core::rules::Conflict;
+    let probe = Sim::new(SimConfig::new(SEED));
+    let home = probe.terrain().runways()[0].center;
+    let fires = |conflict: Conflict, north: f64| {
+        let base = Spawn { north, east: home[1], visible: true, conflict, ..Spawn::default() };
+        let mut sim = duel_in(WeaponKind::Sidewinder, 3, 30_000.0, base);
+        let hostile = sim.flight_data().over_hostile;
+        (first_air_launch(&mut sim, 20.0).is_some(), hostile)
+    };
+    assert_eq!(fires(Conflict::ColdWar, home[0]), (false, false), "über eigenem Gebiet geschossen");
+    assert_eq!(fires(Conflict::War, home[0]), (true, false), "offener Krieg: schießt überall");
+    let far = home[0] + if home[0] > 0.0 { -90_000.0 } else { 90_000.0 };
+    assert_eq!(fires(Conflict::ColdWar, far), (true, true), "über feindlichem Gebiet nicht geschossen");
 }

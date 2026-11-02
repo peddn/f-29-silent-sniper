@@ -4,7 +4,7 @@
 //! die Startbedingungen exakt erhalten bleiben):
 //!
 //! ```text
-//! F29REPLAY 7
+//! F29REPLAY 8
 //! seed 3881
 //! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
 //! loadout fall,chute,lgb,agm
@@ -12,6 +12,7 @@
 //! awacs <on|off>
 //! stealth <on|off>
 //! damage <on|off>
+//! rules <cold|limited|war>
 //! frames <anzahl Zeilen>
 //! <wiederholungen> <pitch> <roll> <yaw> <throttle> <flags> <waffen>
 //! ...
@@ -22,11 +23,12 @@
 //! Modell geändert, dieselben Eingaben ergäben einen anderen Flug.
 
 use crate::controls::ControlFrame;
+use crate::rules::Conflict;
 use crate::sim::{Sim, SimConfig, Spawn, SpawnKind};
 use crate::weapons::Loadout;
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 7";
+pub const MAGIC: &str = "F29REPLAY 8";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replay {
@@ -106,6 +108,7 @@ impl Replay {
         let _ = writeln!(s, "awacs {}", if sp.awacs { "on" } else { "off" });
         let _ = writeln!(s, "stealth {}", if sp.visible { "off" } else { "on" });
         let _ = writeln!(s, "damage {}", if sp.invulnerable { "off" } else { "on" });
+        let _ = writeln!(s, "rules {}", sp.conflict.code());
         let _ = writeln!(s, "frames {}", self.frames.len());
         for (n, f) in &self.frames {
             let _ =
@@ -176,6 +179,11 @@ impl Replay {
         let awacs = switch("awacs", "on", "off")?;
         let visible = switch("stealth", "off", "on")?;
         let invulnerable = switch("damage", "off", "on")?;
+        let (ln, l) = next("rules")?;
+        let conflict = l
+            .strip_prefix("rules ")
+            .and_then(Conflict::from_code)
+            .ok_or_else(|| err(ln, "erwartet `rules cold|limited|war`".into()))?;
 
         let (ln, frames_line) = next("frames")?;
         let count = frames_line
@@ -233,6 +241,7 @@ impl Replay {
                     awacs,
                     visible,
                     invulnerable,
+                    conflict,
                 },
             },
             frames,

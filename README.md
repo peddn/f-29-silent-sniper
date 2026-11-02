@@ -54,6 +54,9 @@ cargo run --release -p f29-app -- --no-sound
 
 # andere Beladung der vier Schächte: fall, chute, lgb, agm, arm, ship, aim9, aim120 oder -
 cargo run --release -p f29-app -- --loadout fall,fall,agm,arm
+# Regelset: Kalter Krieg (Gegner feuern nur über feindlichem Gebiet),
+# begrenzter Konflikt oder offener Krieg (Standard)
+cargo run --release -p f29-app -- --rules cold
 
 # nach 10 s automatisch einen Screenshot speichern und beenden
 cargo run --release -p f29-app -- --screenshot bild.png --after 10
@@ -277,6 +280,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - ~~Flak~~ (gestrichen, Spielerentscheidung v0.2.9)
 
 ### v0.3: Missionen
+- [x] Regelsets Kalter Krieg / Begrenzter Konflikt / Offener Krieg
+      (`--rules`): wo und wie viel der Gegner feuert, Entdeckungskosten für
+      die Wertung; MSN-Seite mit Regelset und Gebiet (v0.3)
 - [ ] Einsatzgebiete als Daten (M-031): eigenes fiktives Küstengebiet, rund
       400–500 km, Grobraster 16 × 16 (Land/Wasser, Geländeart, Zugehörigkeit)
       steuert das prozedurale Gelände; feste Objekte (Basen, Träger, geheime

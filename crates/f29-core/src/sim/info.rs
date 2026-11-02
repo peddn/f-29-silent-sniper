@@ -210,6 +210,10 @@ pub struct FlightData {
     pub own_contacts: Vec<usize>,
     /// Ein freundliches AWACS ist in der Luft (Datalink).
     pub awacs: bool,
+    /// Regelset der Mission und ob das Flugzeug über feindlichem Gebiet ist
+    /// (im Kalten Krieg feuert der Gegner nur dort).
+    pub rules: &'static str,
+    pub over_hostile: bool,
     /// Zielhilfe, wenn eine ungelenkte Bombe gewählt ist und das Flugzeug fliegt.
     pub bomb_aim: Option<BombAim>,
     /// Waffen in der Luft für die Karte: eigene und feindliche.
@@ -797,6 +801,8 @@ impl Sim {
             weapon_messages: self.weapon_messages(),
             systems: self.systems,
             awacs: self.config.spawn.awacs,
+            rules: self.rules().label,
+            over_hostile: self.over_hostile(a.position),
             own_contacts: (0..self.targets.len())
                 .filter(|&i| self.ground_seen[i].any() && self.targets[i].is_intact())
                 .collect(),

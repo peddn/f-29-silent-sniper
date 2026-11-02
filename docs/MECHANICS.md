@@ -1746,6 +1746,30 @@ Format jedes Eintrags:
     Orden (M-030).
 - **Status:** gelesen (v0.3)
 
+### M-033 Regelsets (Konfliktlage)
+
+- **Verhalten (Original):** Die Konfliktstufe der Mission – von kaltem Krieg
+  bis offenem Krieg – bestimmt an vielen Stellen, wie gefährlich der Gegner
+  ist (gleichzeitige Bedrohungen, Mindestentfernung der Jägerraketen,
+  Aggressivität, Anstieg der Alarmstufen) und wie die Mission bewertet
+  wird.
+- **Unser Design (v0.3, Spielerentscheidungen):** `f29_core::rules`. Drei
+  Regelsets, je Mission eines (`--rules cold|limited|war`, im Replay):
+  - **Kalter Krieg:** Jäger fangen ab und verfolgen, SAMs und Jäger feuern
+    aber nur, wenn das Flugzeug über feindlichem Gebiet ist. Höchstens zwei
+    feindliche Raketen zugleich, vier Jäger in der Luft, Jägerraketen nicht
+    unter 1,5 km. Entdeckung kostet viel.
+  - **Begrenzter Konflikt:** Gegner feuern überall, sonst wie oben;
+    Entdeckung kostet mittel.
+  - **Offener Krieg** (Standard, das bisherige Verhalten): vier Raketen
+    zugleich, sechs Jäger, 1 km; Entdeckung kostet nichts.
+  - **Feindliches Gebiet** – Übergangsregel bis zum Gebietsraster: weiter
+    als 40 km von der Heimatbasis und den geheimen Pisten. Die MSN-Seite
+    zeigt das Regelset und „FRIENDLY“/„HOSTILE“.
+  - Die Entdeckungskosten nutzt die Wertung (M-032); weitere Werte
+    (Alarmanstieg, Zivil- und Eigenbeschuss) kommen mit ihr.
+- **Status:** umgesetzt (v0.3)
+
 ### M-030 Karriere, Szenarien, Orden
 
 - **Verhalten:** Ein Pilot fliegt eine Folge von Missionen in mehreren Einsatzgebieten
