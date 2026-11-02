@@ -1724,6 +1724,22 @@ Format jedes Eintrags:
     für Einsatzgebiet, Missionsart, Schwierigkeit und Konfliktlage skaliert;
     ein Ausstieg kürzt je nach Gebiet, lange Flüge werden in Stufen
     aufgewertet.
+  - **Fotokamera** (Referenz `src_en/egtarget.c`, Zielanzeige): Die Kamera
+    ist eine Ausrüstung im Schacht, kein Geschoss. Sie arbeitet über die
+    Zielanzeige: Ist ein Bodenziel gewählt und die Kamera gewählt, zeigt die
+    Zielanzeige das Kamerabild; ein Druck auf den Auslöser macht ein Bild
+    („Bild n“, mit kurzer Verschlusszeit und Klickton, ohne Vorratsgrenze).
+    Die Kamera blickt fest etwas unter die Nase. Ein Bild zählt, wenn das
+    gewählte Ziel das Aufklärungsziel des Auftrags ist und noch steht und
+    eine Summe aus Kursabweichung zum Ziel, Abweichung des Blickwinkels nach
+    unten und Entfernung unter einer Grenze liegt – nah heran, Nase genau
+    darauf. Die Grenze wird mit der Konfliktstufe enger. Dann Meldung „Ziel
+    fotografiert“ und ein Eintrag im Protokoll. Ohne gewähltes Ziel kann
+    die Kamera ein Objekt am Boden dort finden, wohin ihr Blick trifft.
+  - **Weitere Auftragsarten im Original:** Fracht über einem Ort abwerfen
+    bzw. an einen Ort liefern (mit Zeitlimit) und das Abfangen bestimmter
+    Flugzeuge (Transporter auf dem Weg zu oder von einem Ort, ein Flugzeug
+    über einem Ort).
   - **Nachbesprechung:** Karte mit dem abgeflogenen Weg (abspielbar), Liste
     der Ereignisse, Ausgangstext (Primär-/Sekundärziel erreicht oder nicht,
     Landung, Ausstieg, Tod, Zwischenfall), Punkte; danach Beförderung und
