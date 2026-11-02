@@ -1804,6 +1804,36 @@ Format jedes Eintrags:
     der Ereignisse, Ausgangstext (Primär-/Sekundärziel erreicht oder nicht,
     Landung, Ausstieg, Tod, Zwischenfall), Punkte; danach Beförderung und
     Orden (M-030).
+- **Lesephase 3 (Wertung und Nachbesprechung, eigene Worte, keine Werte):**
+  - **Punkte aus dem Protokoll:** Die Wertung geht das Flugprotokoll der
+    Reihe nach durch. Primärziel (zerstört, fotografiert oder beliefert)
+    bringt den größten Betrag. Das Sekundärziel bringt weniger – fällt das
+    Primärziel ebenfalls (auch später im Flug), wird der Betrag fürs
+    Sekundärziel nachträglich auf einen höheren angehoben. Andere Ziele
+    werden nach Art bewertet: bewaffnete militärische Einheiten und
+    Flugzeuge positiv (Jäger, Transporter und Hubschrauber verschieden),
+    eigene Einheiten und Ziele im eigenen Gebiet negativ, zivile negativ.
+    Je nach Stufe zählen unbewaffnete Ziele gar nicht oder als
+    unerlaubter Angriff.
+  - **Entdeckung kostet, Rache lohnt:** Jede Identifizierung durch Sicht
+    bzw. Radar zieht Punkte ab. Zerstört man später genau die Einheit, die
+    einen entdeckt hat, bekommt man den Abzug zurück.
+  - **Wegpunkte:** außerhalb des eigenen Gebiets je nach Stufe ein Punkt
+    pro Wegpunkt oder pro vier Wegpunkte, darüber nichts.
+  - **Untergrenze:** Bei Landung bzw. Ausstieg wird ein negativer
+    Zwischenstand auf null gesetzt.
+  - **Faktoren** auf die Summe: Einsatzgebiet, Missionsart, Schwierigkeit
+    und Konfliktlage; nach einem Ausstieg zusätzlich ein Faktor je
+    Ausgang (gerettet, gefangen, Zwischenfall); lange Flüge werden in drei
+    Zeitstufen leicht aufgewertet.
+  - **Ablauf der Nachbesprechung:** zuerst ein Bild zum Ausgang (Tod,
+    Landung, Ausstieg), dann die Karte mit dem abgeflogenen Weg: Man
+    blättert Ereignis für Ereignis, die Karte zeigt die Stelle, dazu
+    Uhrzeit, Text des Ereignisses, Kennzeichnung als Primär- bzw.
+    Sekundärziel und die bis dahin erreichte Wertung; am Ende die
+    Gesamtwertung. Danach Statistik, Beförderung und Orden (Kampagne,
+    M-030) und eine Abschlussseite mit Bild und zufälligem Text zum
+    Ausgang.
 - **Lesephase 2 (Generator):** Je Ziel wählt der Generator aus einer Tabelle
   eine Auftragsart; die Tabelle hängt von der Zielart, dem Gebiet und der
   Konfliktstufe ab (die Werte liegen der Rekonstruktion nicht bei). Für
