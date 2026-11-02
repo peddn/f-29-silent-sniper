@@ -1682,6 +1682,54 @@ Format jedes Eintrags:
     Struktur (Raster, Objektliste, Generatorregeln) wird nachgebaut.
 - **Status:** Lesephase abgeschlossen (v0.2.9), Umsetzung geplant (v0.3)
 
+### M-032 Missionsauftrag, Bewaffnung und Auswertung
+
+- **Verhalten (Original):** Der Generator legt zu den Zielen eine
+  Missionsart, eine vorgeschlagene Bewaffnung und die Tageszeit fest; nach
+  dem Flug wertet das Spiel den Ausgang und das Flugprotokoll aus.
+- **Referenzstelle:** f19re `src_start/stgen.c` (`runGenerator`, Ende:
+  Vorschlag der Bewaffnung), `src_start/stutil.c` (`drawStoreIcons`,
+  Bewaffnungsbildschirm), `src_end/enbrief.c` (`calcMissionScore`),
+  `src_end/enmain.c` (Ablauf der Nachbesprechung), `src_end/endevt.c`
+  (Ausgangstexte, Gebiet am Landeort), `src/egkeys.c` (Schleudersitz).
+- **Lesephase v0.3 (eigene Worte, keine Werte):**
+  - **Missionsarten:** Je Ziel ergibt sich aus seiner Art, was verlangt ist:
+    zerstören (Angriff), fotografieren (Aufklärung mit einer Kamera im
+    Schacht) oder eine Sonderausrüstung absetzen. Die Tageszeit des Starts
+    folgt aus den Zielen; bestimmte Aufträge fliegen immer nachts, andere
+    nie.
+  - **Vorgeschlagene Bewaffnung** für die vier Schächte: grundsätzlich je
+    eine Luft-Luft-Waffe kurzer und mittlerer Reichweite, eine
+    Anti-Radar-Rakete und abwechselnd Lenkraketen oder Bomben; bei weiter
+    Strecke statt einer Waffe ein Zusatztank. Je Ziel wird ein Schacht
+    ersetzt: Kamera für Aufklärung, Sonderausrüstung für Absetzaufträge,
+    für Angriffe eine zufällige Waffe, die gegen die Zielklasse gut wirkt.
+    Der Spieler kann die Schächte vor dem Start umrüsten.
+  - **Ausgang der Mission:** gelandet (eigener Flugplatz), mit dem
+    Schleudersitz ausgestiegen oder tot. Ob der Ausstieg gelingt, hängt von
+    Fahrt und Fluglage ab (schnell oder stark geneigt – Tod). Nach Landung
+    oder Ausstieg zählt das Gebiet unter dem Flugzeug aus einem Raster
+    (eigen, neutral, feindlich): Aussteigen über Feindesland bedeutet
+    Gefangenschaft, Landen in neutralem Gebiet einen „internationalen
+    Zwischenfall“.
+  - **Flugprotokoll und Punkte:** Das Spiel schreibt während des Flugs ein
+    Protokoll (Zerstörungen mit Zielart, Abschüsse, erreichte Wegpunkte,
+    Entdeckung durch Radar bzw. Sicht, Ausstieg/Landung). Die Wertung geht
+    es durch und vergibt Punkte je Eintrag nach Tabellen (je Kampagnenstufe):
+    hohe Werte für Primär- und Sekundärziel (das Sekundärziel zählt mehr,
+    wenn auch das Primärziel fiel), weniger für andere militärische Ziele
+    und Abschüsse; Abzüge für zivile Ziele, Eigenbeschuss und für jede
+    Entdeckung (Sicht- bzw. Radaridentifizierung). Wegpunkte bringen
+    Kleinstpunkte, über eigenem Gebiet keine. Die Summe wird mit Faktoren
+    für Einsatzgebiet, Missionsart, Schwierigkeit und Konfliktlage skaliert;
+    ein Ausstieg kürzt je nach Gebiet, lange Flüge werden in Stufen
+    aufgewertet.
+  - **Nachbesprechung:** Karte mit dem abgeflogenen Weg (abspielbar), Liste
+    der Ereignisse, Ausgangstext (Primär-/Sekundärziel erreicht oder nicht,
+    Landung, Ausstieg, Tod, Zwischenfall), Punkte; danach Beförderung und
+    Orden (M-030).
+- **Status:** gelesen (v0.3)
+
 ### M-030 Karriere, Szenarien, Orden
 
 - **Verhalten:** Ein Pilot fliegt eine Folge von Missionen in mehreren Einsatzgebieten
