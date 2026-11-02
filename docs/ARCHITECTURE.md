@@ -7,7 +7,7 @@
                 │   f29-data   │  Flugzeugparameter (später: Waffen, Bedrohungen, Szenarien)
                 └──────┬───────┘
 ┌──────────────┐       │
-│ f29-terrain  │       │         deterministisches Gelände: (seed, x, y) → Höhe
+│ f29-world  │       │         Einsatzgebiet + Gelände: (Gebiet, x, y) → Höhe
 └──────┬───────┘       │
        └───────┬───────┘
         ┌──────▼──────┐
@@ -29,7 +29,7 @@ kompiliert und testet ohne Grafikkarte, ohne Fenster und ohne externe Crates.
 | Crate | Aufgabe |
 |---|---|
 | `f29-data` | Spieldaten als Typen und Konstanten |
-| `f29-terrain` | Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung, Flugplätze (Platzwahl, Einebnung) |
+| `f29-world` | Einsatzgebiet als Daten (RON), Grobraster, Zielklassen, Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung, Flugplätze (Einebnung), Erstbefüllung (`populate`) |
 | `f29-core` | Flugmodell, Atmosphäre, Sim-Schleife, Navigation, Replays, Autopilot, deterministische Mathematik |
 | `f29-hud` | HUD und MFDs (Karte mit Höhenlinien, Ressourcen) als Liniensegmente, Vektorfont, SVG-Export |
 | `f29-audio` | Prozedurale Klangsynthese (Triebwerk, Systeme, Ereignisse), Formant-Sprachansagen, WAV-Ein-/Ausgabe |
@@ -41,7 +41,7 @@ kompiliert und testet ohne Grafikkarte, ohne Fenster und ohne externe Crates.
 
 | System | Achsen | Wo |
 |---|---|---|
-| **Welt (NED)** | x = Nord, y = Ost, z = unten; Ursprung auf Meereshöhe | `f29-core`, `f29-terrain` |
+| **Welt (NED)** | x = Nord, y = Ost, z = unten; Ursprung auf Meereshöhe | `f29-core`, `f29-world` |
 | **Körper** | x = Nase, y = rechte Fläche, z = unten | Flugmodell, HUD-Projektion |
 | **Darstellung (Y-up)** | x = Ost, y = oben, z = Süd; Modellnase = −z | `f29-render`, `f29-app` |
 
@@ -68,7 +68,7 @@ gerundet. Das hält die Darstellung auch hunderte Kilometer vom Weltursprung sta
 ### Determinismus
 
 Gleicher Seed + gleiche Eingaben ⇒ bitgleicher Zustand, auf jeder Plattform. Regeln
-für `f29-core` und `f29-terrain`:
+für `f29-core` und `f29-world`:
 
 1. Transzendente Funktionen (`sin`, `atan2`, `exp`, `powf` …) **nur aus
    `f29_core::detmath`**. Die Plattform-Mathebibliotheken dürfen um einige ULP
@@ -89,10 +89,10 @@ Terrain-Streaming in Threads), solange es den Simulationszustand nur liest.
 |---|---|---|
 | Unit | detmath vs. `std` (≤ 1e-14), Quaternionen, ISA-Tabellenwerte, PCG32-Referenzfolge, Rauschen | `src/**` |
 | Flugtests | Autopilot hält Höhe/Kurs/Fahrt, Rollrate, g-Begrenzer, stetiger Strömungsabriss (Abkippen, Erholung mit Fahrt, keine Sprünge), Abrisswarnung, Energieverlust in harter Kurve, Abriss im Steilflug, Schubwirkung, Turbulenz nur in Bodennähe, Landeklappen, begrenzte Steigleistung, Höchstgeschwindigkeit, Luftbremse, Absturz, PULL-UP-Warnung | `f29-core/tests/flight.rs` |
-| Landungen | Bahnstart, Start und Steigflug, Autopilot-Landung (gut), Landung auf geheimer Piste mit Wenden am Ende und erneutem Start, Bauchlandung, harte Landung, Landung neben der Bahn, Route über die Piste, Treibstoffverbrauch und Gewichtseinfluss, Flameout, BINGO, Fahrwerks-Überfahrt | `f29-core/tests/landing.rs` |
+| Landungen | Bahnstart, Start und Steigflug, Autopilot-Landung (gut), Landung mit Wenden am Ende und erneutem Start, Route zu beiden Zielen und zurück, Bauchlandung, harte Landung, Landung neben der Bahn, Route über die Piste, Treibstoffverbrauch und Gewichtseinfluss, Flameout, BINGO, Fahrwerks-Überfahrt | `f29-core/tests/landing.rs` |
 | Determinismus | identische Eingaben ⇒ identischer Hash; eine Quantisierungsstufe Unterschied ⇒ anderer Hash; Replay-Textformat verlustfrei | `f29-core/tests/determinism.rs` |
 | Golden Replay | 90-s-Flug sowie Anflug, Landung, Ausrollen und erneuter Start mit festem Hash, läuft in CI auf Linux, Windows und macOS | `f29-core/tests/golden/*.replay` |
-| Terrain | Seed-Stabilität, Kachelränder bitgleich, Stetigkeit, Normalen, Flugplätze eben und deterministisch, Bahnnummern | `f29-terrain`, `f29-render` |
+| Terrain | Seed-Stabilität, Kachelränder bitgleich, Stetigkeit, Normalen, Flugplätze eben und deterministisch, Bahnnummern | `f29-world`, `f29-render` |
 | HUD/MFD | alles bleibt bei 4:3 bis 21:9 im Bild, Projektion des Boresight, Leiter bewegt sich richtig, deterministisch; MFDs passen ins Brett, Karte bleibt im linken MFD (alle Modi und Zoomstufen), Treibstoffbalken, Höhenlinien, kursbezogene Projektion | `f29-hud` |
 | Daten | Flugzeugparameter plausibel; Shader-Palette = Rust-Palette | `f29-data`, `f29-render` |
 

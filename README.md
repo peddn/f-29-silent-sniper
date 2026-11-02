@@ -11,7 +11,7 @@ jeder Auflösung scharf bleibt.
 > in [`docs/MECHANICS.md`](docs/MECHANICS.md) festgelegt und protokolliert.
 
 **Status:** v0.1 abgeschlossen: Freiflug über prozeduralem Gelände mit HUD und zwei
-MFDs, Start und Landung auf der Heimatbasis und geheimen Pisten, Treibstoff, Klang.
+MFDs, Start und Landung auf der Heimatbasis, Treibstoff, Klang.
 v0.2 (Angriff und Tarnung) abgeschlossen bis auf den Joystick-Test: Bodenziele,
 Zielerfassung, Bomben, Lenkwaffen und Kanone, feindliche Radare und Boden-Luft-Raketen,
 Schadensmodell, Täuschkörper und Störer. Als Nächstes: v0.3 (Missionen).
@@ -153,7 +153,7 @@ cargo run --release -p f29-headless -- bench
 ```
 crates/
   f29-data/      Spieldaten (Flugzeugparameter)
-  f29-terrain/   deterministisches prozedurales Gelände
+  f29-world/   Einsatzgebiete (Daten) und deterministisches Gelände
   f29-core/      Simulationskern: Flugmodell, fester Tick, Replays – keine Engine
   f29-hud/       HUD und Instrumente als Vektor-Display-Liste
   f29-render/    engine-neutrale Geometrie: Terrain-Meshes, Modell, Palette
@@ -283,13 +283,13 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Regelsets Kalter Krieg / Begrenzter Konflikt / Offener Krieg
       (`--rules`): wo und wie viel der Gegner feuert, Entdeckungskosten für
       die Wertung; MSN-Seite mit Regelset und Gebiet (v0.3)
-- [ ] Einsatzgebiete als Daten (M-031): eigenes fiktives Küstengebiet, rund
-      400–500 km, Grobraster 16 × 16 (Land/Wasser, Geländeart, Zugehörigkeit)
-      steuert das prozedurale Gelände; feste Objekte (Basen, Träger, geheime
-      Pisten, Radarnetz, Städte, Häfen, Brücken, Kraftwerke)
-- [ ] Missionsgenerator nach dem Vorbild des Originals: Ziele aus dem Gebiet,
-      nächste eigene Startbasis, Strecke in einem Band, Route aus Basis und
-      Zielen
+- [x] Einsatzgebiete als Daten (M-031, Crate `f29-world`): Gebiet
+      „NORTH COAST“, 500 km, Grobraster 64 × 64 (Gelände, Seite) formt das
+      Gelände; Flugplätze und alle Ziele aus der Datei; `f29-headless
+      theater-new` / `theater-png`; Kartenbild über das ganze Gebiet (v0.3)
+- [x] Missionsgenerator: zwei Ziele aus dem Gebiet, das nähere ist das
+      Primärziel; Route Start → Primär → Sekundär → Landung; geheime Pisten
+      entfallen (v0.3)
 - [ ] Planquadrate auf Karte und Missionsseite; Geländeart als Radarfaktor
 - [ ] Missionsdaten: Primär- und Sekundärziel, Route, Bedrohungslage
 - [ ] Bewaffnung und Betankung vor dem Start (Zusatztanks), Missionsauswertung

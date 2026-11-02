@@ -352,17 +352,17 @@ Format jedes Eintrags:
 - **Referenzstelle:** f19re `src/egframe.c` (Suche des nächsten Flugplatzes,
   Landekorridor, Startposition), `src/egflight.c` (Trägerstart).
 - **Unser Design:**
-  - Pro Seed eine **Heimatbasis** (3 km × 45 m, voll markiert, PAPI) und zwei
-    **geheime Pisten** (1,5 km × 30 m, unbefestigt, kaum markiert, unbefeuert),
-    deterministisch auf flachem Land gewählt.
+  - Flugplätze stehen in der Gebietsdatei (M-031): **Heimatbasen** (3 km ×
+    45 m, voll markiert, PAPI) und **feindliche Fliegerhorste**. Die geheimen
+    Pisten sind entfallen (v0.3); sie kommen ggf. mit Absetzaufträgen zurück.
   - Echte Bahnen in 22,5°-Schritten statt nur Nord-Süd. Das Gelände wird unter
     der Bahn eingeebnet und weich übergeblendet; Kollision, Radarhöhe und
     Darstellung gelten damit automatisch.
-  - Die Route führt über zwei Wegpunkte zur nächstgelegenen geheimen Piste und
-    zurück zur Heimatbasis. HSI zeigt bei Flugplätzen die Bahnrichtung.
+  - Die Route kommt vom Missionsgenerator (M-031). HSI zeigt bei
+    Flugplätzen die Bahnrichtung.
   - Standardstart steht am Anfang der Heimatbahn (`--start air` für den Luftstart).
   - Flugzeugträger folgen mit Szenarien auf See.
-- **Unsere Werte:** `crates/f29-terrain/src/airfield.rs`.
+- **Unsere Werte:** `crates/f29-world/src/airfield.rs`.
 - **Status:** umgesetzt (v0.1.6)
 
 ### M-041 Fahrwerk und Rollen am Boden
@@ -649,7 +649,7 @@ Format jedes Eintrags:
   Gradientenrauschen, fBm und Grat-Rauschen für Gebirgszüge, mit Meer, Küsten, Wald und
   Fels. Sie wird für Kollision und Darstellung identisch ausgewertet. Eigene, fiktive
   Einsatzgebiete entstehen später aus Seed und Parametern.
-- **Unsere Werte:** `TerrainParams::default()` in `crates/f29-terrain/src/lib.rs`.
+- **Unsere Werte:** `TerrainParams::default()` in `crates/f29-world/src/lib.rs`.
 - **Status:** umgesetzt (v0.1)
 
 ### M-003 HUD und Cockpit-Instrumente
@@ -1134,8 +1134,7 @@ Format jedes Eintrags:
     ±10°.
   - **NAV** (Start): Flugdaten, Navigationspunkt, Konfiguration; mit
     ausgefahrenem Fahrwerk Gleitlinie und Sinkratenskala. Erfassen lassen
-    sich nur Landebahnen, nur zur Anzeige: Name, „FRIENDLY“ (Heimatbasis,
-    geheime Pisten) bzw. „HOSTILE“ (feindliche Fliegerhorste), „NEUTRAL“
+    sich nur Landebahnen, nur zur Anzeige: Name, „FRIENDLY“ (Heimatbasis) bzw. „HOSTILE“ (feindliche Fliegerhorste), „NEUTRAL“
     vorgesehen; Entfernung in km.
   - **AG** (Luft-Boden): Bodenziele, Erfassungskreis, gewählte Waffe und die
     Zielhilfe je nach Waffe – Kanone: Kanonenkreuz am vorausberechneten
@@ -1680,7 +1679,30 @@ Format jedes Eintrags:
     feste Objekte bekommen eine Vorauswahl nach Rasterzellen.
   - Keine Positionen aus dem Original (sie liegen auch nicht vor): nur die
     Struktur (Raster, Objektliste, Generatorregeln) wird nachgebaut.
-- **Status:** Lesephase abgeschlossen (v0.2.9), Umsetzung geplant (v0.3)
+- **Umsetzung v0.3 (Spielerentscheidungen):**
+  - Eigenes Crate `f29-world`: Gebietsformat, Gelände, Flugplätze,
+    Zielklassen. Ein Gebiet ist eine RON-Datei (`data/theaters/*.ron`):
+    Name, Seed, Kantenlänge (500 km), Grobraster n × n (64 × 64; die Größe
+    ist frei, ein Editor kann 128 × 128 nutzen) mit Gelände (`~ . h M`) und
+    Seite (`F N H`), Flugplätze (feindliche mit ihren Jägern) und **alle**
+    Objekte mit Klasse, Lage, Ausrichtung und „zivil“.
+  - Das Raster formt die Landschaft: je Geländeart ein Höhenprofil, weich
+    überblendet und mit verzerrten Zellgrenzen, darüber das Detailrauschen.
+  - Missionsgenerator (`f29_core::mission`): wählt aus den militärischen
+    Objekten des Gebiets zwei Ziele in einem Entfernungsband von der
+    Heimatbasis, nah beieinander; das nähere ist das Primärziel. Route:
+    Startbasis → Primärziel → Sekundärziel → Landebasis (die Startbasis).
+    Gelandet werden darf wie im Original auf jedem Platz im eigenen Gebiet.
+  - Seiten (eigen/neutral/feindlich) kommen aus dem Raster.
+  - Replays speichern Name und Prüfsumme des Gebiets.
+  - Das erste Gebiet „NORTH COAST“ wurde einmalig mit `f29-headless
+    theater-new` aus Rauschgelände erzeugt (Raster abgetastet, Plätze
+    gesucht, Seiten nach Nähe, Objekte verteilt) und ist ab jetzt Daten;
+    `theater-png` zeigt eine Vorschau. Ein grafischer Editor folgt.
+  - Das MFD-Kartenbild (4096²) deckt das ganze Gebiet ab und wird parallel
+    berechnet.
+  - Offen: Planquadrate, Geländeart als Radarfaktor.
+- **Status:** umgesetzt (v0.3)
 
 ### M-032 Missionsauftrag, Bewaffnung und Auswertung
 
@@ -1763,9 +1785,8 @@ Format jedes Eintrags:
     Entdeckung kostet mittel.
   - **Offener Krieg** (Standard, das bisherige Verhalten): vier Raketen
     zugleich, sechs Jäger, 1 km; Entdeckung kostet nichts.
-  - **Feindliches Gebiet** – Übergangsregel bis zum Gebietsraster: weiter
-    als 40 km von der Heimatbasis und den geheimen Pisten. Die MSN-Seite
-    zeigt das Regelset und „FRIENDLY“/„HOSTILE“.
+  - **Feindliches Gebiet** kommt aus dem Gebietsraster (M-031). Die
+    MSN-Seite zeigt das Regelset und „FRIENDLY“/„NEUTRAL“/„HOSTILE“.
   - Die Entdeckungskosten nutzt die Wertung (M-032); weitere Werte
     (Alarmanstieg, Zivil- und Eigenbeschuss) kommen mit ihr.
 - **Status:** umgesetzt (v0.3)
