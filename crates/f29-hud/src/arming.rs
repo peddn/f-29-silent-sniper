@@ -1,0 +1,106 @@
+//! Bewaffnungsbildschirm (M-036): oben Treibstoffbedarf und -vorrat, in der
+//! Mitte groß die Unterseite der F-29 mit den vier Schächten (der Umriss
+//! folgt dem Grundriss des 3D-Modells und darf über den Rand ragen), unten
+//! die Liste in zwei Spalten. Welche Einträge es gibt und was eine Wahl
+//! bewirkt, bestimmt das Frontend.
+
+use crate::ScreenLayout;
+use crate::canvas::{Align, DisplayList, Ink, Rect};
+use crate::debrief::{TXT, footer};
+
+/// Einträge je Spalte der Liste.
+pub const ROWS: usize = 6;
+const ROW: f32 = 0.029;
+/// Bildbereich (Fensterhöhe = 1) und Maßstab (Bildschirm je Meter): Die
+/// Schächte füllen rund 2/3 der Höhe.
+const PICTURE: [f32; 2] = [-0.225, 0.43];
+const SCALE: f32 = 0.1;
+/// Grundriss der F-29 (rechte Hälfte, x quer, z längs, Nase in −z, Meter)
+/// wie in `f29_render::model::aircraft`.
+const OUTLINE: [[f32; 2]; 5] = [[0.0, -9.0], [6.5, 4.0], [3.0, 5.0], [2.2, 7.5], [0.0, 6.2]];
+/// Ein Schacht (halbe Breite, halbe Länge) und die Mitte des vorderen
+/// rechten (x, z; Meter).
+const BAY_HALF: [f32; 2] = [1.15, 1.45];
+const BAY_CENTER: [f32; 2] = [1.3, -1.9];
+/// Abstand der Schachtreihen (m).
+const BAY_GAP: f32 = 0.4;
+
+/// Inhalt des Bildschirms.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Arming {
+    /// Je Schacht Kurzname und Anzahl.
+    pub bays: [Option<(String, u8)>; 4],
+    pub items: Vec<String>,
+    /// Gewählter Listeneintrag.
+    pub cursor: usize,
+    /// Fokus auf einem Schacht (die Waffe am Cursor wird dort abgelegt).
+    pub bay: Option<usize>,
+    /// Takt des Blinkens.
+    pub blink: bool,
+    /// Treibstoff: benötigt, mitgeführt (kg).
+    pub fuel: (f64, f64),
+}
+
+/// Mitte des Schachts `k` (1 vorn links, 2 vorn rechts, 3 hinten links,
+/// 4 hinten rechts) in Bildschirmeinheiten.
+fn bay_center(k: usize, origin: [f32; 2]) -> [f32; 2] {
+    let x = if k.is_multiple_of(2) { -BAY_CENTER[0] } else { BAY_CENTER[0] };
+    let z = BAY_CENTER[1] + (k / 2) as f32 * (2.0 * BAY_HALF[1] + BAY_GAP);
+    [origin[0] + x * SCALE, origin[1] - z * SCALE]
+}
+
+pub fn draw(layout: &ScreenLayout, a: &Arming) -> DisplayList {
+    let mut dl = DisplayList::new();
+    let blink = if a.blink { Ink::HudWarning } else { Ink::Hud };
+    dl.text_mid([0.0, 0.475], TXT, Align::Center, "ARMING", Ink::Hud);
+    let (need, have) = a.fuel;
+    let ink = if have < need { Ink::HudWarning } else { Ink::HudDim };
+    let fuel = format!("FUEL REQUIRED {need:.0} KG    CARRIED {have:.0} KG");
+    dl.text_mid([0.0, 0.447], TXT * 0.85, Align::Center, &fuel, ink);
+
+    // Unterseite, auf den Bildbereich beschnitten
+    let half = layout.aspect * 0.5;
+    let area = Rect { min: [-half, PICTURE[0]], max: [half, PICTURE[1]] };
+    // Die beiden Schachtreihen mittig im Bildbereich.
+    let middle = BAY_CENTER[1] + BAY_HALF[1] + BAY_GAP * 0.5;
+    let origin = [0.0, area.center()[1] + middle * SCALE];
+    let pt = |[x, z]: [f32; 2]| [origin[0] + x * SCALE, origin[1] - z * SCALE];
+    dl.set_clip(Some(area));
+    let side: Vec<[f32; 2]> = OUTLINE.iter().map(|&p| pt(p)).collect();
+    let other: Vec<[f32; 2]> = OUTLINE.iter().rev().map(|&[x, z]| pt([-x, z])).collect();
+    dl.polyline(&[side, other].concat(), true, Ink::HudDim);
+    for k in 0..4 {
+        let c = bay_center(k, origin);
+        let r = Rect::from_center(c, [BAY_HALF[0] * SCALE, BAY_HALF[1] * SCALE]);
+        let focus = a.bay == Some(k);
+        let ink = if focus { blink } else { Ink::Hud };
+        dl.rect(r, ink);
+        if focus {
+            dl.rect(Rect::from_center(c, [BAY_HALF[0] * SCALE + 0.008, BAY_HALF[1] * SCALE + 0.008]), ink);
+        }
+        dl.text_mid([c[0], r.max[1] - TXT], TXT * 0.8, Align::Center, &format!("BAY {}", k + 1), Ink::HudDim);
+        let (name, count) = match &a.bays[k] {
+            Some((n, c)) => (n.as_str(), format!("X{c}")),
+            None => ("EMPTY", String::new()),
+        };
+        dl.text_mid([c[0], c[1] + TXT * 0.4], TXT, Align::Center, name, ink);
+        dl.text_mid([c[0], c[1] - TXT * 1.2], TXT, Align::Center, &count, ink);
+    }
+    dl.set_clip(None);
+
+    // Liste in zwei Spalten
+    for (k, item) in a.items.iter().enumerate() {
+        let x = if k < ROWS { -0.62 } else { 0.08 };
+        let y = PICTURE[0] - 0.03 - (k % ROWS) as f32 * ROW;
+        let ink = match (k == a.cursor, a.bay) {
+            (true, None) => blink,
+            (true, Some(_)) => Ink::Hud,
+            _ => Ink::HudDim,
+        };
+        dl.text_mid([x, y], TXT * 0.85, Align::Left, item, ink);
+    }
+    let hint =
+        if a.bay.is_some() { "ARROWS - BAY    SPACE - LOAD" } else { "ARROWS - SELECT    SPACE - TAKE" };
+    footer(&mut dl, hint);
+    dl
+}

@@ -6,6 +6,7 @@
 //! noch Linien. Dadurch ist das HUD ohne GPU testbar und in jeder Auflösung
 //! gleich proportioniert.
 
+pub mod arming;
 pub mod canvas;
 pub mod debrief;
 pub mod font;

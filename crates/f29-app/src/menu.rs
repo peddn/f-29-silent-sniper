@@ -15,7 +15,9 @@ use crate::sim::{SimState, SimSystems};
 use crate::view::ViewSettings;
 use bevy::prelude::*;
 use f29_core::rules::{Conflict, Landings, Opponents};
+use f29_core::weapons::{Loadout, WeaponKind};
 use f29_hud::Page;
+use f29_hud::arming::Arming;
 
 pub struct MenuPlugin;
 
@@ -88,19 +90,8 @@ pub fn page(state: &SimState) -> Page {
             ("FLIGHT PERFORMANCE", vec![], Landings::ALL.map(|l| l.label().to_string()).into())
         }
         Screen::Briefing => ("MISSION BRIEFING", sim.briefing(), list(&["CONTINUE"])),
-        Screen::Arming => {
-            let bays = sim.flight_data().stores.bays;
-            let lines = bays
-                .iter()
-                .enumerate()
-                .map(|(k, b)| match b.kind {
-                    Some(w) => format!("BAY {}: {} X{}", k + 1, w.label(), b.count),
-                    None => format!("BAY {}: EMPTY", k + 1),
-                })
-                .chain(["".into(), "REARMING FOLLOWS IN A LATER VERSION.".into()])
-                .collect();
-            ("ARMING", lines, list(&["CONTINUE"]))
-        }
+        // eigener Bildschirm (`arming`); hier nur die Zahl der Einträge
+        Screen::Arming => ("ARMING", vec![], vec![String::new(); ARM_ITEMS]),
         Screen::Final => (
             "FINAL CHOICES",
             vec![],
@@ -108,6 +99,71 @@ pub fn page(state: &SimState) -> Page {
         ),
     };
     Page { title: title.into(), lines, options, cursor: state.cursor }
+}
+
+/// Liste der Bewaffnung: die Waffen, „leer“, „fertig“.
+const ARM_ITEMS: usize = WeaponKind::ALL.len() + 2;
+
+/// Inhalt des Bewaffnungsbildschirms; `blink` ist der Takt des Blinkens.
+pub fn arming(state: &SimState, blink: bool) -> Arming {
+    let sim = &state.sim;
+    let bays = sim.flight_data().stores.bays.map(|b| b.kind.map(|k| (k.label().to_string(), b.count)));
+    let items = WeaponKind::ALL
+        .iter()
+        .map(|k| k.spec().name.to_string())
+        .chain(["EMPTY".into(), "ARMING COMPLETE".into()]);
+    Arming {
+        bays,
+        items: items.collect(),
+        cursor: state.cursor,
+        bay: state.arm_bay,
+        blink,
+        fuel: (sim.fuel_required_kg(), sim.fuel_carried_kg()),
+    }
+}
+
+/// Bewaffnung bedienen: in der Liste eine Waffe nehmen, dann mit den Pfeilen
+/// einen Schacht wählen und sie dort ablegen; zurück in der Liste blinkt sie.
+fn arm(state: &mut SimState, (up, down, left, right, ok): (bool, bool, bool, bool, bool)) {
+    match state.arm_bay {
+        None => {
+            let n = ARM_ITEMS;
+            let step = |c: usize, d: usize| (c + d) % n;
+            let mut c = state.cursor;
+            c = if up {
+                step(c, n - 1)
+            } else if down {
+                step(c, 1)
+            } else {
+                c
+            };
+            if left || right {
+                c = step(
+                    c,
+                    if c < f29_hud::arming::ROWS { f29_hud::arming::ROWS } else { n - f29_hud::arming::ROWS },
+                );
+            }
+            state.cursor = c.min(n - 1);
+            if ok && state.cursor == n - 1 {
+                open(state, Screen::Final);
+            } else if ok {
+                state.arm_bay = Some(0);
+            }
+        }
+        Some(mut k) => {
+            // 2×2: links/rechts wechselt die Seite, hoch/runter vorn/hinten.
+            k ^= usize::from(left || right) | usize::from(up || down) << 1;
+            state.arm_bay = Some(k);
+            if ok {
+                let mut config = state.sim.config().clone();
+                let mut l = Loadout(state.sim.flight_data().stores.bays.map(|b| b.kind));
+                l.0[k] = WeaponKind::ALL.get(state.cursor).copied();
+                config.spawn.loadout = Some(l);
+                state.reset(config);
+                state.arm_bay = None;
+            }
+        }
+    }
 }
 
 /// Öffnet einen Bildschirm; Auswahllisten beginnen bei der aktuellen Wahl.
@@ -122,9 +178,11 @@ fn open(state: &mut SimState, screen: Screen) {
     state.menu = Some(screen);
 }
 
-/// Neue Mission: nächster Seed (SplitMix64), dieselben Einstellungen.
+/// Neue Mission: nächster Seed (SplitMix64), dieselben Einstellungen, die
+/// vorgeschlagene Beladung.
 fn new_mission(state: &mut SimState) {
     let mut config = state.sim.config().clone();
+    config.spawn.loadout = None;
     let z = config.seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
     let z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     config.seed = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB) >> 1;
@@ -199,7 +257,14 @@ fn menu_input(
     let up = keys.any_just_pressed([KeyCode::ArrowUp, KeyCode::KeyW]) || act(Action::LookForward);
     let down = keys.any_just_pressed([KeyCode::ArrowDown, KeyCode::KeyS]) || act(Action::LookAft);
     let ok = keys.just_pressed(KeyCode::Enter) || act(Action::Fire);
+    let left = keys.any_just_pressed([KeyCode::ArrowLeft, KeyCode::KeyA]) || act(Action::LookLeft);
+    let right = keys.any_just_pressed([KeyCode::ArrowRight, KeyCode::KeyD]) || act(Action::LookRight);
     actions.0.retain(|&(a, ..)| a == Action::Quit);
+    if state.menu == Some(Screen::Arming) {
+        arm(&mut state, (up, down, left, right, ok));
+        *pilot = PilotInput::matching(&state.sim);
+        return;
+    }
     let n = page(&state).options.len();
     if up {
         state.cursor = (state.cursor + n - 1) % n;

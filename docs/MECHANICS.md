@@ -2086,5 +2086,23 @@ Format jedes Eintrags:
   zum Dienstplan. Gegnerqualität und Flugverhalten wirken (M-022, M-005) und
   stehen im Replay (Format 12); „leicht“ = Landegrenzen ×1,5 (gut bis
   6 m/s, Bruch ab 10,5 m/s, 22,5° Querlage, −7,5° Nase).
-- **Status:** S1 umgesetzt (v0.3); S2 Bewaffnung mit Zusatztank, S3
-  Lagebesprechungskarte, S4 Dienstplan folgen
+- **Umgesetzt S2 (v0.3):** **Bewaffnung** („Arm Your Plane“): oben
+  „FUEL REQUIRED / CARRIED“ (Warnfarbe bei Mangel), in der Mitte die
+  Unterseite der F-29 als Liniengrafik nach dem Grundriss des 3D-Modells
+  mit den vier Schächten (2×2, gut 60 % der Höhe, Umriss ragt über den
+  Rand), darin Kurzname und Stückzahl; unten die Liste in zwei Spalten
+  (die zehn Ausrüstungen, EMPTY, ARMING COMPLETE). Bedienung: Pfeile
+  wählen, Leertaste nimmt die Waffe, dann wählen die Pfeile einen Schacht
+  (der blinkt), Leertaste legt sie ab; zurück in der Liste blinkt die Waffe
+  zwischen zwei Farben. Eine neue Mission bringt wieder die vorgeschlagene
+  Beladung.
+  - **Treibstoffschätzung:** Routenlänge × 11 kg/km (gemessen mit dem
+    Autopiloten bei 250 m/s in 3000 m) plus 450 kg Reserve; steht auch im
+    Briefing. Reicht der Haupttank (5200 kg) nicht, schlägt die Beladung
+    einen Zusatztank statt der HARM vor.
+  - **Zusatztank** (`tank`): 1000 kg Treibstoff, voll 1120 kg; ein Tank je
+    Schacht. Gewählt pumpt der Auslöser in jedem HUD-Modus ohne Klappen in
+    die Haupttanks („FUEL TRANSFERRED“), was nicht passt, geht verloren,
+    der Schacht ist danach leer. WPN-Seite: „FUEL“, „READY“.
+- **Status:** S1 und S2 umgesetzt (v0.3); S3 Lagebesprechungskarte, S4
+  Dienstplan folgen

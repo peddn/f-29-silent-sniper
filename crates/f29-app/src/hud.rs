@@ -69,7 +69,9 @@ fn scale_line_width(
     config.line.width = (window.physical_height() as f32 / 420.0).clamp(1.0, 6.0);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_hud(
+    time: Res<Time>,
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
     view: Res<ViewSettings>,
@@ -106,7 +108,10 @@ fn draw_hud(
         camera_feed: true,
         debrief_screen: view.debrief,
     };
-    let list = if state.menu.is_some() {
+    let blink = time.elapsed_secs().fract() < 0.5;
+    let list = if state.menu == Some(crate::menu::Screen::Arming) {
+        f29_hud::arming::draw(&layout, &crate::menu::arming(&state, blink))
+    } else if state.menu.is_some() {
         f29_hud::draw_menu(&layout, &crate::menu::page(&state))
     } else {
         f29_hud::build(&fd, &layout, &opts, maps.map.as_deref())

@@ -902,3 +902,23 @@ fn ejected_pilot_sees_no_hud() {
     let fd = f29_core::FlightData { pilot: Some(pilot), ..sample() };
     assert!(build(&fd, &layout, &opts, None).lines.is_empty());
 }
+
+/// Bewaffnung (M-036): Der Fokus blinkt zwischen zwei Farben – in der Liste
+/// der Eintrag am Cursor, sonst der gewählte Schacht.
+#[test]
+fn arming_focus_blinks() {
+    use crate::arming::{Arming, draw};
+    let layout = ScreenLayout::cockpit(16.0 / 9.0);
+    let a = Arming {
+        bays: [Some(("AIM-9".into(), 4)), None, None, None],
+        items: vec!["A".into(), "B".into()],
+        fuel: (4_000.0, 5_200.0),
+        ..Arming::default()
+    };
+    let warn = |a: &Arming| draw(&layout, a).lines.iter().filter(|l| l.ink == Ink::HudWarning).count();
+    assert_eq!(warn(&a), 0);
+    assert!(warn(&Arming { blink: true, ..a.clone() }) > 0, "Liste blinkt");
+    let bay = Arming { blink: true, bay: Some(2), ..a.clone() };
+    assert!(warn(&bay) > warn(&Arming { blink: true, ..a.clone() }), "Schacht blinkt");
+    assert!(warn(&Arming { fuel: (6_000.0, 5_200.0), ..a }) > 0, "zu wenig Treibstoff");
+}

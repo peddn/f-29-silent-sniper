@@ -82,6 +82,8 @@ pub struct SimState {
     /// Offener Menübildschirm vor dem Flug (M-036) und Cursor darin.
     pub menu: Option<crate::menu::Screen>,
     pub cursor: usize,
+    /// Bewaffnung: Fokus auf diesem Schacht statt auf der Liste.
+    pub arm_bay: Option<usize>,
 }
 
 impl SimState {
@@ -99,6 +101,7 @@ impl SimState {
             recorder,
             menu: None,
             cursor: 0,
+            arm_bay: None,
         }
     }
 
@@ -126,9 +129,9 @@ impl SimState {
     /// Neue Simulation mit `config`; das Menü bleibt, wo es ist.
     pub fn reset(&mut self, config: SimConfig) {
         self.save_replay();
-        let (menu, cursor) = (self.menu, self.cursor);
+        let (menu, cursor, arm_bay) = (self.menu, self.cursor, self.arm_bay);
         *self = Self::new(config);
-        (self.menu, self.cursor) = (menu, cursor);
+        (self.menu, self.cursor, self.arm_bay) = (menu, cursor, arm_bay);
     }
 
     /// Deckt ein Bildschirm (Menü oder Nachbesprechung) die Ansicht zu?
