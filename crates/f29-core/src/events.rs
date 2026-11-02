@@ -1,14 +1,15 @@
-//! Ereignisprotokoll: die letzten `N` Ereignisse mit Tick. Die Teilsysteme
-//! (Waffen, Radar, Kanone, Jäger) sammeln ihre Ereignisse eines Ticks darin;
-//! die Simulation übernimmt sie in ihren einen Ereignisstrom
+//! Ereignisprotokoll: Ereignisse mit Tick, wahlweise nur die letzten `N`.
+//! Die Teilsysteme (Waffen, Radar, Kanone, Jäger) sammeln ihre Ereignisse
+//! eines Ticks darin, ohne Grenze – es geht keines verloren; die Simulation
+//! übernimmt sie jeden Tick in ihren einen Ereignisstrom
 //! ([`crate::sim::Event`]), aus dem Meldungen, Klang, Effekte und das
 //! Flugprotokoll entstehen.
 
 use std::ops::Deref;
 
-/// Die letzten `N` Ereignisse, älteste zuerst.
+/// Die letzten `N` Ereignisse (ohne Angabe alle), älteste zuerst.
 #[derive(Debug, Clone, PartialEq)]
-pub struct EventLog<T, const N: usize = 16>(Vec<(u64, T)>);
+pub struct EventLog<T, const N: usize = { usize::MAX }>(Vec<(u64, T)>);
 
 impl<T, const N: usize> Default for EventLog<T, N> {
     fn default() -> Self {
@@ -49,7 +50,7 @@ mod tests {
 
     #[test]
     fn keeps_the_newest_and_filters_by_age() {
-        let mut log: EventLog<u64> = EventLog::default();
+        let mut log: EventLog<u64, 16> = EventLog::default();
         for t in 0..20_u64 {
             log.push(t, t * 10);
         }
