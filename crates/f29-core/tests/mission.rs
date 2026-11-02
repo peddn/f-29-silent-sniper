@@ -93,7 +93,12 @@ fn close_photo_of_the_recon_target_counts() {
         let a = sim.aircraft().position;
         let near = (t.north - a.x).hypot(t.east - a.y) < 1_800.0;
         let w = if near && sim.tick().is_multiple_of(60) { weapon_flags::RELEASE } else { 0 };
+        let framed = sim.flight_data().camera.expect("Kamera gewählt").in_frame;
         step(&mut sim, 0, w);
+        // Die Anzeige „IN FRAME“ sagt das gültige Foto voraus.
+        if w != 0 {
+            assert_eq!(photographed(&sim) && !done, framed && !done, "Anzeige und Foto uneins");
+        }
         done |= photographed(&sim);
     }
     assert!(done && sim.objective_done(0), "nicht fotografiert ({} Fotos)", sim.stores().photos);

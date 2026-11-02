@@ -15,7 +15,7 @@ use f29_core::systems::{Condition, System};
 use f29_core::targets::TargetRole;
 use f29_core::units;
 use f29_core::weapons::{Seeker, WeaponKind};
-use f29_core::{DVec3, FlightData, MarkKind, TargetInfo};
+use f29_core::{CameraInfo, DVec3, FlightData, MarkKind, TargetInfo};
 
 /// Anteil der Bildhöhe, den die Seitenleiste unten belegt.
 pub(crate) const PAGE_BAR: f32 = 0.075;
@@ -539,6 +539,9 @@ pub fn target_image_rect(screen: Rect) -> Rect {
 /// Landebahn). Mit `camera_feed` liegt ein gerendertes Kamerabild unter dem
 /// Bildfeld; gezeichnet werden dann nur Rahmen und Fadenkreuz.
 pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, mode: HudMode, camera_feed: bool) {
+    if let Some(cam) = fd.camera.filter(|_| mode == HudMode::AirToGround) {
+        return recon_camera(dl, fd, cam, screen, camera_feed);
+    }
     let f = frame(screen);
     title(dl, screen, &f, "TARGET");
     let img = target_image_rect(screen);
@@ -607,6 +610,44 @@ pub(crate) fn target(dl: &mut DisplayList, fd: &FlightData, screen: Rect, mode: 
     let radar = if fd.radar_on { "ON" } else { "OFF" };
     let ink = if fd.radar_on { Ink::Warning } else { Ink::MfdDim };
     row(dl, &f, y, &format!("LOOK {}", fd.look.label()), &format!("RADAR {radar}"), ink);
+}
+
+/// TGT-Seite mit gewählter Aufklärungskamera (M-032): ihr Bild entlang der
+/// geneigten Sichtlinie (Bildhöhe = Fotokreis), Fadenkreuz und Kreis; was im
+/// Kreis liegt, kommt aufs Foto. „IN FRAME“, wenn das gewählte Ziel jetzt
+/// gültig im Bild wäre.
+fn recon_camera(dl: &mut DisplayList, fd: &FlightData, cam: CameraInfo, screen: Rect, camera_feed: bool) {
+    let f = frame(screen);
+    title(dl, screen, &f, "CAMERA");
+    dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, "RECON", Ink::Mfd);
+    let img = target_image_rect(screen);
+    dl.rect(img, Ink::MfdDim);
+    let c = img.center();
+    let half = (img.max[1] - img.min[1]) * 0.5;
+    dl.circle(c, half * 0.98, 40, Ink::Mfd);
+    for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+        let a = [c[0] + dx * half * 0.1, c[1] + dy * half * 0.1];
+        dl.line(a, [c[0] + dx * half * 0.35, c[1] + dy * half * 0.35], Ink::Mfd);
+    }
+    if !camera_feed {
+        dl.text_mid([c[0], c[1] - half * 0.55], f.txt * 0.85, Align::Center, "NO VIDEO", Ink::MfdDim);
+    }
+    if cam.in_frame {
+        dl.boxed_text([c[0], img.min[1] + f.txt * 1.2], f.txt, Align::Center, "IN FRAME", Ink::Warning);
+    }
+    let step = f.txt * 1.35;
+    let mut y = img.min[1] - step * 0.9;
+    let (name, range) = fd
+        .target
+        .as_ref()
+        .map_or(("NO TARGET", String::new()), |t| (t.name, format!("{:.1} KM", units::m_to_km(t.range))));
+    dl.text_mid([f.x0, y], f.txt, Align::Left, name, Ink::Mfd);
+    dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &range, Ink::Mfd);
+    y -= step;
+    row(dl, &f, y, "PHOTOS", &cam.photos.to_string(), Ink::Mfd);
+    y -= step;
+    let max = format!("{:.1} KM", units::m_to_km(f29_core::weapons::PHOTO_RANGE_M));
+    row(dl, &f, y, "MAX RANGE", &max, Ink::MfdDim);
 }
 
 fn sensor_status(optical: bool, radar: bool) -> &'static str {

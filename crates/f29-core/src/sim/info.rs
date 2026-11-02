@@ -124,6 +124,13 @@ pub struct SteerpointInfo {
 }
 
 /// Abgeleitete Flugdaten – alles, was Anzeigen brauchen.
+/// Zustand der gewählten Kamera.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CameraInfo {
+    pub photos: u32,
+    pub in_frame: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct FlightData {
     pub tick: u64,
@@ -218,6 +225,9 @@ pub struct FlightData {
     pub objectives: [Option<(Task, bool)>; 2],
     /// Verletzungen der Einsatzregeln bisher.
     pub roe_violations: u32,
+    /// Kamera gewählt (M-032): Fotos bisher und ob das gewählte Ziel jetzt
+    /// gültig im Bild wäre.
+    pub camera: Option<CameraInfo>,
     /// Zielhilfe, wenn eine ungelenkte Bombe gewählt ist und das Flugzeug fliegt.
     pub bomb_aim: Option<BombAim>,
     /// Waffen in der Luft für die Karte: eigene und feindliche.
@@ -794,6 +804,15 @@ impl Sim {
                     .map(|_| (self.mission.tasks[k], self.objective_done(k)))
             }),
             roe_violations: self.roe_violations,
+            camera: (self.stores.selected_weapon() == Some(WeaponKind::Camera)).then(|| CameraInfo {
+                photos: self.stores.photos,
+                in_frame: self
+                    .picks
+                    .ground
+                    .index
+                    .filter(|_| self.picks.ground.seen.optical)
+                    .is_some_and(|i| weapons::in_photo(a.position, a.attitude, &self.targets[i])),
+            }),
             own_contacts: (0..self.targets.len())
                 .filter(|&i| self.ground_seen[i].any() && self.targets[i].is_intact())
                 .collect(),

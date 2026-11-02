@@ -4,6 +4,9 @@
 //! (`assets/shaders/tgt_camera.wesl`). Das Bild liegt als Sprite im Bildfeld
 //! der Seite, die Linien des MFDs (Rahmen, Fadenkreuz) darüber.
 //!
+//! Mit gewählter Aufklärungskamera zeigt die TGT-Seite deren Bild: fest unter
+//! dem Rumpf, entlang ihrer geneigten Sichtlinie.
+//!
 //! Dieselbe Kamera liefert das Bild der WPN-CAM-Seite: Sie sitzt dann an
 //! der Waffe mit Fernsehsuchkopf (Maverick) und blickt mit ihrem Suchkopf.
 //! Nach dem Abschuss einer solchen Waffe schaltet das MFD selbst auf diese
@@ -174,6 +177,14 @@ fn update(
             })
         }
         RightPage::Target if settings.hud_mode == f29_hud::HudMode::Nav => None,
+        // Aufklärungskamera gewählt: ihr Bild entlang der geneigten
+        // Sichtlinie, Bildhöhe = Fotokreis (M-032).
+        RightPage::Target if fd.camera.is_some() => on.then(|| {
+            let look = state.render_pose().attitude.rotate(f29_core::weapons::camera_axis());
+            let eye = eye();
+            let aim = eye + place(look * 100.0, f29_core::DVec3::ZERO);
+            (eye, aim, f29_core::weapons::PHOTO_CONE_RAD as f32, NEAR_M, 0.6)
+        }),
         RightPage::Target => fd.target.filter(|t| t.optical && on).map(|t| {
             let tgt = &state.sim.targets()[t.index];
             let [n, e, d] = tgt.center_ned();

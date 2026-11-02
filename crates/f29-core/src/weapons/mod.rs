@@ -557,8 +557,8 @@ pub struct Launch<'a> {
 
 /// Ein Foto zählt bis zu dieser Entfernung zum Ziel (m; Spielerwunsch v0.3).
 pub const PHOTO_RANGE_M: f64 = 2_000.0;
-/// … und so weit (rad) um die Sichtlinie der Kamera.
-pub const PHOTO_CONE_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
+/// … und so weit (rad) um die Sichtlinie der Kamera (Spielerwunsch v0.3).
+pub const PHOTO_CONE_RAD: f64 = 5.0 * std::f64::consts::PI / 180.0;
 /// Die Kamera blickt so weit (rad) unter die Rumpflängsachse.
 pub const CAMERA_TILT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
 
@@ -572,10 +572,15 @@ pub fn camera_axis() -> DVec3 {
 /// nahe der Sichtlinie der Kamera liegt.
 fn photo_target(l: &Launch<'_>) -> Option<usize> {
     let i = l.lock.filter(|_| l.lock_optical)?;
-    let t = l.targets.get(i).filter(|t| t.is_intact())?;
-    let to = center(t) - l.position;
-    (to.length() <= PHOTO_RANGE_M && angle_between(l.attitude.rotate(camera_axis()), to) <= PHOTO_CONE_RAD)
-        .then_some(i)
+    in_photo(l.position, l.attitude, l.targets.get(i)?).then_some(i)
+}
+
+/// Läge das (stehende) Ziel jetzt gültig im Bild der Kamera?
+pub fn in_photo(position: DVec3, attitude: DQuat, t: &Target) -> bool {
+    let to = center(t) - position;
+    t.is_intact()
+        && to.length() <= PHOTO_RANGE_M
+        && angle_between(attitude.rotate(camera_axis()), to) <= PHOTO_CONE_RAD
 }
 
 /// Winkel zwischen zwei Richtungen (rad).

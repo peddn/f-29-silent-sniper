@@ -1780,11 +1780,14 @@ Format jedes Eintrags:
     etwa ein Fünftel.
   - **Kamera** (`cam`): bleibt im Schacht, Klappen müssen offen sein, der
     Auslöser macht ein Foto („PHOTO n“), unbegrenzt. Sie blickt 10° unter die
-    Rumpflängsachse; ihre Sichtlinie mit einem Bildkreis von 10° ist im
+    Rumpflängsachse; ihre Sichtlinie mit einem Bildkreis von 5° ist im
     AG-HUD das Zielinstrument. Ein Foto zählt, wenn das gewählte Ziel
     steht, optisch entdeckt ist, höchstens 2 km entfernt und im Bildkreis
     liegt; ist es das Aufklärungsziel, „PRIMARY/SECONDARY PHOTOGRAPHED“.
-    Die TGT-Seite zeigt wie bisher das Zielbild.
+    Die TGT-Seite zeigt im AG-Modus das Kamerabild selbst (fest unter dem
+    Rumpf, Bildhöhe = Fotokreis: was im Kreis liegt, kommt aufs Foto), dazu
+    Fotozahl, gewähltes Ziel mit Entfernung und „IN FRAME“, wenn ein Foto
+    jetzt zählen würde.
   - **Vorgeschlagene Beladung** (ohne `--loadout`): AIM-9, HARM, je Ziel
     Kamera (einmal) bzw. GBU-12 gegen Gebäude/Bunker/Brücken, sonst
     Maverick.

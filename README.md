@@ -294,8 +294,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Primärziel; Route Start → Primär → Sekundär → Landung; geheime Pisten
       entfallen (v0.3)
 - [x] Missionsauftrag (M-032): je Ziel Angriff oder Aufklärung, Mischung nach
-      Regelset; Aufklärungskamera (Foto bis 2 km, 10° um ihre geneigte
-      Sichtlinie, Bildkreis im HUD); vorgeschlagene Beladung; Aufklärung bei
+      Regelset; Aufklärungskamera (Foto bis 2 km, 5° um ihre geneigte
+      Sichtlinie, Bildkreis im HUD, Kamerabild auf der TGT-Seite); vorgeschlagene Beladung; Aufklärung bei
       Tag; Kalter Krieg: Angriff nur auf Ziele, die uns entdeckt haben, sonst
       ROE VIOLATION (v0.3)
 - [ ] Planquadrate auf Karte und Missionsseite; Geländeart als Radarfaktor
