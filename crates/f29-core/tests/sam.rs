@@ -71,22 +71,14 @@ fn sam_site_fires_after_radar_id() {
 #[test]
 fn missile_hit_damages_two_systems() {
     let (mut sim, _) = toward_site(TargetClass::AirDefense, 7_000.0, 800.0);
-    let hit = |s: &Sim| {
-        s.weapon_events().iter().find_map(|(_, e)| match e {
-            WeaponEvent::AircraftHit { systems, .. } => Some(*systems),
-            _ => None,
-        })
-    };
-    assert!(fly_until(&mut sim, 60.0, |s| hit(s).is_some()), "kein Treffer");
-    let systems = hit(&sim).unwrap();
-    assert_ne!(systems[0], systems[1]);
+    let hit = |s: &Sim| s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. }));
+    assert!(fly_until(&mut sim, 60.0, hit), "kein Treffer");
     // Klang: Treffer am eigenen Flugzeug
     let blast = sim.flight_data().blast.expect("Detonation");
     assert_eq!(blast.kind, f29_core::BlastKind::AircraftHit);
-    for s in System::ALL {
-        let damaged = !sim.systems().get(s).is_ok();
-        assert_eq!(damaged, systems.contains(&s), "{s:?}");
-    }
+    let damaged = System::ALL.iter().filter(|&&s| !sim.systems().get(s).is_ok()).count();
+    assert_eq!(damaged, 2);
+    assert_eq!(sim.systems().damage, 1.0);
     assert_eq!(sim.status(), f29_core::Status::Flying);
     // Das beschädigte Flugzeug rüttelt (hier über der Turbulenzgrenze).
     let mut shake: f64 = 0.0;

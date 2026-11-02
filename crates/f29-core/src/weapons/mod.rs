@@ -480,12 +480,10 @@ pub enum WeaponEvent {
         n: u32,
         target: Option<usize>,
     },
-    /// Eine feindliche Rakete hat das Flugzeug getroffen und diese Systeme
-    /// beschädigt.
+    /// Eine feindliche Rakete hat das Flugzeug getroffen.
     AircraftHit {
         kind: WeaponKind,
         id: u32,
-        systems: [System; HIT_SYSTEMS],
     },
 }
 
@@ -892,9 +890,7 @@ impl Stores {
                 }
                 Fate::Fuze(_) if w.target == Some(Track::Aircraft) => {
                     self.in_flight.remove(i);
-                    let systems = self.pick_systems();
-                    self.events
-                        .push(world.tick, WeaponEvent::AircraftHit { kind: w.kind, id: w.id, systems });
+                    self.events.push(world.tick, WeaponEvent::AircraftHit { kind: w.kind, id: w.id });
                 }
                 // Feindlich im Gelände: wirkungslos.
                 Fate::Fuze(p) | Fate::Ground(p) if w.owner.is_some() => {
@@ -917,17 +913,13 @@ impl Stores {
         }
     }
 
-    /// Kanonentreffer: mit [`crate::systems::GUN_SYSTEM_CHANCE`] ein
-    /// zufälliges Bordsystem, das schlechter wird.
-    pub fn roll_gun_system(&mut self) -> Option<System> {
-        let roll = self.rng.next_f64() < crate::systems::GUN_SYSTEM_CHANCE;
-        roll.then(|| System::ALL[self.rng.next_u32() as usize % System::ALL.len()])
-    }
-
-    /// Zufällige, verschiedene Bordsysteme für einen Raketentreffer.
-    fn pick_systems(&mut self) -> [System; HIT_SYSTEMS] {
+    /// Bordsysteme, die ein Treffer der Stärke `strength` verschlechtert:
+    /// verschiedene, zufällig, im Mittel [`HIT_SYSTEMS`] × Stärke (eine
+    /// Rakete genau [`HIT_SYSTEMS`]).
+    pub fn roll_systems(&mut self, strength: f64) -> Vec<System> {
+        let n = (strength * HIT_SYSTEMS as f64 + self.rng.next_f64()).floor() as usize;
         let mut pool = System::ALL.to_vec();
-        std::array::from_fn(|_| pool.remove(self.rng.next_u32() as usize % pool.len()))
+        (0..n.min(pool.len())).map(|_| pool.remove(self.rng.next_u32() as usize % pool.len())).collect()
     }
 
     /// Schaden ohne kritischen Treffer (Bordkanone).

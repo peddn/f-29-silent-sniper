@@ -1073,6 +1073,13 @@ Format jedes Eintrags:
   Leistung → ausgefallen, beschädigtes Triebwerk 8 % Höchstschub je Treffer
   (Original 4 %), Rütteln je Treffer, unregelmäßiges Flackern beschädigter
   Anzeigen (v0.2.9, M-021); Splitterschaden eigener Bomben offen
+- **Eine Schadensregel (v0.3):** Raketen und Kanonen wirken gleich, nur mit
+  ihrer **Trefferstärke** – gezählt in Raketentreffern (Rakete 1, Kanone je
+  Muster ein Bruchteil, M-016). Ein Treffer verschlechtert im Mittel
+  2 × Stärke zufällige, verschiedene Systeme (Rakete genau zwei, ein
+  Kanonentreffer der Stärke 0,15 mit 30 % eines); das beschädigte Triebwerk
+  verliert 8 % Höchstschub je Summe der Stärken. Dieselbe Summe entscheidet
+  bei den Jägern über den Abschuss (M-022).
 
 ### M-016 Bordkanone
 
@@ -1094,11 +1101,20 @@ Format jedes Eintrags:
   mit Munitionsstand. 3D-Ansicht: Leuchtspur je Patrone, kleine Wölkchen bei
   Einschlägen (am Ziel rot). Zustand (Munition, Patronen, Zufallsstrom) geht in
   den Zustandshash ein; das Replay-Format bleibt (Bit 3 im Waffenbyte).
-- **Unsere Werte:** 600 Schuss, 50 Schuss/s (12 s Dauerfeuer), 1000 m/s
-  Mündungsgeschwindigkeit, 3 s Flugzeit (≈ 3 km), Streuung 3 mrad, 2 % Schaden
-  je Treffer (50 Treffer zerstören jedes Ziel).
-- **Gegen Jäger (v0.2.9, Etappe 2):** Patronen treffen einen Jäger, wenn
-  ihre Flugstrecke eines Ticks näher als 7 m an seiner Mitte vorbeiführt;
+- **Kanonen je Flugzeugmuster (v0.3, eigene Werte):** Alle mit 1000 m/s
+  Mündungsgeschwindigkeit und 3 s Flugzeit (≈ 3 km).
+
+  | | Muster | Schuss | Schuss/s | Streuung | Stärke |
+  |---|---|---|---|---|---|
+  | F-29 | M61A1 | 600 | 50 | 5 mrad | 0,125 |
+  | MiG-21 | GSh-23L | 200 | 50 | 8 mrad | 0,15 |
+  | MiG-29 | GSh-30-1 | 150 | 25 | 6 mrad | 0,3 |
+
+  Gegen Bodenziele 0,16 Schaden je Stärke (M61A1: 2 % je Treffer, 50
+  Treffer zerstören jedes Ziel).
+- **Gegen Flugzeuge (v0.2.9, seit v0.3 mit 4 m):** Patronen treffen ein
+  Flugzeug, wenn ihre Flugstrecke eines Ticks näher als 4 m an seiner Mitte
+  vorbeiführt (gilt in beide Richtungen);
   je Typ braucht es einige Treffer (M-022). Im AA-Modus zeigt die
   **Vorhaltemarke** (kleiner Kreis mit Punkt) gegen den gewählten Jäger, wohin
   die Nase zeigen muss – aus Flugzeit und Fall der Patrone und der Bewegung
@@ -1528,7 +1544,8 @@ Format jedes Eintrags:
   eine Rauchspur, stürzt ab und zählt als Abschuss.
 - **Unser Design Etappe 2 (Spielerentscheidungen v0.2.9):**
   - **Abschuss:** Eine Rakete zerstört einen Jäger, die Kanone braucht bei
-    der MiG-21 5, bei der MiG-29 8 Treffer. Der Jäger stürzt ab (rollt ab,
+    der MiG-21 5, bei der MiG-29 8 Treffer (seit v0.3 als Summe der
+    Trefferstärken: Widerstand 0,625 bzw. 1, M-015). Der Jäger stürzt ab (rollt ab,
     senkt die Nase), bleibt als Wrack am Boden und startet nie wieder;
     Meldung „MIG-21 DESTROYED“. Eine Rauchspur fehlt noch.
   - **Kein Ausweichen:** Die Jäger fliegen weiter stur auf das Flugzeug zu
@@ -1596,9 +1613,25 @@ Format jedes Eintrags:
     Reichweite und nicht näher als 1 km ist. Meldung „MISSILE LAUNCH AA-8 -
     MIG-21“. Treffer wirken wie SAM-Treffer über die Bordsysteme (M-015).
   - **Kanone:** feuert, solange er verfolgt und das Flugzeug näher als
-    1,2 km und innerhalb 3° vor seiner Nase liegt. Jeder Treffer kostet 2 %
-    Höchstschub und verschlechtert mit 15 % ein zufälliges System um eine
-    Stufe. Meldung „MIG-21 GUN HIT“; Leuchtspur sichtbar.
+    1,2 km und innerhalb 3° vor seiner Nase liegt – seit v0.3 in
+    Feuerstößen (Länge nach Können, 1,5 s Pause) mit der Kanone seines
+    Musters (M-016); Treffer nach der einen Schadensregel (M-015). Meldung
+    „MIG-21 GUN HIT“; Leuchtspur sichtbar.
+  - **Pilotenkönnen (v0.3, eigene Ergänzung):** Im Original ergibt sich das
+    Können aus Nummer des Jägers und Missionsstand (drei Stufen) und wählt
+    nur das Manöver aus der Manövertabelle, die wir nicht haben. Bei uns
+    würfelt jeder Jäger beim Missionsstart Anfänger, Erfahren oder Ass
+    (gleich verteilt), das Regelset verschiebt um eine Stufe (Kalter Krieg
+    schwächer, offener Krieg stärker). Es bestimmt:
+
+    | | Feuerstoß | Täuschkörper ab | Rakete bis |
+    |---|---|---|---|
+    | Anfänger | 0,3 s | 1 km | volle Reichweite |
+    | Erfahren | 0,6 s | 2 km | 70 % |
+    | Ass | 1,0 s | 3,5 km | 50 % |
+
+    Gemessen: 15 s dicht hinter einem geradeaus fliegenden Flugzeug landet
+    ein Jäger 21–69 Treffer (vorher Dauerfeuer, etwa 50 je Sekunde).
   - **Ausweichen:** Verfolgt ihn eine eigene Rakete und ist sie näher als
     6 km, dreht er auf den näheren Kurs querab zu ihr. Die MiG-21 kennt nur
     diese Kurve, die MiG-29 wechselt je Rakete zwischen ihr und dem

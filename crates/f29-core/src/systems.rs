@@ -1,14 +1,16 @@
 //! Bordsysteme und ihr Zustand (Schadensmodell).
 //!
 //! Jedes System ist intakt, eingeschränkt (mit verbleibender Leistung 0..1)
-//! oder ausgefallen. Ein Raketentreffer verschlechtert zufällig gewählte
-//! Systeme ([`Systems::missile_hit`]); Tests setzen Zustände direkt über
+//! oder ausgefallen. Jeder Treffer – Rakete oder Kanone – folgt derselben
+//! Regel mit seiner Trefferstärke (Rakete 1, Kanone je Muster weniger):
+//! Er verschlechtert zufällig gewählte Systeme, im Mittel
+//! [`HIT_SYSTEMS`](crate::weapons::HIT_SYSTEMS) × Stärke ([`Systems::hit`]); Tests setzen Zustände direkt über
 //! [`crate::Sim::set_condition`]. Die Wirkung steckt an genau einer Stelle je
 //! System:
 //!
 //! | System | Wirkung |
 //! |---|---|
-//! | Triebwerk | Triebwerksstellung höchstens Leistung (auch bei Vollgas), ausgefallen = kein Schub; nach Raketentreffern 8 % je Treffer weniger, je Kanonentreffer 2 % |
+//! | Triebwerk | Triebwerksstellung höchstens Leistung (auch bei Vollgas), ausgefallen = kein Schub; beschädigt: [`THRUST_LOSS_PER_HIT`] × Summe aller Trefferstärken weniger |
 //! | Treibstoff | Leck: bis [`FUEL_LEAK_MAX_KGPS`] zusätzlich |
 //! | Hydraulik | Klappen, Fahrwerk, Schachtklappen langsamer; ausgefallen = blockiert |
 //! | Flugsteuerung | Drehraten × Leistung, ausgefallen = Notsteuerung ([`CONTROL_BACKUP`]) |
@@ -24,14 +26,10 @@ pub const CONTROL_BACKUP: f64 = 0.3;
 
 /// Restleistung eines Systems nach dem ersten Treffer.
 pub const HIT_CAPABILITY: f64 = 0.5;
-/// Ist das Triebwerk beschädigt, kostet jeder Raketentreffer so viel
-/// Höchstschub je Treffer bei beschädigtem Triebwerk (Original 4 %, hier
-/// doppelt so viel, Spielerwunsch v0.2.9; ausfallen kann es nicht).
+/// Ist das Triebwerk beschädigt, kostet jeder Treffer der Stärke 1 so viel
+/// Höchstschub (Original 4 %, hier doppelt so viel, Spielerwunsch v0.2.9;
+/// ausfallen kann es nicht).
 pub const THRUST_LOSS_PER_HIT: f64 = 0.08;
-/// Jeder Kanonentreffer kostet so viel Höchstschub und verschlechtert mit
-/// [`GUN_SYSTEM_CHANCE`] ein zufälliges System (Spielerentscheidung v0.2.9).
-pub const GUN_THRUST_LOSS: f64 = 0.02;
-pub const GUN_SYSTEM_CHANCE: f64 = 0.15;
 
 /// Ein Bordsystem.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -126,9 +124,9 @@ impl Default for Health {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Systems {
     conditions: [Condition; 8],
-    /// Raketen- und Kanonentreffer bisher.
+    /// Treffer bisher und Summe ihrer Stärken.
     pub hits: u32,
-    pub gun_hits: u32,
+    pub damage: f64,
 }
 
 impl Systems {
@@ -144,27 +142,19 @@ impl Systems {
         self.get(s).capability()
     }
 
-    /// Ein Raketentreffer auf die Systeme `hit`: intakt → halbe Leistung,
-    /// eingeschränkt → ausgefallen. Das Triebwerk ist wie im Original nur
-    /// „beschädigt“: Dann kostet jeder Treffer – auch spätere auf andere
-    /// Systeme – [`THRUST_LOSS_PER_HIT`] Höchstschub.
-    pub fn missile_hit(&mut self, hit: &[System]) {
+    /// Ein Treffer der Stärke `strength` auf die Systeme `hit`: intakt →
+    /// halbe Leistung, eingeschränkt → ausgefallen. Das Triebwerk ist wie im
+    /// Original nur „beschädigt“: Dann kostet jeder Treffer – auch spätere auf
+    /// andere Systeme – [`THRUST_LOSS_PER_HIT`] × Stärke Höchstschub.
+    pub fn hit(&mut self, strength: f64, hit: &[System]) {
         self.hits += 1;
+        self.damage += strength;
         for &s in hit {
             self.worsen(s);
         }
-        self.update_thrust();
-    }
-
-    /// Ein Kanonentreffer: kostet Höchstschub ([`GUN_THRUST_LOSS`]) und
-    /// verschlechtert `system`, falls gewürfelt.
-    pub fn gun_hit(&mut self, system: Option<System>) {
-        self.gun_hits += 1;
-        self.worsen(System::Engine);
-        if let Some(s) = system {
-            self.worsen(s);
+        if !self.get(System::Engine).is_ok() {
+            self.set(System::Engine, Condition::Degraded((1.0 - THRUST_LOSS_PER_HIT * self.damage).max(0.0)));
         }
-        self.update_thrust();
     }
 
     /// Intakt → halbe Leistung, eingeschränkt → ausgefallen; das Triebwerk
@@ -176,15 +166,6 @@ impl Systems {
             _ => Condition::Failed,
         };
         self.set(s, next);
-    }
-
-    /// Höchstschub des beschädigten Triebwerks aus allen Treffern.
-    fn update_thrust(&mut self) {
-        if !self.get(System::Engine).is_ok() {
-            let loss =
-                THRUST_LOSS_PER_HIT * f64::from(self.hits) + GUN_THRUST_LOSS * f64::from(self.gun_hits);
-            self.set(System::Engine, Condition::Degraded((1.0 - loss).max(0.0)));
-        }
     }
 
     /// Mindestens ein System ist nicht intakt.
@@ -217,7 +198,7 @@ impl Systems {
                 Condition::Degraded(v) => (1, *v),
                 Condition::Failed => (2, 0.0),
             })
-            .chain([(3, f64::from(self.hits)), (4, f64::from(self.gun_hits))])
+            .chain([(3, f64::from(self.hits)), (4, self.damage)])
     }
 }
 
@@ -256,15 +237,18 @@ mod tests {
     #[test]
     fn missile_hits_cost_thrust_once_the_engine_is_damaged() {
         let mut s = Systems::default();
-        s.missile_hit(&[System::Radar, System::Optics]);
+        s.hit(1.0, &[System::Radar, System::Optics]);
         assert_eq!(s.health().thrust, 1.0);
         assert_eq!(s.get(System::Radar), Condition::Degraded(HIT_CAPABILITY));
-        s.missile_hit(&[System::Engine, System::Radar]);
+        s.hit(1.0, &[System::Engine, System::Radar]);
         assert!((s.health().thrust - 0.84).abs() < 1e-12);
         assert!(s.get(System::Radar).is_failed());
-        s.missile_hit(&[System::Engine, System::Fuel]);
-        s.missile_hit(&[System::Hydraulics, System::Displays]);
+        s.hit(1.0, &[System::Engine, System::Fuel]);
+        s.hit(1.0, &[System::Hydraulics, System::Displays]);
         assert!((s.health().thrust - 0.68).abs() < 1e-12);
-        assert_eq!(s.hits, 4);
+        // Ein Kanonentreffer zählt nach seiner Stärke.
+        s.hit(0.25, &[]);
+        assert!((s.health().thrust - 0.66).abs() < 1e-12);
+        assert_eq!(s.hits, 5);
     }
 }

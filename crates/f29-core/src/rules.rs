@@ -33,6 +33,8 @@ pub struct Rules {
     /// Angreifen nur, was uns entdeckt hat (Radarstellung mit Alarm, Jäger
     /// mit Kontakt); sonst ROE-Verletzung.
     pub attack_needs_detection: bool,
+    /// Verschiebt das gewürfelte Pilotenkönnen der Jäger (−1 = schwächer).
+    pub pilot_skill: i8,
 }
 
 const RULES: [Rules; 3] = [
@@ -44,6 +46,7 @@ const RULES: [Rules; 3] = [
         max_airborne: 4,
         detection_penalty: 30,
         attack_needs_detection: true,
+        pilot_skill: -1,
     },
     Rules {
         label: "LIMITED",
@@ -53,6 +56,7 @@ const RULES: [Rules; 3] = [
         max_airborne: 4,
         detection_penalty: 10,
         attack_needs_detection: false,
+        pilot_skill: 0,
     },
     Rules {
         label: "OPEN WAR",
@@ -62,6 +66,7 @@ const RULES: [Rules; 3] = [
         max_airborne: 6,
         detection_penalty: 0,
         attack_needs_detection: false,
+        pilot_skill: 1,
     },
 ];
 
@@ -103,6 +108,7 @@ mod tests {
         assert_eq!(war.detection_penalty, 0);
         assert!(war.max_hostile_missiles > limited.max_hostile_missiles);
         assert!(war.max_airborne > limited.max_airborne);
+        assert!(cold.pilot_skill < limited.pilot_skill && limited.pilot_skill < war.pilot_skill);
         for c in Conflict::ALL {
             assert_eq!(Conflict::from_code(c.code()), Some(c));
         }

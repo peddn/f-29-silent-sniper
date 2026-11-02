@@ -155,18 +155,21 @@ fn stealthy_aircraft_draws_no_fire() {
 }
 
 /// Ein Jäger dicht hinter dem Flugzeug schießt mit der Kanone: Jeder Treffer
-/// kostet Höchstschub, mit Meldung.
+/// zählt mit der Stärke seiner Kanone, mit Meldung.
 #[test]
-fn fighter_gun_costs_thrust() {
-    use f29_core::systems::System;
+fn fighter_gun_hits_with_its_strength() {
     let mut sim = duel_with(WeaponKind::Sidewinder, 0, 1.0, true);
     let a = sim.aircraft().position;
     sim.fighters_mut().put_in_air(0, a - DVec3::new(900.0, 0.0, 0.0), 0.0);
     fly(&mut sim, 15.0, 0, 0);
     let s = sim.systems();
-    assert!(s.gun_hits > 0, "keine Kanonentreffer");
-    assert!(s.capability(System::Engine) < 1.0 - 0.019 * f64::from(s.gun_hits).min(10.0));
-    assert!(sim.flight_data().weapon_messages.iter().any(|m| m.text == "MIG-21 GUN HIT"));
+    assert!(s.hits > 0, "keine Kanonentreffer");
+    let strength = sim.fighters().list[0].spec().gun.strength;
+    assert!((s.damage - strength * f64::from(s.hits)).abs() < 1e-9);
+    let hit = f29_core::sim::Event::Fighter(f29_core::fighters::FighterEvent::GunHit {
+        kind: f29_core::fighters::FighterKind::MiG21,
+    });
+    assert!(sim.events().iter().any(|(_, e)| *e == hit));
 }
 
 /// Kommt eine Rakete nah, dreht der Jäger querab zu ihr.
@@ -203,6 +206,8 @@ fn cold_war_fighters_fire_only_over_hostile_territory() {
     let fires = |conflict: Conflict, at: [f64; 2]| {
         let base = Spawn { north: at[0], east: at[1], visible: true, conflict, ..Spawn::default() };
         let mut sim = duel_in(WeaponKind::Sidewinder, 3, 30_000.0, base);
+        // Anfänger schießen auf größte Entfernung: Hier zählt nur das Regelset.
+        sim.fighters_mut().list[3].skill = f29_core::fighters::Skill::Rookie;
         let hostile = sim.flight_data().territory == f29_core::Side::Hostile;
         (first_air_launch(&mut sim, 20.0).is_some(), hostile)
     };

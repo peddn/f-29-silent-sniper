@@ -469,7 +469,7 @@ impl Sim {
             - spec.gear_height_m)
             .max(0.0);
         let route = mission::route(&plan, &terrain, &targets);
-        let fighters = Fighters::new(&terrain, seed, sp.conflict.rules().max_airborne);
+        let fighters = Fighters::new(&terrain, seed, sp.conflict.rules());
         // Aufklärung fliegt immer bei Tag.
         let sensors = Sensors { night: sp.night && !plan.has_recon(), ..Sensors::default() };
         let aero = flight::aero_data(&spec, &aircraft);
@@ -823,7 +823,8 @@ impl Sim {
     }
 
     /// Jäger, deren Radar das Flugzeug gerade erfasst hat und es vor der Nase
-    /// haben, starten ihre Luft-Luft-Rakete (M-022, wie im Original).
+    /// haben, starten ihre Luft-Luft-Rakete (M-022, wie im Original) – je
+    /// nach Können erst ab einem Anteil ihrer Reichweite.
     fn launch_air(&mut self) {
         if !self.hostile_fire() {
             return;
@@ -832,39 +833,57 @@ impl Sim {
         for f in &self.fighters.list {
             let to = a - f.position;
             let ahead = f.velocity().normalize_or_zero().dot(to.normalize_or_zero());
-            if f.airborne() && f.contact_tick == Some(self.tick) && ahead >= fighters::LAUNCH_CONE_RAD.cos() {
-                let kind = f.spec().missile;
+            let kind = f.spec().missile;
+            if f.airborne()
+                && f.contact_tick == Some(self.tick)
+                && ahead >= fighters::LAUNCH_CONE_RAD.cos()
+                && to.length() <= kind.spec().max_range_m * f.skill.spec().launch_share
+            {
                 self.stores.launch_air(self.tick, kind, f.id as usize, (f.position, f.velocity()), a, rules);
             }
         }
     }
 
-    /// Kanonen der Jäger: Feuer, solange das Flugzeug nah und fast genau vor
-    /// der Nase eines verfolgenden Jägers liegt. Jeder Treffer kostet Schub
-    /// und verschlechtert mit 15 % ein zufälliges System (M-015).
+    /// Kanonen der Jäger: Feuerstöße (Länge nach Können, dazwischen
+    /// [`fighters::BURST_PAUSE_S`]), solange das Flugzeug nah und fast genau
+    /// vor der Nase eines verfolgenden Jägers liegt (M-015).
     fn fighter_guns(&mut self) {
         let (a, allowed) = (self.aircraft.position, self.hostile_fire());
         for i in 0..self.fighters.list.len() {
-            let f = self.fighters.list[i];
+            let f = &mut self.fighters.list[i];
             let to = a - f.position;
             let nose = f.velocity().normalize_or_zero();
-            let fire = allowed
+            let aimed = allowed
                 && f.mode == fighters::Mode::Pursue
                 && to.length() < fighters::GUN_RANGE_M
                 && nose.dot(to.normalize_or_zero()) >= fighters::GUN_CONE_RAD.cos();
+            let burst = (f.skill.spec().burst_s / DT) as u64;
+            let cycle = burst + (fighters::BURST_PAUSE_S / DT) as u64;
+            if aimed && f.burst_tick.is_none_or(|t| self.tick >= t + cycle) {
+                f.burst_tick = Some(self.tick);
+            }
+            let fire = aimed && f.burst_tick.is_some_and(|t| self.tick < t + burst);
+            let f = *f;
             let gun = &mut self.fighters.guns[i];
             gun.trigger(self.tick, fire, f.position, f.velocity(), f.attitude(), DT);
             gun.step(self.tick, &self.terrain, &mut [], &[(0, a)], f.position, DT);
             let hits =
                 gun.events.iter().filter(|&&(t, e)| t == self.tick && e == GunEvent::AirHit(0)).count();
+            let strength = gun.spec.strength;
             for _ in 0..hits {
                 self.fighters.events.push(self.tick, FighterEvent::GunHit { kind: f.kind });
-                if !self.config.spawn.invulnerable {
-                    let system = self.stores.roll_gun_system();
-                    self.systems.gun_hit(system);
-                    self.apply_systems();
-                }
+                self.damage_aircraft(strength);
             }
+        }
+    }
+
+    /// Ein Treffer der Stärke `strength` am eigenen Flugzeug (Rakete 1): die
+    /// eine Schadensregel für Raketen und Kanonen (M-015).
+    fn damage_aircraft(&mut self, strength: f64) {
+        if !self.config.spawn.invulnerable {
+            let systems = self.stores.roll_systems(strength);
+            self.systems.hit(strength, &systems);
+            self.apply_systems();
         }
     }
 
@@ -1021,7 +1040,7 @@ impl Sim {
         let every = (fighters::DECOY_INTERVAL_S / DT) as u64;
         for (i, f) in self.fighters.list.iter_mut().enumerate() {
             let Some((m, _, kind)) = f.threat else { continue };
-            if (m - f.position).length() < fighters::DECOY_RANGE_M
+            if (m - f.position).length() < f.skill.spec().decoy_range_m
                 && f.decoys > 0
                 && f.decoy_tick.is_none_or(|t| self.tick >= t + every)
             {
@@ -1039,7 +1058,7 @@ impl Sim {
         self.gun.step(self.tick, &self.terrain, &mut self.targets, &jets, self.aircraft.position, DT);
         for (_, e) in self.gun.events.iter().filter(|(t, _)| *t == self.tick) {
             if let GunEvent::AirHit(i) = *e {
-                self.fighters.hit(self.tick, i, false);
+                self.fighters.hit(self.tick, i, self.gun.spec.strength);
             }
         }
     }
@@ -1068,35 +1087,16 @@ impl Sim {
         // Die Wahl bleibt auch auf einem zerstörten Ziel, bis der
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
         self.stores.step(&mut world);
-        // Raketentreffer: Folgen nur über die Bordsysteme (M-015).
-        let hits: Vec<_> = self
-            .stores
-            .events
-            .iter()
-            .filter(|(t, _)| *t == self.tick)
-            .filter_map(|(_, e)| match e {
-                WeaponEvent::AircraftHit { systems, .. } => Some(*systems),
-                _ => None,
-            })
-            .collect();
-        let downed: Vec<usize> = self
-            .stores
-            .events
-            .iter()
-            .filter(|(t, _)| *t == self.tick)
-            .filter_map(|(_, e)| match e {
-                WeaponEvent::FighterHit { fighter, .. } => Some(*fighter),
-                _ => None,
-            })
-            .collect();
-        for i in downed {
-            self.fighters.hit(self.tick, i, true);
-        }
-        if !hits.is_empty() && !self.config.spawn.invulnerable {
-            for systems in hits {
-                self.systems.missile_hit(&systems);
+        // Raketentreffer: am Jäger zerstörend, am Flugzeug über die
+        // Bordsysteme (M-015).
+        let now: Vec<_> =
+            self.stores.events.iter().filter(|(t, _)| *t == self.tick).map(|&(_, e)| e).collect();
+        for e in now {
+            match e {
+                WeaponEvent::FighterHit { fighter, .. } => self.fighters.hit(self.tick, fighter, 1.0),
+                WeaponEvent::AircraftHit { .. } => self.damage_aircraft(1.0),
+                _ => {}
             }
-            self.apply_systems();
         }
     }
 

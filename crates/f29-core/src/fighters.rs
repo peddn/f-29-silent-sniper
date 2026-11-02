@@ -23,18 +23,26 @@
 //! M-020), aber nur in einem Kegel um die Nase.
 //!
 //! **Abschuss** (wie im Original): Eine Rakete zerstört, die Kanone braucht
-//! je Typ einige Treffer ([`FighterSpec::hits`]). Der getroffene Jäger stürzt
-//! ab und bleibt als Wrack aus dem Spiel. Verfolgt ihn eine Rakete und ist
-//! sie nah, weicht er aus – je Typ mit eigenen Manövern ([`Evasion`]) – und
-//! wirft dabei passende Täuschkörper ([`DECOYS`] Stück); ob sie ihnen
-//! folgt, entscheidet ihre Resistenz.
+//! je Typ einige Treffer – die Trefferstärken summieren sich bis
+//! [`FighterSpec::toughness`]. Der getroffene Jäger stürzt ab und bleibt als
+//! Wrack aus dem Spiel. Verfolgt ihn eine Rakete und ist sie nah, weicht er
+//! aus – je Typ mit eigenen Manövern ([`Evasion`]) – und wirft dabei
+//! passende Täuschkörper ([`DECOYS`] Stück); ob sie ihnen folgt, entscheidet
+//! ihre Resistenz.
+//!
+//! **Pilotenkönnen** ([`Skill`], eigene Ergänzung – im Original wählt es nur
+//! das Manöver): je Jäger aus dem Seed gewürfelt, vom Regelset verschoben.
+//! Es bestimmt die Länge der Feuerstöße, wie früh er Täuschkörper wirft und
+//! aus welcher Entfernung er seine Rakete startet.
 
 use crate::atmosphere::G0;
 use crate::detmath;
 use crate::events::EventLog;
-use crate::gun::Gun;
+use crate::gun::{GSH_23L, GSH_30_1, Gun, GunSpec};
 use crate::math::DVec3;
 use crate::radar::{Exposure, RadarKind, RadarSpec};
+use crate::rng::Pcg32;
+use crate::rules::Rules;
 use crate::weapons::{DecoyKind, WeaponKind};
 use f29_world::{AirfieldKind, Terrain};
 
@@ -52,13 +60,58 @@ pub const LAUNCH_CONE_RAD: f64 = 30.0 * std::f64::consts::PI / 180.0;
 /// Nase (rad) liegt (wie im Original: sehr nah, fast genau voraus).
 pub const GUN_RANGE_M: f64 = 1_200.0;
 pub const GUN_CONE_RAD: f64 = 3.0 * std::f64::consts::PI / 180.0;
-/// Eigener Zufallsstrom je Kanone (plus Nummer des Jägers).
+/// Eigener Zufallsstrom je Kanone (plus Nummer des Jägers) und fürs
+/// Pilotenkönnen.
 const STREAM_GUNS: u64 = 0x4A47_554E;
+const STREAM_SKILL: u64 = 0x534B_494C;
+/// Pause zwischen zwei Feuerstößen (s).
+pub const BURST_PAUSE_S: f64 = 1.5;
 /// Täuschkörper je Jäger; beim Ausweichen wirft er alle so viele Sekunden
-/// einen passenden, sobald die Rakete näher als so (m) ist.
+/// einen passenden, sobald die Rakete näher als [`SkillSpec::decoy_range_m`]
+/// ist.
 pub const DECOYS: u8 = 4;
 pub const DECOY_INTERVAL_S: f64 = 1.0;
-pub const DECOY_RANGE_M: f64 = 2_000.0;
+
+/// Pilotenkönnen eines Jägers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Skill {
+    Rookie,
+    Regular,
+    Ace,
+}
+
+/// Was das Können bewirkt.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SkillSpec {
+    pub label: &'static str,
+    /// Länge eines Feuerstoßes (s).
+    pub burst_s: f64,
+    /// Täuschkörper ab dieser Entfernung der Rakete (m).
+    pub decoy_range_m: f64,
+    /// Rakete erst innerhalb dieses Anteils ihrer Reichweite.
+    pub launch_share: f64,
+}
+
+const SKILLS: [SkillSpec; 3] = [
+    SkillSpec { label: "ROOKIE", burst_s: 0.3, decoy_range_m: 1_000.0, launch_share: 1.0 },
+    SkillSpec { label: "REGULAR", burst_s: 0.6, decoy_range_m: 2_000.0, launch_share: 0.7 },
+    SkillSpec { label: "ACE", burst_s: 1.0, decoy_range_m: 3_500.0, launch_share: 0.5 },
+];
+
+impl Skill {
+    pub fn spec(self) -> &'static SkillSpec {
+        &SKILLS[self as usize]
+    }
+
+    /// Gewürfelt (gleich verteilt), um `shift` Stufen verschoben.
+    fn roll(rng: &mut Pcg32, shift: i8) -> Self {
+        match (rng.next_u32() % 3) as i8 + shift {
+            ..=0 => Skill::Rookie,
+            1 => Skill::Regular,
+            _ => Skill::Ace,
+        }
+    }
+}
 /// Abhebefahrt (m/s) und Beschleunigung beim Rollen (m/s²).
 const ROTATE_MPS: f64 = 90.0;
 const TAKEOFF_ACCEL: f64 = 12.0;
@@ -103,8 +156,10 @@ pub struct FighterSpec {
     pub radar: RadarSpec,
     /// Halber Öffnungswinkel des Radars um die Nase (rad).
     pub radar_cone_rad: f64,
-    /// Kanonentreffer bis zum Abschuss (Spielerentscheidung v0.2.9).
-    pub hits: u8,
+    /// Summe der Trefferstärken bis zum Abschuss (eine Rakete = 1; mit der
+    /// M61A1: MiG-21 5, MiG-29 8 Treffer, Spielerentscheidung v0.2.9).
+    pub toughness: f64,
+    pub gun: &'static GunSpec,
     /// Luft-Luft-Rakete (Vorrat unbegrenzt, eine in der Luft).
     pub missile: WeaponKind,
     /// Ausweichmanöver, je Rakete reihum.
@@ -125,7 +180,8 @@ const SPECS: [FighterSpec; 2] = [
         endurance_s: 900.0,
         radar: RadarSpec { kind: RadarKind::Pulse, range_m: 15_000.0, sweep_s: 2.0 },
         radar_cone_rad: deg(30.0),
-        hits: 5,
+        toughness: 0.625,
+        gun: &GSH_23L,
         missile: WeaponKind::Aphid,
         evasions: &[Evasion::Beam],
     },
@@ -138,7 +194,8 @@ const SPECS: [FighterSpec; 2] = [
         endurance_s: 1_200.0,
         radar: RadarSpec { kind: RadarKind::Doppler, range_m: 35_000.0, sweep_s: 2.0 },
         radar_cone_rad: deg(60.0),
-        hits: 8,
+        toughness: 1.0,
+        gun: &GSH_30_1,
         missile: WeaponKind::Alamo,
         evasions: &[Evasion::Beam, Evasion::Dive],
     },
@@ -170,6 +227,7 @@ pub enum Mode {
 pub struct Fighter {
     pub id: u32,
     pub kind: FighterKind,
+    pub skill: Skill,
     /// Heimatplatz (Index in `Terrain::runways`).
     pub base: usize,
     pub mode: Mode,
@@ -186,8 +244,10 @@ pub struct Fighter {
     pub goal: DVec3,
     /// Tick des letzten eigenen Radartreffers.
     pub contact_tick: Option<u64>,
-    /// Erhaltene Kanonentreffer.
-    pub hits: u8,
+    /// Summe der erhaltenen Trefferstärken.
+    pub damage: f64,
+    /// Beginn des letzten Feuerstoßes (Tick).
+    pub burst_tick: Option<u64>,
     /// Restliche Täuschkörper und Tick des letzten Wurfs.
     pub decoys: u8,
     pub decoy_tick: Option<u64>,
@@ -198,13 +258,14 @@ pub struct Fighter {
 
 impl Fighter {
     /// Bereit am Anfang der Bahn seines Platzes.
-    fn parked(id: u32, kind: FighterKind, base: usize, terrain: &Terrain) -> Self {
+    fn parked(id: u32, kind: FighterKind, skill: Skill, base: usize, terrain: &Terrain) -> Self {
         let rw = &terrain.runways()[base];
         let start = rw.world(-rw.length_m * 0.5 + 150.0, 0.0);
         let position = DVec3::new(start[0], start[1], -rw.elevation_m);
         Self {
             id,
             kind,
+            skill,
             base,
             mode: Mode::Ready,
             position,
@@ -215,7 +276,8 @@ impl Fighter {
             flight_s: 0.0,
             goal: position,
             contact_tick: None,
-            hits: 0,
+            damage: 0.0,
+            burst_tick: None,
             decoys: DECOYS,
             decoy_tick: None,
             threat: None,
@@ -349,8 +411,9 @@ pub struct Fighters {
 
 impl Fighters {
     /// Die Jäger der feindlichen Plätze laut Gebiet ([`Runway::fighters`]:
-    /// MiG-21, MiG-29) bereit.
-    pub fn new(terrain: &Terrain, seed: u64, max_airborne: usize) -> Self {
+    /// MiG-21, MiG-29) bereit, Können und Höchstzahl nach Regelset.
+    pub fn new(terrain: &Terrain, seed: u64, rules: &Rules) -> Self {
+        let mut rng = Pcg32::new(seed, STREAM_SKILL);
         let mut list = Vec::new();
         for (base, rw) in terrain.runways().iter().enumerate().filter(|(_, r)| r.kind == AirfieldKind::Enemy)
         {
@@ -358,11 +421,14 @@ impl Fighters {
             let kinds = std::iter::repeat_n(FighterKind::MiG21, mig21.into())
                 .chain(std::iter::repeat_n(FighterKind::MiG29, mig29.into()));
             for kind in kinds {
-                list.push(Fighter::parked(list.len() as u32, kind, base, terrain));
+                let skill = Skill::roll(&mut rng, rules.pilot_skill);
+                list.push(Fighter::parked(list.len() as u32, kind, skill, base, terrain));
             }
         }
-        let guns = (0..list.len() as u64).map(|k| Gun::with_stream(seed, STREAM_GUNS + k)).collect();
-        Self { list, guns, max_airborne, contact: None, events: EventLog::default() }
+        let guns = (0..list.len() as u64)
+            .map(|k| Gun::with_stream(list[k as usize].spec().gun, seed, STREAM_GUNS + k))
+            .collect();
+        Self { list, guns, max_airborne: rules.max_airborne, contact: None, events: EventLog::default() }
     }
 
     /// Ein Tick. `alert` ist der jüngste Ping-Ort der Radarstellungen,
@@ -409,7 +475,7 @@ impl Fighters {
                     f.goal = home;
                     let d = home - f.position;
                     if DVec3::new(d.x, d.y, 0.0).length() < ARRIVE_M {
-                        *f = Fighter::parked(f.id, f.kind, f.base, terrain);
+                        *f = Fighter::parked(f.id, f.kind, f.skill, f.base, terrain);
                         self.events.push(tick, FighterEvent::Landed { kind: f.kind, base: f.base });
                         continue;
                     }
@@ -464,14 +530,14 @@ impl Fighters {
         f.goal = position + DVec3::new(c, s, 0.0) * 100_000.0;
     }
 
-    /// Treffer am Jäger `i`: eine Rakete (`missile`) zerstört, die Kanone
-    /// zählt Treffer bis [`FighterSpec::hits`].
-    pub fn hit(&mut self, tick: u64, i: usize, missile: bool) {
+    /// Treffer der Stärke `strength` am Jäger `i` (Rakete 1); ab
+    /// [`FighterSpec::toughness`] stürzt er ab.
+    pub fn hit(&mut self, tick: u64, i: usize, strength: f64) {
         let Some(f) = self.list.get_mut(i).filter(|f| f.airborne()) else {
             return;
         };
-        f.hits = f.hits.saturating_add(1);
-        if missile || f.hits >= f.spec().hits {
+        f.damage += strength;
+        if f.damage >= f.spec().toughness {
             f.mode = Mode::Falling;
             self.events.push(tick, FighterEvent::Destroyed { kind: f.kind });
         }
@@ -512,7 +578,7 @@ mod tests {
 
     fn setup() -> (Terrain, Fighters) {
         let terrain = Terrain::from_theater(f29_world::Theater::builtin());
-        let f = Fighters::new(&terrain, 1, 6);
+        let f = Fighters::new(&terrain, 1, crate::rules::Conflict::War.rules());
         (terrain, f)
     }
 
@@ -654,13 +720,16 @@ mod tests {
         run(&mut f, &terrain, 120.0, alert, None);
         let up: Vec<usize> = (0..f.list.len()).filter(|&k| f.list[k].airborne()).collect();
         let (gun, missile) = (up[0], up[1]);
-        let need = f.list[gun].spec().hits;
+        let need = match f.list[gun].kind {
+            FighterKind::MiG21 => 5,
+            FighterKind::MiG29 => 8,
+        };
         for k in 0..need {
             assert!(f.list[gun].airborne(), "nach {k} Treffern schon unten");
-            f.hit(1, gun, false);
+            f.hit(1, gun, crate::gun::M61A1.strength);
         }
         assert_eq!(f.list[gun].mode, Mode::Falling);
-        f.hit(1, missile, true);
+        f.hit(1, missile, 1.0);
         assert_eq!(f.list[missile].mode, Mode::Falling, "Rakete zerstört sofort");
         assert!(f.events.iter().any(|(_, e)| matches!(e, FighterEvent::Destroyed { .. })));
         let t0 = (120.0 / TICK) as u64;
@@ -670,6 +739,24 @@ mod tests {
         assert_eq!(f.list[gun].mode, Mode::Wreck, "nicht aufgeschlagen");
         assert_eq!(f.list[missile].mode, Mode::Wreck);
         assert!(f.list.iter().filter(|x| x.airborne()).count() <= f.max_airborne);
+    }
+
+    /// Das Können ist gewürfelt und folgt dem Regelset: im offenen Krieg
+    /// mehr Asse als im Kalten Krieg, dort mehr Anfänger.
+    #[test]
+    fn pilot_skill_follows_the_rules() {
+        let terrain = Terrain::from_theater(f29_world::Theater::builtin());
+        let count = |c: crate::rules::Conflict, s: Skill| {
+            (0..20u64)
+                .map(|seed| {
+                    Fighters::new(&terrain, seed, c.rules()).list.iter().filter(|f| f.skill == s).count()
+                })
+                .sum::<usize>()
+        };
+        use crate::rules::Conflict::{ColdWar, War};
+        assert!(count(War, Skill::Ace) > count(ColdWar, Skill::Ace));
+        assert!(count(ColdWar, Skill::Rookie) > count(War, Skill::Rookie));
+        assert!(count(ColdWar, Skill::Regular) > 0 && count(War, Skill::Regular) > 0);
     }
 
     /// Tief und waagerecht bleibt das Flugzeug für das Jägerradar unsichtbar
