@@ -426,7 +426,15 @@ Format jedes Eintrags:
     zwei weiß, zwei rot.
   - „PULL UP“ ist mit ausgefahrenem Fahrwerk nur bei gefährlicher Sinkrate aktiv;
     „GEAR“ warnt im Anflug mit eingefahrenem Fahrwerk.
-  - Schwierigkeitsstufen für die Grenzwerte folgen mit M-008.
+  - Schwierigkeitsstufen für die Grenzwerte folgen mit M-008 bzw. dem
+    Flugverhalten der Menüführung (M-036).
+- **Lesephase Flugverhalten (v0.3, eigene Worte):** Die Aufsetzprüfung im
+  Landekorridor rechnet mit einem Faktor je Stufe. „Realistisch“ hat den
+  doppelten Faktor von „leicht“: Leicht verträgt also die doppelte
+  Sinkrate und die doppelte Querlage. „Kein Absturz“ setzt den Faktor auf
+  null – Aufsetzen im Korridor zerstört dann nie, auch nicht ohne
+  Fahrwerk; außerhalb gilt weiter Bodenberührung als Absturz. Auf der
+  leichtesten Stufe entfällt zudem das Wackeln in Bodennähe (M-006).
 - **Unsere Werte:** gut bis 4 m/s (≈ 790 ft/min), Bruch ab 7 m/s (≈ 1 380 ft/min),
   Querlage bis 15°, Nicklage nicht unter −5°. *v0.1.9:* gelockert nach Spieltest
   (vorher 3 / 5 m/s, 10°, −2°); eine flache Landung mit 190 kt ohne Abfangen
@@ -2039,11 +2047,14 @@ Format jedes Eintrags:
     Ablauf, das Rätsel selbst später.
   - **Gebiet:** Liste bleibt (später vier Gebiete), vorerst ein Eintrag.
   - **Missionsart:** Liste bleibt (später Flugzeuge als Missionsziele).
-  - **Gegnerqualität:** vorbereiten; entspricht dem Pilotenkönnen der
-    Jäger (M-022).
+  - **Gegnerqualität:** entspricht dem Pilotenkönnen der Jäger (M-022)
+    und ersetzt die Verschiebung durch das Regelset; das Regelset bestimmt
+    nur noch Einsatzregeln und Bedrohungsdichte.
   - **Flugverhalten:** bezieht sich auf die Landung; über die
-    Landegrenzwerte umsetzen.
-  - **Zusatztank:** wird wie eine Waffe einem Schacht zugewiesen, auch in
-    mehreren Schächten. Im NAV-Modus erscheint er als „Waffe“ und wird ohne
-    Öffnen der Klappen „verbraucht“; der Schacht ist danach leer.
+    Landegrenzwerte umsetzen (M-005).
+  - **Zusatztank:** wird wie eine Waffe einem Schacht zugewiesen, ein Tank
+    je Schacht, also höchstens vier. Im NAV-Modus erscheint er als „Waffe“
+    und wird ohne Öffnen der Klappen „verbraucht“: Sein Inhalt fließt in die
+    Haupttanks, was nicht passt, geht verloren; der Schacht ist danach
+    leer.
 - **Status:** gelesen (v0.3); Umsetzung offen
