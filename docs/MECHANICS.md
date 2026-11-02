@@ -1120,11 +1120,11 @@ Format jedes Eintrags:
   Jäger, Landebahn) – so bleiben Replays bitgleich, und beim Umschalten ist
   die frühere Wahl der Art wieder da.
   - **Vierecke nach den vier Stufen (M-013),** gleich groß, unabhängig von
-    der Entfernung, für jedes Ziel der Modusart im Glas: *gemeldet*
-    gestrichelt und gedämpft; *entdeckt* durchgezogen mit Kürzel R, O oder
-    RO (Radar, optisch); *gewählt* doppelter, heller Rahmen mit Typ und
-    Entfernung, außerhalb des Glases ein Randpfeil; *erfasst* dazu Ecken
-    (blau). Die Karte zeigt dieselben Stufen aus derselben Liste und nur für
+    der Entfernung. Im HUD wie im Original **nur das gewählte Ziel**
+    (v0.3; vorher alle bekannten – zu unübersichtlich): doppelter, heller
+    Rahmen mit Typ und Entfernung, außerhalb des Glases ein Randpfeil;
+    *erfasst* dazu Ecken (blau). Die Karte zeigt alle Stufen – *gemeldet*
+    gestrichelt, *entdeckt* durchgezogen, *gewählt* hervorgehoben – nur für
     die Modusart – gewählt ist so immer genau eines zu sehen; Jäger stehen
     dort nur, wenn sie gemeldet oder entdeckt sind. Die TGT-Seite zeigt das
     gewählte Ziel des Modus (im AA-Modus den Jäger mit Kamerabild, solange

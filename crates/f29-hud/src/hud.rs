@@ -5,7 +5,7 @@ use crate::{ScreenLayout, heading_deg};
 use f29_core::sensors;
 use f29_core::units;
 use f29_core::weapons::{self, LaunchZone, WeaponKind};
-use f29_core::{FlightData, MarkKind, PickedInfo, Side, Stage};
+use f29_core::{FlightData, MarkKind, PickedInfo, Side};
 
 /// Zeichenhöhe der HUD-Schrift (Bildschirmeinheiten).
 const TXT: f32 = 0.020;
@@ -85,11 +85,11 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
     boresight(dl, c, vh);
     flight_path_marker(dl, fd, layout, &glass, vh);
     steerpoint_marker(dl, fd, layout, &glass, vh);
-    // Der Modus filtert die Zielart: Vierecke um alle bekannten Ziele dieser
-    // Art, das gewählte eigens; AA und AG mit ihrem Erfassungskreis (M-013).
+    // Der Modus filtert die Zielart; wie im Original zeigt das HUD nur das
+    // gewählte Ziel (alle bekannten zeigt die Karte). AA und AG mit ihrem
+    // Erfassungskreis (M-013).
     match mode {
         HudMode::Nav => {
-            marks(dl, fd, layout, &glass, vh, MarkKind::Runway);
             picked_target(dl, fd.runway_target.as_ref(), layout, &glass, vh);
         }
         HudMode::AirToGround => {
@@ -105,7 +105,6 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
                 }
                 None => dl.circle(c, circle_radius(layout, sensors::GROUND_CIRCLE_RAD), 40, Ink::Hud),
             }
-            marks(dl, fd, layout, &glass, vh, MarkKind::Ground);
             target_marker(dl, fd, layout, &glass, vh);
             bomb_aim(dl, fd, layout, &glass, vh);
             gun_cross(dl, fd, layout, &glass, vh);
@@ -113,7 +112,6 @@ pub(crate) fn draw(dl: &mut DisplayList, fd: &FlightData, layout: &ScreenLayout,
         }
         HudMode::AirToAir => {
             dl.circle(c, circle_radius(layout, sensors::AIR_CIRCLE_RAD), 48, Ink::Hud);
-            marks(dl, fd, layout, &glass, vh, MarkKind::Air);
             picked_target(dl, fd.air_target.as_ref(), layout, &glass, vh);
             lead_marker(dl, fd, layout, &glass, vh);
         }
@@ -417,39 +415,6 @@ fn corners(dl: &mut DisplayList, p: [f32; 2], s: f32, ink: Ink) {
         (o.max[0], o.max[1], -1.0, -1.0),
     ] {
         dl.polyline(&[[cx + dx * k, cy], [cx, cy], [cx, cy + dy * k]], false, ink);
-    }
-}
-
-/// Schlichte Vierecke um alle bekannten Ziele der Art `kind` im Glas (das
-/// gewählte zeichnet sein eigener Rahmen): gemeldet gestrichelt, entdeckt
-/// durchgezogen mit Kürzel des Sensors (R Radar, O optisch).
-fn marks(
-    dl: &mut DisplayList,
-    fd: &FlightData,
-    layout: &ScreenLayout,
-    glass: &Rect,
-    vh: f32,
-    kind: MarkKind,
-) {
-    let s = vh * MARK_SIZE;
-    for m in fd.marks.iter().filter(|m| m.kind == kind && !m.selected) {
-        let Some(p) = layout.project_body(m.direction_body.to_array()).filter(|p| glass.contains(*p)) else {
-            continue;
-        };
-        let r = Rect::from_center(p, [s, s]);
-        if m.stage == Stage::Reported {
-            dl.dashed_rect(r, Ink::HudDim);
-            continue;
-        }
-        dl.rect(r, Ink::HudDim);
-        if kind != MarkKind::Runway {
-            let tag = match (m.seen.radar, m.seen.optical) {
-                (true, true) => "RO",
-                (true, false) => "R",
-                _ => "O",
-            };
-            dl.text_mid([r.max[0] + s * 0.4, r.min[1]], TXT_SMALL * 0.6, Align::Left, tag, Ink::HudDim);
-        }
     }
 }
 

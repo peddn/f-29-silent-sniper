@@ -601,10 +601,10 @@ fn one_circle_per_mode() {
     assert_eq!(on_circle(HudMode::Nav, GROUND_CIRCLE_RAD) + on_circle(HudMode::Nav, AIR_CIRCLE_RAD), 0);
 }
 
-/// Der Modus filtert die Vierecke: AA nur Jäger, AG nur Bodenziele, NAV nur
-/// Landebahnen.
+/// Wie im Original zeigt das HUD nur das gewählte Ziel: Bekannte, nicht
+/// gewählte Ziele bekommen in keinem Modus ein Viereck (die Karte zeigt sie).
 #[test]
-fn modes_filter_the_target_marks() {
+fn hud_shows_only_the_picked_target() {
     use crate::HudMode;
     use f29_core::{Mark, MarkKind, Stage};
     let layout = ScreenLayout::cockpit(16.0 / 9.0);
@@ -631,9 +631,9 @@ fn modes_filter_the_target_marks() {
     };
     let empty = f29_core::FlightData { marks: Vec::new(), ..fd.clone() };
     let added = |mode| dim(&fd, mode) - dim(&empty, mode);
-    assert_eq!(added(HudMode::AirToGround), 12, "gemeldet: gestrichelt");
-    assert_eq!(added(HudMode::Nav), 4, "Landebahn ohne Kürzel");
-    assert!(added(HudMode::AirToAir) > 12 + 4, "entdeckt: Viereck mit Kürzel");
+    for mode in [HudMode::Nav, HudMode::AirToGround, HudMode::AirToAir] {
+        assert_eq!(added(mode), 0, "{mode:?}");
+    }
 }
 
 /// Feuersignal: „SHOOT“ (blau), wenn die Vorausberechnung trifft, sonst nur

@@ -310,7 +310,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Rückflug und Landung; Karte (v0.2.9)
 - [x] Etappe 1b: Jäger in 3D, Radar-Aufschaltung auf Luftziele, Zielrahmen im
       AA-Modus (v0.2.9)
-- [x] HUD-Modus als Zielfilter: Vierecke um alle bekannten Ziele der Art,
+- [x] HUD-Modus als Zielfilter (HUD seit v0.3 nur das gewählte Ziel, die Karte alle),
       I/J/K/L wählen je Modus Jäger (AA), Bodenziele (AG) oder Landebahnen mit
       FRIENDLY/HOSTILE (NAV); ein Erfassungskreis je Modus (AA ±10°, AG ±6°);
       Jäger als Punkt bis 15 km sichtbar; `--no-damage` (v0.2.9)
