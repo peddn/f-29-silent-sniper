@@ -52,7 +52,8 @@ pub const BUTTON_NAMES: [&str; 15] = [
     "RightThumb",
 ];
 
-/// Was eine Taste auslöst.
+/// Was eine Taste auslöst – gleich für Tastatur und Joystick
+/// ([`crate::actions`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Gun,
@@ -82,10 +83,22 @@ pub enum Action {
     Pause,
     TimeWarp,
     Eject,
+    /// Blick aus dem Cockpit (M-035).
+    CockpitForward,
+    CockpitLeft,
+    CockpitAft,
+    CockpitRight,
+    ViewCockpit,
+    ViewChase,
+    Retro,
+    HudToggle,
+    WideView,
+    Restart,
+    Quit,
 }
 
 impl Action {
-    pub const ALL: [(Action, &'static str); 27] = [
+    pub const ALL: [(Action, &'static str); 38] = [
         (Action::Gun, "gun"),
         (Action::Fire, "fire"),
         (Action::NextWeapon, "next_weapon"),
@@ -113,6 +126,17 @@ impl Action {
         (Action::Pause, "pause"),
         (Action::TimeWarp, "time_warp"),
         (Action::Eject, "eject"),
+        (Action::CockpitForward, "cockpit_forward"),
+        (Action::CockpitLeft, "cockpit_left"),
+        (Action::CockpitAft, "cockpit_aft"),
+        (Action::CockpitRight, "cockpit_right"),
+        (Action::ViewCockpit, "view_cockpit"),
+        (Action::ViewChase, "view_chase"),
+        (Action::Retro, "retro"),
+        (Action::HudToggle, "hud"),
+        (Action::WideView, "wide_view"),
+        (Action::Restart, "restart"),
+        (Action::Quit, "quit"),
     ];
 
     pub fn name(self) -> &'static str {

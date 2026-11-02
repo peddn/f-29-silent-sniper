@@ -1,21 +1,18 @@
-//! Tastatur → quantisierte Steuereingaben (Joystick: `joystick.rs`).
+//! Steuerorgane und Tastatur-Achsen → quantisierte Steuereingaben. Tasten
+//! laufen über die gemeinsame Aktionsliste (`actions.rs`), der Joystick über
+//! `joystick.rs`.
 
-use crate::mfd::MfdView;
-use crate::sim::{SimState, SimSystems};
-use crate::view::{ViewMode, ViewSettings};
-use bevy::app::AppExit;
-use bevy::input::keyboard::Key;
+use crate::sim::SimSystems;
 use bevy::prelude::*;
 use f29_core::ControlFrame;
 use f29_core::controls::{flags, weapon_flags};
-use f29_core::sensors::LookDir;
 
 pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(Update, (SimSystems::Input, SimSystems::Step, SimSystems::Present).chain())
-            .add_systems(Update, (flight_input, hotkeys).in_set(SimSystems::Input));
+            .add_systems(Update, flight_input.in_set(SimSystems::Input));
     }
 }
 
@@ -123,6 +120,7 @@ fn axis(keys: &ButtonInput<KeyCode>, neg: &[KeyCode], pos: &[KeyCode]) -> f64 {
     f64::from(i8::from(p) - i8::from(n))
 }
 
+/// Tastatur: Knüppel, Seitenruder und Schub.
 pub(crate) fn flight_input(keys: Res<ButtonInput<KeyCode>>, time: Res<Time>, mut pilot: ResMut<PilotInput>) {
     let dt = time.delta_secs_f64();
 
@@ -153,135 +151,5 @@ pub(crate) fn flight_input(keys: Res<ButtonInput<KeyCode>>, time: Res<Time>, mut
         if keys.just_pressed(key) {
             pilot.throttle = value;
         }
-    }
-    if keys.just_pressed(KeyCode::KeyB) {
-        pilot.airbrake = !pilot.airbrake;
-    }
-    if keys.just_pressed(KeyCode::KeyF) {
-        pilot.flaps = !pilot.flaps;
-    }
-    if keys.just_pressed(KeyCode::KeyG) {
-        pilot.gear = !pilot.gear;
-    }
-    if keys.just_pressed(KeyCode::KeyN) {
-        pilot.next_steerpoint = true;
-    }
-    // Zielerfassung: V Radar, I/L/K/J Blickrichtung voraus/rechts/hinten/links
-    if keys.just_pressed(KeyCode::KeyV) {
-        pilot.radar_toggle = true;
-    }
-    // (mit Strg: Blick aus dem Cockpit, siehe `hotkeys`)
-    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
-    for (key, dir) in [
-        (KeyCode::KeyI, LookDir::Forward),
-        (KeyCode::KeyL, LookDir::Right),
-        (KeyCode::KeyK, LookDir::Aft),
-        (KeyCode::KeyJ, LookDir::Left),
-    ] {
-        if keys.just_pressed(key) && !ctrl {
-            pilot.look = dir.code();
-        }
-    }
-
-    // Bordkanone: Rücktaste (gehalten) feuert sie immer; die Leertaste
-    // feuert die gewählte Waffe – gehalten die Kanone, wenn sie gewählt ist.
-    pilot.gun = keys.pressed(KeyCode::Backspace);
-    pilot.trigger = keys.pressed(KeyCode::Space);
-
-    // Waffen: Leertaste auslösen, O Schacht auf/zu, Tab nächste Waffe (GUN,
-    // BAY 1–4); C Düppel, T Fackel, M Störsender ein/aus, U Infrarotstörer
-    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
-    for (key, flag) in [
-        (KeyCode::Space, weapon_flags::RELEASE),
-        (KeyCode::KeyO, weapon_flags::BAY_DOORS),
-        (KeyCode::Tab, weapon_flags::NEXT_BAY),
-        (KeyCode::KeyC, weapon_flags::CHAFF),
-        (KeyCode::KeyT, weapon_flags::FLARE),
-        (KeyCode::KeyM, weapon_flags::ECM),
-        (KeyCode::KeyU, weapon_flags::IR_JAMMER),
-    ] {
-        if keys.just_pressed(key) && !(shift && key == KeyCode::KeyT) {
-            pilot.weapons |= flag;
-        }
-    }
-    // Schleudersitz: Strg+E (M-032)
-    if keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) && keys.just_pressed(KeyCode::KeyE) {
-        pilot.weapons |= weapon_flags::EJECT;
-    }
-}
-
-fn hotkeys(
-    keys: Res<ButtonInput<KeyCode>>,
-    logical: Res<ButtonInput<Key>>,
-    mut state: ResMut<SimState>,
-    mut view: ResMut<ViewSettings>,
-    mut mfd: ResMut<MfdView>,
-    mut pilot: ResMut<PilotInput>,
-    mut exit: MessageWriter<AppExit>,
-) {
-    if keys.just_pressed(KeyCode::Escape) {
-        state.save_replay();
-        exit.write(AppExit::Success);
-    }
-    if keys.just_pressed(KeyCode::KeyP) {
-        state.paused = !state.paused;
-    }
-    // Zeitraffer 1× → 2× → 4× (Shift+T; T allein wirft Fackeln)
-    if keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) && keys.just_pressed(KeyCode::KeyT) {
-        state.cycle_time_scale();
-    }
-    if keys.just_pressed(KeyCode::KeyR) {
-        state.restart();
-        *pilot = PilotInput::matching(&state.sim);
-    }
-    // Ansichten: Shift + F-Taste
-    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
-    if shift && keys.just_pressed(KeyCode::F1) {
-        view.mode = ViewMode::Cockpit;
-        view.look = LookDir::Forward;
-    }
-    // Blick aus dem Cockpit: Strg+I/J/K/L vorn/links/hinten/rechts
-    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
-    for (key, look) in [
-        (KeyCode::KeyI, LookDir::Forward),
-        (KeyCode::KeyJ, LookDir::Left),
-        (KeyCode::KeyK, LookDir::Aft),
-        (KeyCode::KeyL, LookDir::Right),
-    ] {
-        if ctrl && keys.just_pressed(key) {
-            view.mode = ViewMode::Cockpit;
-            view.look = look;
-        }
-    }
-    if shift && keys.just_pressed(KeyCode::F2) {
-        view.mode = ViewMode::Chase;
-    }
-    if shift && keys.just_pressed(KeyCode::F3) {
-        view.retro = view.retro.next();
-    }
-    if shift && keys.just_pressed(KeyCode::F4) {
-        view.hud = !view.hud;
-    }
-    if shift && keys.just_pressed(KeyCode::F5) {
-        view.wide = !view.wide;
-    }
-    // HUD-Modus: NAV → AG → AA
-    if keys.just_pressed(KeyCode::KeyH) {
-        view.hud_mode = view.hud_mode.next();
-    }
-    // MFDs: F3 Karte Gitter/Satellit, F4 nächste Seite rechts,
-    // Y/X zoomen nach Tastenbeschriftung (deutsche und US-Tastatur).
-    if !shift && keys.just_pressed(KeyCode::F3) {
-        mfd.0.toggle_map_mode();
-    }
-    if !shift && keys.just_pressed(KeyCode::F4) {
-        mfd.0.next_page();
-    }
-    let typed = |c: &str| logical.just_pressed(Key::Character(c.into()));
-    if typed("y") || typed("Y") {
-        mfd.0.zoom_in();
-    }
-    if typed("x") || typed("X") {
-        mfd.0.zoom_out();
     }
 }

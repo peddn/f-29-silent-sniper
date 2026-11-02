@@ -16,6 +16,7 @@
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
 
+mod actions;
 mod airfield;
 mod capture;
 mod cockpit;
@@ -112,6 +113,7 @@ fn main() {
         // Ohne Klang wird auch kein Audiogerät geöffnet.
         app.add_plugins(DefaultPlugins.set(window).disable::<bevy::audio::AudioPlugin>());
     }
+    app.add_plugins(actions::ActionsPlugin);
     app.add_plugins((
         sim::SimPlugin { config },
         airfield::AirfieldPlugin,

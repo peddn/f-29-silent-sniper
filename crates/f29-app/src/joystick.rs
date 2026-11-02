@@ -10,16 +10,12 @@
 //! sind; der Schubregler setzt den Schub, sobald er bewegt wird.
 
 use crate::input::{PilotInput, flight_input};
-use crate::joystick_config::{Action, AxisBinding, AxisId, ButtonId, JoystickConfig, linux};
-use crate::mfd::MfdView;
-use crate::sim::{SimState, SimSystems};
-use crate::view::{ViewMode, ViewSettings};
+use crate::joystick_config::{AxisBinding, AxisId, ButtonId, JoystickConfig, linux};
+use crate::sim::SimSystems;
 use bevy::input::gamepad::{
     GamepadConnection, GamepadConnectionEvent, RawGamepadAxisChangedEvent, RawGamepadButtonChangedEvent,
 };
 use bevy::prelude::*;
-use f29_core::controls::weapon_flags;
-use f29_core::sensors::LookDir;
 use std::collections::HashMap;
 
 /// Belegung und Diagnosemodus.
@@ -147,15 +143,12 @@ fn read(pad: &Gamepad, b: Option<AxisBinding>) -> Option<f64> {
     Some(if b.invert { -v } else { v })
 }
 
-/// Joystick → Steuerorgane, Waffen und Anzeigen.
-#[allow(clippy::too_many_arguments)]
-fn joystick_input(
+/// Joystick → Steuerorgane; Tasten als Aktionen ([`crate::actions`]).
+pub fn joystick_input(
     settings: Res<JoystickSettings>,
     gamepads: Query<&Gamepad>,
     mut pilot: ResMut<PilotInput>,
-    mut view: ResMut<ViewSettings>,
-    mut mfd: ResMut<MfdView>,
-    mut state: ResMut<SimState>,
+    mut actions: ResMut<crate::actions::Actions>,
     mut last_throttle: Local<Option<f64>>,
 ) {
     let cfg = &settings.config;
@@ -182,47 +175,7 @@ fn joystick_input(
         }
         for (button, action) in &cfg.buttons {
             let b = to_button(button);
-            let (held, pressed) = (pad.pressed(b), pad.just_pressed(b));
-            match action {
-                Action::Gun => pilot.gun |= held,
-                Action::Fire => {
-                    pilot.trigger |= held;
-                    if pressed {
-                        pilot.weapons |= weapon_flags::RELEASE;
-                    }
-                }
-                _ if !pressed => {}
-                Action::NextWeapon => pilot.weapons |= weapon_flags::NEXT_BAY,
-                Action::BayDoors => pilot.weapons |= weapon_flags::BAY_DOORS,
-                Action::Chaff => pilot.weapons |= weapon_flags::CHAFF,
-                Action::Flare => pilot.weapons |= weapon_flags::FLARE,
-                Action::Ecm => pilot.weapons |= weapon_flags::ECM,
-                Action::IrJammer => pilot.weapons |= weapon_flags::IR_JAMMER,
-                Action::Eject => pilot.weapons |= weapon_flags::EJECT,
-                Action::Radar => pilot.radar_toggle = true,
-                Action::NextSteerpoint => pilot.next_steerpoint = true,
-                Action::LookForward => pilot.look = LookDir::Forward.code(),
-                Action::LookRight => pilot.look = LookDir::Right.code(),
-                Action::LookAft => pilot.look = LookDir::Aft.code(),
-                Action::LookLeft => pilot.look = LookDir::Left.code(),
-                Action::Gear => pilot.gear = !pilot.gear,
-                Action::Flaps => pilot.flaps = !pilot.flaps,
-                Action::Airbrake => pilot.airbrake = !pilot.airbrake,
-                Action::MapZoom => mfd.0.cycle_zoom(),
-                Action::ZoomIn => mfd.0.zoom_in(),
-                Action::ZoomOut => mfd.0.zoom_out(),
-                Action::MapMode => mfd.0.toggle_map_mode(),
-                Action::MfdPage => mfd.0.next_page(),
-                Action::HudMode => view.hud_mode = view.hud_mode.next(),
-                Action::View => {
-                    view.mode = match view.mode {
-                        ViewMode::Cockpit => ViewMode::Chase,
-                        ViewMode::Chase => ViewMode::Cockpit,
-                    }
-                }
-                Action::Pause => state.paused = !state.paused,
-                Action::TimeWarp => state.cycle_time_scale(),
-            }
+            actions.push(*action, pad.just_pressed(b), pad.pressed(b));
         }
     }
 }
