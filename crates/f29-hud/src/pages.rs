@@ -158,7 +158,7 @@ pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     let bay = st.bays[selected];
     let release = if bay.count == 0 {
         ("EMPTY", Ink::MfdDim)
-    } else if st.door >= 1.0 {
+    } else if st.door >= 1.0 || bay.kind == Some(WeaponKind::DropTank) {
         ("READY", Ink::Warning)
     } else {
         ("BAY CLOSED", Ink::Mfd)
@@ -169,6 +169,7 @@ pub(crate) fn weapons(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
             let guidance = match s.seeker {
                 Seeker::None if k == WeaponKind::Retarded => "RETARDED",
                 Seeker::None if k == WeaponKind::Camera => "PHOTO",
+                Seeker::None if k == WeaponKind::DropTank => "FUEL",
                 Seeker::None => "NONE",
                 Seeker::Optical if s.anti_air => "IR",
                 Seeker::Optical => "TV",

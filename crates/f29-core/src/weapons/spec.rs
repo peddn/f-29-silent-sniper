@@ -40,6 +40,9 @@ pub enum WeaponKind {
     Alamo,
     /// Aufklärungskamera (M-032): kein Geschoss; der Auslöser macht ein Foto.
     Camera,
+    /// Zusatztank im Schacht (M-036): kein Geschoss; der Auslöser pumpt
+    /// seinen Inhalt in die Haupttanks, ohne die Klappen zu öffnen.
+    DropTank,
 }
 
 /// Suchkopf einer gelenkten Waffe.
@@ -221,7 +224,7 @@ const SAM: WeaponSpec = WeaponSpec {
     ..MISSILE
 };
 
-const SPECS: [WeaponSpec; 15] = [
+const SPECS: [WeaponSpec; 16] = [
     BOMB,
     WeaponSpec {
         kind: WeaponKind::Retarded,
@@ -435,11 +438,25 @@ const SPECS: [WeaponSpec; 15] = [
         frag_radius_m: 0.0,
         ..BOMB
     },
+    // Zusatztank: voll [`TANK_FUEL_KG`] Treibstoff plus Behälter.
+    WeaponSpec {
+        kind: WeaponKind::DropTank,
+        label: "TANK",
+        name: "FUEL TANK",
+        mass_kg: TANK_FUEL_KG + 120.0,
+        per_bay: 1,
+        lethal_radius_m: 0.0,
+        frag_radius_m: 0.0,
+        ..BOMB
+    },
 ];
+
+/// Treibstoff eines Zusatztanks (kg; die Haupttanks fassen 5200 kg).
+pub const TANK_FUEL_KG: f64 = 1_000.0;
 
 impl WeaponKind {
     /// Die Waffen für die Schächte (ohne die feindlichen Raketen).
-    pub const ALL: [WeaponKind; 9] = [
+    pub const ALL: [WeaponKind; 10] = [
         WeaponKind::FreeFall,
         WeaponKind::Retarded,
         WeaponKind::GuidedBomb,
@@ -449,6 +466,7 @@ impl WeaponKind {
         WeaponKind::Sidewinder,
         WeaponKind::Amraam,
         WeaponKind::Camera,
+        WeaponKind::DropTank,
     ];
 
     pub fn spec(self) -> &'static WeaponSpec {
@@ -472,7 +490,12 @@ impl WeaponKind {
 
     /// Ungelenkte Bombe (Aufschlagvorhersage, Zielhilfe).
     pub fn is_bomb(self) -> bool {
-        !self.is_guided() && self != WeaponKind::Camera
+        !self.is_guided() && !self.is_equipment()
+    }
+
+    /// Ausrüstung statt Waffe: Kamera, Zusatztank.
+    pub fn is_equipment(self) -> bool {
+        matches!(self, WeaponKind::Camera | WeaponKind::DropTank)
     }
 
     /// Fernsehsuchkopf: Die Waffe sendet ihr Bild (WPN-CAM-Seite).
@@ -498,6 +521,7 @@ impl WeaponKind {
             WeaponKind::Aphid => "aa8",
             WeaponKind::Alamo => "aa10",
             WeaponKind::Camera => "cam",
+            WeaponKind::DropTank => "tank",
         }
     }
 
@@ -521,7 +545,8 @@ impl WeaponKind {
                 | W::Amraam
                 | W::Aphid
                 | W::Alamo
-                | W::Camera,
+                | W::Camera
+                | W::DropTank,
                 _,
             ) => 0.0,
             (W::AntiRadar, C::AirDefense | C::EarlyWarning | C::ShortRangeSam) => 1.0,

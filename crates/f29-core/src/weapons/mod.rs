@@ -408,6 +408,10 @@ impl ImpactResult {
 /// Ereignisse für Meldungen, Klang und Darstellung.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WeaponEvent {
+    /// Zusatztank in die Haupttanks umgepumpt.
+    FuelTransfer {
+        bay: usize,
+    },
     Released {
         kind: WeaponKind,
         bay: usize,
@@ -713,6 +717,13 @@ impl Stores {
     pub fn release(&mut self, l: &Launch<'_>) -> f64 {
         let bay = self.bays[self.selected];
         let (_, _, roll) = l.attitude.to_euler();
+        // Zusatztank: pumpt ohne Klappen um, der Schacht ist danach leer;
+        // den Treibstoff bucht das Sim.
+        if bay.kind == Some(WeaponKind::DropTank) {
+            self.bays[self.selected] = Bay { kind: None, count: 0 };
+            self.events.push(l.tick, WeaponEvent::FuelTransfer { bay: self.selected });
+            return WeaponKind::DropTank.spec().mass_kg;
+        }
         let event = match bay.kind {
             _ if !l.bay_ok => Some(WeaponEvent::BayFault),
             _ if !self.door_open() => Some(WeaponEvent::BayClosed),

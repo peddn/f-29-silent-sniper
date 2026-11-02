@@ -62,6 +62,16 @@ const OFF_RUNWAY_MAX_SPEED: f64 = 12.0;
 const RUNWAY_START_OFFSET_M: f64 = 150.0;
 /// Treibstoffreserve, die bei der Heimkehr übrig bleiben soll (kg).
 pub const FUEL_RESERVE_KG: f64 = 450.0;
+/// Verbrauch im Reiseflug für die Treibstoffschätzung (kg/km; gemessen mit
+/// dem Autopiloten bei 250 m/s in 3000 m).
+pub const CRUISE_FUEL_KG_PER_KM: f64 = 11.0;
+
+/// Treibstoffbedarf der Route samt Reserve (kg) – wie das „Fuel Estimate“
+/// des Originals allein aus der Streckenlänge (M-036).
+pub fn fuel_required_kg(route: &[Steerpoint]) -> f64 {
+    let m: f64 = route.windows(2).map(|w| (w[1].north - w[0].north).hypot(w[1].east - w[0].east)).sum();
+    m / 1_000.0 * CRUISE_FUEL_KG_PER_KM + FUEL_RESERVE_KG
+}
 /// „FUEL LOW“ unter diesem Anteil der Tankfüllung.
 const FUEL_LOW_FRACTION: f64 = 0.15;
 /// Stillstand: langsamer als das (m/s).
@@ -467,7 +477,17 @@ impl Sim {
                 targets[i].role = role;
             }
         }
-        let stores = Stores::new(&sp.loadout.unwrap_or_else(|| plan.loadout(&targets)), seed);
+        let route = mission::route(&plan, &terrain, &targets);
+        // Vorschlag wie im Original: reicht der Tank nicht, ersetzt ein
+        // Zusatztank die HARM.
+        let suggested = || {
+            let mut l = plan.loadout(&targets);
+            if fuel_required_kg(&route) > aircraft.fuel_kg {
+                l.0[1] = Some(WeaponKind::DropTank);
+            }
+            l
+        };
+        let stores = Stores::new(&sp.loadout.unwrap_or_else(suggested), seed);
         aircraft.stores_kg = stores.mass_kg();
         if !aircraft.on_ground {
             // Getrimmt starten: Nase um den Anstellwinkel anheben, bei dem der
@@ -487,7 +507,6 @@ impl Sim {
             - terrain.elevation(aircraft.position.x, aircraft.position.y)
             - spec.gear_height_m)
             .max(0.0);
-        let route = mission::route(&plan, &terrain, &targets);
         let fighters =
             Fighters::new(&terrain, seed, sp.conflict.rules().max_airborne, sp.opponents.skill_shift());
         // Aufklärung fliegt immer bei Tag.
@@ -1031,8 +1050,14 @@ impl Sim {
         // Bei gewählter Kanone löst die Auslösetaste keine Schachtwaffe aus.
         if controls.has_weapon(weapon_flags::RELEASE) && !self.stores.gun_selected {
             let launch = launch!(self);
+            let tank = self.stores.selected_weapon() == Some(WeaponKind::DropTank);
             let dropped = if self.aircraft.on_ground { 0.0 } else { self.stores.release(&launch) };
             self.aircraft.stores_kg = (self.aircraft.stores_kg - dropped).max(0.0);
+            // Umgepumpt wird, was in die Haupttanks passt; der Rest geht verloren.
+            if tank && dropped > 0.0 {
+                let a = &mut self.aircraft;
+                a.fuel_kg = (a.fuel_kg + weapons::TANK_FUEL_KG).min(self.spec.fuel_capacity_kg);
+            }
         }
     }
 

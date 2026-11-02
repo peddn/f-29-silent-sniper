@@ -1063,6 +1063,7 @@ impl Sim {
                         WeaponEvent::AircraftHit { kind, .. } => (format!("{} HIT", kind.label()), true),
                         WeaponEvent::FighterHit { kind, .. } => (format!("{} HIT", kind.label()), false),
                         WeaponEvent::Photo { n, .. } => (format!("PHOTO {n}"), false),
+                        WeaponEvent::FuelTransfer { .. } => ("FUEL TRANSFERRED".to_string(), false),
                         WeaponEvent::Decoyed { kind, .. } => (format!("{} DECOYED", kind.label()), false),
                         WeaponEvent::DecoyEmpty(kind) => (format!("{} EMPTY", kind.label()), true),
                         WeaponEvent::Acquired { kind, target, .. } => {
