@@ -921,3 +921,23 @@ fn arming_fits_the_picture() {
     }
     assert!(draw(&Arming { bay: Some(2), ..Arming::default() }, area).lines.len() > plain.len());
 }
+
+/// Lagebesprechung (M-036): Die Bedrohungen zeichnen die Radarkreise dazu,
+/// der Flugplan beschriftet die Wegpunkte; alles bleibt im Bildfeld.
+#[test]
+fn intel_map_shows_threats_and_plan() {
+    use crate::intel::{Topic, draw, labels};
+    let sim = Sim::new(SimConfig::runway(7));
+    let map = crate::MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
+    let fd = sim.flight_data();
+    let area = Rect { min: [0.2, -0.25], max: [0.75, 0.3] };
+    let lines = |t| draw(&map, &fd.threat.sites, t, area).lines;
+    assert!(lines(Topic::Threats).len() > lines(Topic::Leave).len() + 64);
+    let plan = labels(&map, Topic::FlightPlan, area);
+    let texts: Vec<&str> = plan.iter().map(|l| l.text.as_str()).collect();
+    assert_eq!(texts, ["HOME", "2", "3"]);
+    let inside = |p: [f32; 2]| {
+        (area.min[0] - 0.1..area.max[0] + 0.1).contains(&p[0]) && area.contains([area.center()[0], p[1]])
+    };
+    assert!(plan.iter().all(|l| inside(l.pos)), "{plan:?}");
+}

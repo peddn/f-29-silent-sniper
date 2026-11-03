@@ -92,7 +92,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Steigvermögen, ein steiler Steigflug endet im Abriss; 7 g erst ab ≈ 170 m/s,
     darunter reißt voller Zug vorher ab; nach 8 s am g-Begrenzer ab 450 kt bleiben
     ≈ 374 kt; in 3000 m bringen 10 s Vollgas ab 200 m/s +22 m/s, Leerlauf −31 m/s;
-    Höchstfahrt in Bodennähe ≈ Mach 0,96 (kein Wellenwiderstand modelliert).
+    Höchstfahrt in Bodennähe ≈ Mach 0,96, in 3000 m knapp Überschall (≈ Mach 1,02):
+    bewusst kein Widerstandsanstieg nahe Mach 1 (Entscheidung des Spielers).
 - **Abweichungen:** Kräftemodell statt des Fahrt-und-Lage-Modells des Originals
   (M-004).
 - **Status:** umgesetzt.
@@ -1525,9 +1526,10 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   Mission zufällig, sonst fest (`--seed` gilt immer); im Menü steht die
   Simulation still, trägt aber schon die Mission.
   - **Ablauf:** Titelbild (nur beim Start) → Erkennung, Dienstplan (Platzhalter)
-    → Auftrag (ACCEPT MISSION
-    oder CHANGE CHOICES durch die Listen) → Briefing → FINAL CHOICES (SELECT NEW
-    MISSION, INTELLIGENCE BRIEFING, ARM YOUR PLANE, BEGIN MISSION). Neue Mission
+    → Auftrag (ACCEPT MISSION oder CHANGE CHOICES durch die Listen) →
+    INTELLIGENCE BRIEFING → FINAL CHOICES (SELECT NEW MISSION, INTELLIGENCE
+    BRIEFING, ARM YOUR PLANE, BEGIN MISSION; im Textfeld die Übersicht des
+    Briefings). Neue Mission
     = nächster Seed mit denselben Einstellungen und vorgeschlagener Beladung,
     zurück zum Dienstplan; ebenso nach der Nachbesprechung. Gebiet und
     Missionsart haben vorerst je einen Eintrag; Konfliktlage = Regelset (M-033).
@@ -1539,9 +1541,21 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     10,5 m/s), ohne Fahrwerk weiter Bruch; kein Absturz = Aufsetzen auf der Bahn
     zerstört nie (auch ohne Fahrwerk), keine Turbulenz in Bodennähe. Wertung ×1
     / ×0,9 / ×0,75. Beide stehen in `Spawn` und damit im Replay.
-  - **Briefing** (`Sim::briefing`): je Auftrag Art, Ziel und Entfernung von der
-    Basis, Routenlänge, Treibstoff nötig und mitgeführt, CAMERA REQUIRED,
-    Regelset mit Einschränkungen, Tageszeit. Bedarf (`fuel_required_kg`):
+  - **Lagebesprechung** (`f29_hud::intel`, Texte `Sim::briefing_*`): rechts im
+    Textfeld die nordausgerichtete Karte des Einsatzraums (Route mit Rand) über
+    dem Höhenbild des Geländes, immer mit Basis, gestrichelter Route und den
+    beiden Zielen; links der Text zum Thema am Cursor. Themen: TARGETS (je Ziel
+    Auftrag, Name, Entfernung und Richtung von der Basis, Kamera nötig; auf der
+    Karte hervorgehoben mit P/S und Name), THREATS (Einsatzregeln, Stellungen
+    entlang der Route je Typ mit Radar- und Raketenreichweite, feindliche
+    Fliegerhorste; auf der Karte alle Radarkreise, gepunktet Impuls,
+    durchgezogen Doppler, und die Horste), FLIGHT PLAN (Wegpunkte mit
+    Teilstrecken, Gesamtstrecke, Treibstoff, Tageszeit; Route hervorgehoben),
+    LEAVE BRIEFING (Übersicht; weiter zur Schlussauswahl). Die Karte zeichnen
+    Linien in Fensterauflösung, die Beschriftung setzt die UI.
+  - **Briefing-Übersicht** (`Sim::briefing`): je Auftrag Art, Ziel und
+    Entfernung, Routenlänge, Treibstoff nötig und mitgeführt, CAMERA
+    REQUIRED, Regelset mit Einschränkungen, Tageszeit. Bedarf (`fuel_required_kg`):
     Routenlänge × 11 kg/km (gemessen mit dem Autopiloten bei 250 m/s in 3000 m)
     plus 450 kg Reserve; reicht der Haupttank (5200 kg) nicht, kommt ein
     Zusatztank in den Vorschlag (M-032).
@@ -1575,9 +1589,12 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     und Grafiken in Fensterauflösung darüber. Das Titelbild ist eine
     Rastergrafik `assets/title.png` (16:10, z. B. 320 × 200 oder 640 × 400,
     Pixelart), bildfüllend ohne Glättung; die mitgelieferte ist ein Mockup.
-- **Abweichungen:** Lagebesprechung vorerst nur als Text, ohne Karte;
-  Erkennung und Dienstplan sind Platzhalter; „leicht“ lockert die Landegrenzen
+- **Abweichungen:** Die Lagebesprechung fasst die Menüpunkte zu vier Themen
+  zusammen (die Auswahl hat höchstens vier Zeilen), Raketenreichweiten stehen
+  im Text statt als eigene Kreise; Richtung und Entfernung statt
+  Gitterkoordinaten (Planquadrate fehlen noch, M-031), keine Fristen und
+  besonderen Ereignisse; Erkennung und Dienstplan sind Platzhalter; „leicht“ lockert die Landegrenzen
   weniger als das Original, weil unsere schon großzügig sind (mehr wäre ein
   Aufprall).
-- **Status:** teilweise (es fehlen die Karte der Lagebesprechung, der
-  Dienstplan mit Pilotenakten und das Erkennungsrätsel).
+- **Status:** teilweise (es fehlen der Dienstplan mit Pilotenakten und das
+  Erkennungsrätsel).

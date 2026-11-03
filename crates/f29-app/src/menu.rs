@@ -1,9 +1,10 @@
 //! Menüführung vor dem Flug (M-036), Ablauf wie im Original: Titelbild →
 //! Erkennung (Platzhalter) → Dienstplan (Platzhalter) → Auftrag (annehmen
 //! oder der Reihe nach ändern: Gebiet, Konfliktlage, Missionsart,
-//! Gegnerqualität, Flugverhalten) → Briefing → Schlussauswahl (neue Mission,
-//! Briefing, Bewaffnung, Start). Eine neue Mission und das Ende der Nachbesprechung
-//! führen zurück zum Dienstplan.
+//! Gegnerqualität, Flugverhalten) → Lagebesprechung (Karte und Themen) →
+//! Schlussauswahl (neue Mission, Lagebesprechung, Bewaffnung, Start). Eine
+//! neue Mission und das Ende der Nachbesprechung führen zurück zum
+//! Dienstplan.
 //!
 //! Die Simulation steht still, solange ein Menü offen ist; sie trägt aber
 //! schon die Mission, die das Briefing beschreibt.
@@ -17,6 +18,7 @@ use bevy::prelude::*;
 use f29_core::rules::{Conflict, Landings, Opponents};
 use f29_core::weapons::{Loadout, WeaponKind};
 use f29_hud::arming::Arming;
+use f29_hud::intel::Topic;
 use f29_hud::{Page, Row};
 
 pub struct MenuPlugin;
@@ -47,7 +49,8 @@ pub enum Screen {
     MissionType,
     Opponents,
     Landings,
-    Briefing,
+    /// Lagebesprechung: Karte (`ui.rs`, `hud.rs`) und je Thema ein Text.
+    Intel,
     Arming,
     Final,
 }
@@ -93,7 +96,15 @@ pub fn page(state: &SimState) -> Page {
         Screen::Landings => {
             ("FLIGHT PERFORMANCE", vec![], Landings::ALL.map(|l| l.label().to_string()).into())
         }
-        Screen::Briefing => ("MISSION BRIEFING", sim.briefing(), list(&["CONTINUE"])),
+        Screen::Intel => {
+            let text = match topic(state) {
+                Topic::Targets => sim.briefing_targets(),
+                Topic::Threats => sim.briefing_threats(),
+                Topic::FlightPlan => sim.briefing_route(),
+                Topic::Leave => sim.briefing(),
+            };
+            ("INTELLIGENCE BRIEFING", text, Topic::ALL.map(|t| t.label().to_string()).into())
+        }
         // Das Briefing noch einmal, um die Mission einzuschätzen.
         Screen::Final => (
             "FINAL CHOICES",
@@ -103,6 +114,11 @@ pub fn page(state: &SimState) -> Page {
     };
     let rows = lines.into_iter().map(Row::from).collect();
     Page { title: title.into(), rows, options, cursor: state.cursor }
+}
+
+/// Thema der Lagebesprechung am Cursor.
+pub fn topic(state: &SimState) -> Topic {
+    Topic::ALL[state.cursor.min(Topic::ALL.len() - 1)]
 }
 
 /// Liste der Bewaffnung: die Waffen, „leer“, „fertig“.
@@ -199,7 +215,7 @@ fn choose(state: &mut SimState, choice: usize) {
         Some(Screen::Title) => Some(Screen::Identification),
         Some(Screen::Identification) => Some(Screen::Roster),
         Some(Screen::Roster) => Some(Screen::Assignment),
-        Some(Screen::Assignment) => Some(if choice == 0 { Screen::Briefing } else { Screen::Region }),
+        Some(Screen::Assignment) => Some(if choice == 0 { Screen::Intel } else { Screen::Region }),
         Some(Screen::Region) => Some(Screen::Conflict),
         Some(Screen::Conflict) => {
             config.spawn.conflict = Conflict::ALL[choice];
@@ -215,15 +231,17 @@ fn choose(state: &mut SimState, choice: usize) {
         Some(Screen::Landings) => {
             config.spawn.landings = Landings::ALL[choice];
             state.reset(config);
-            Some(Screen::Briefing)
+            Some(Screen::Intel)
         }
-        Some(Screen::Briefing | Screen::Arming) => Some(Screen::Final),
+        // Die Themen zeigt schon der Cursor; nur „LEAVE BRIEFING“ führt weiter.
+        Some(Screen::Intel) if Topic::ALL[choice] != Topic::Leave => return,
+        Some(Screen::Intel | Screen::Arming) => Some(Screen::Final),
         Some(Screen::Final) => match choice {
             0 => {
                 new_mission(state);
                 Some(Screen::Roster)
             }
-            1 => Some(Screen::Briefing),
+            1 => Some(Screen::Intel),
             2 => Some(Screen::Arming),
             _ => None,
         },

@@ -53,6 +53,18 @@ pub struct MapAssets {
     map_image: Handle<Image>,
 }
 
+impl MapAssets {
+    /// Mission, zu der [`MapAssets::map`] gehört.
+    pub fn mission(&self) -> Option<(u64, f29_core::rules::Conflict)> {
+        self.mission
+    }
+
+    /// Höhenbild des Geländes, sobald berechnet.
+    pub fn height_raster(&self) -> Option<&MapRaster> {
+        self.rasters[0].as_deref()
+    }
+}
+
 #[derive(Component)]
 enum Screen {
     Left,

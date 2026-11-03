@@ -1,9 +1,18 @@
-//! Briefingtext vor dem Flug (M-036): Aufträge, Entfernungen, Strecke,
-//! Kamera, Einsatzregeln, Tageszeit – alles, um eine Mission vor dem Start
-//! einzuschätzen (und sie gegen eine neue zu tauschen).
+//! Briefingtext vor dem Flug (M-036): Aufträge, Bedrohungen, Flugplan –
+//! alles, um eine Mission vor dem Start einzuschätzen (und sie gegen eine
+//! neue zu tauschen). Die Lagebesprechung zeigt die Teile einzeln neben der
+//! Karte, die Schlussauswahl die Übersicht.
 
 use super::Sim;
+use crate::detmath;
+use crate::targets::{TargetClass, air_defense};
+use crate::terrain::AirfieldKind;
 use crate::weapons::{TANK_FUEL_KG, WeaponKind};
+
+/// Kilometer, gerundet.
+fn km(m: f64) -> u32 {
+    (m / 1_000.0).round() as u32
+}
 
 impl Sim {
     /// Treibstoffbedarf der Route samt Reserve (kg).
@@ -17,34 +26,119 @@ impl Sim {
         self.aircraft.fuel_kg + tanks.count() as f64 * TANK_FUEL_KG
     }
 
-    /// Zeilen des Briefings.
-    pub fn briefing(&self) -> Vec<String> {
-        let km = |m: f64| (m / 1_000.0).round() as u32;
+    /// Entfernung (km) und rechtweisende Richtung (Grad) von der Basis.
+    fn home_vector(&self, north: f64, east: f64) -> (u32, u32) {
         let home = &self.route[0];
+        let (dn, de) = (north - home.north, east - home.east);
+        let deg = detmath::atan2(de, dn).to_degrees().rem_euclid(360.0).round() as u32 % 360;
+        (km(dn.hypot(de)), deg)
+    }
+
+    /// Aufträge: je Ziel Art, Name, Entfernung und Richtung; Kamera.
+    pub fn briefing_targets(&self) -> Vec<String> {
         let mut lines = Vec::new();
         for (k, (i, task)) in self.mission.objectives().enumerate() {
             let t = &self.targets[i];
-            let from = km((t.north - home.north).hypot(t.east - home.east));
-            let label = ["PRIMARY", "SECONDARY"][k];
-            lines.push(format!("{label}: {} {}", task.label(), t.name));
-            lines.push(format!("    {from} KM FROM {}", home.name));
+            let (dist, deg) = self.home_vector(t.north, t.east);
+            lines.push(format!("{}: {} {}", ["PRIMARY", "SECONDARY"][k], task.label(), t.name));
+            lines.push(format!("    {dist} KM FROM {}, BEARING {deg:03}", self.route[0].name));
         }
-        lines.push(String::new());
-        lines.push(format!("ROUTE {} KM", km(crate::nav::route_length_m(&self.route))));
-        let (need, have) = (self.fuel_required_kg(), self.fuel_carried_kg());
-        lines.push(format!("FUEL ESTIMATE {need:.0} KG, CARRIED {have:.0} KG"));
         if self.mission.has_recon() {
+            lines.push(String::new());
             lines.push("CAMERA REQUIRED IN ONE BAY".into());
         }
+        lines
+    }
+
+    /// Bedrohungen: Einsatzregeln, Stellungen je Typ mit Radar- und
+    /// Raketenreichweite, feindliche Flugplätze.
+    pub fn briefing_threats(&self) -> Vec<String> {
+        let mut lines = self.rules_lines();
+        lines.push(String::new());
+        lines.push("AIR DEFENSE ALONG THE ROUTE".into());
+        for class in [TargetClass::EarlyWarning, TargetClass::AirDefense, TargetClass::ShortRangeSam] {
+            let Some((radar, missile)) = air_defense(class) else { continue };
+            let near = |n: f64, e: f64| self.route_distance_m(n, e) <= radar.range_m;
+            let n = self
+                .targets
+                .iter()
+                .filter(|t| t.class == class && t.is_intact() && near(t.north, t.east))
+                .count();
+            let (r, m) = (km(radar.range_m), km(missile.spec().max_range_m));
+            lines.push(format!(
+                "{n:>2} {:<12}RADAR {r:>2} KM  {:<6}{m:>3} KM",
+                class.label(),
+                missile.label()
+            ));
+        }
+        lines.push(String::new());
+        lines.push("FIGHTER BASES".into());
+        for rw in self.terrain.runways().iter().filter(|r| r.kind == AirfieldKind::Enemy) {
+            let (dist, deg) = self.home_vector(rw.center[0], rw.center[1]);
+            lines.push(format!("    {:<8}{dist:>4} KM, BEARING {deg:03}", rw.name));
+        }
+        lines
+    }
+
+    /// Flugplan: Wegpunkte mit Teilstrecken, Gesamtstrecke, Treibstoff,
+    /// Tageszeit.
+    pub fn briefing_route(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        for (k, sp) in self.route.iter().enumerate() {
+            let leg = k.checked_sub(1).map(|j| {
+                let p = &self.route[j];
+                format!("{:>4} KM", km((sp.north - p.north).hypot(sp.east - p.east)))
+            });
+            lines.push(format!("{} {:<20}{}", k + 1, sp.name, leg.unwrap_or_default()).trim_end().into());
+        }
+        lines.push(String::new());
+        lines.extend(self.route_lines());
+        lines
+    }
+
+    /// Übersicht: Aufträge, Strecke und Treibstoff, Regeln, Tageszeit.
+    pub fn briefing(&self) -> Vec<String> {
+        let mut lines = self.briefing_targets();
+        lines.push(String::new());
+        let [route, fuel, time] = self.route_lines();
+        lines.extend([route, fuel]);
+        lines.extend(self.rules_lines());
+        lines.push(time);
+        lines
+    }
+
+    /// Kleinster Abstand eines Punkts von der Route (m).
+    fn route_distance_m(&self, north: f64, east: f64) -> f64 {
+        let legs = self.route.windows(2).map(|w| {
+            let (a, b) = ([w[0].north, w[0].east], [w[1].north, w[1].east]);
+            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+            let t =
+                (((north - a[0]) * dx + (east - a[1]) * dy) / (dx * dx + dy * dy).max(1.0)).clamp(0.0, 1.0);
+            (north - a[0] - t * dx).hypot(east - a[1] - t * dy)
+        });
+        legs.fold(f64::MAX, f64::min)
+    }
+
+    /// Gesamtstrecke, Treibstoff, Tageszeit.
+    fn route_lines(&self) -> [String; 3] {
+        let (need, have) = (self.fuel_required_kg(), self.fuel_carried_kg());
+        [
+            format!("ROUTE {} KM", km(crate::nav::route_length_m(&self.route))),
+            format!("FUEL ESTIMATE {need:.0} KG, CARRIED {have:.0} KG"),
+            format!("TIME: {}", if self.night() { "NIGHT" } else { "DAY" }),
+        ]
+    }
+
+    /// Einsatzregeln des Regelsets.
+    fn rules_lines(&self) -> Vec<String> {
         let rules = self.rules();
-        lines.push(format!("RULES: {}", rules.label));
+        let mut lines = vec![format!("RULES: {}", rules.label)];
         if rules.attack_needs_detection {
             lines.push("    ATTACK ONLY WHAT HAS DETECTED YOU".into());
         }
         if rules.fire_only_over_hostile {
             lines.push("    ENEMY FIRES ONLY OVER HOSTILE TERRITORY".into());
         }
-        lines.push(format!("TIME: {}", if self.night() { "NIGHT" } else { "DAY" }));
         lines
     }
 }
@@ -60,7 +154,8 @@ mod tests {
     fn briefing_names_tasks_route_and_rules() {
         let mut c = SimConfig::new(1);
         c.spawn.conflict = Conflict::ColdWar;
-        let text = Sim::new(c).briefing().join("\n");
+        let sim = Sim::new(c);
+        let text = sim.briefing().join("\n");
         for part in [
             "PRIMARY: RECON",
             "SECONDARY: RECON",
@@ -72,6 +167,12 @@ mod tests {
         ] {
             assert!(text.contains(part), "{part} fehlt:\n{text}");
         }
+        let threats = sim.briefing_threats().join("\n");
+        for part in ["EW RADAR", "SA-6", "FIGHTER BASES", "RED 1"] {
+            assert!(threats.contains(part), "{part} fehlt:\n{threats}");
+        }
+        let route = sim.briefing_route();
+        assert!(route[0].starts_with("1 HOME") && route[1].ends_with(" KM"), "{route:?}");
     }
 }
 

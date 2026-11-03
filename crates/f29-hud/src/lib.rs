@@ -11,6 +11,7 @@ pub mod canvas;
 pub mod debrief;
 pub mod font;
 mod hud;
+pub mod intel;
 pub mod map;
 pub mod mfd;
 mod page;

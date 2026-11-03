@@ -217,7 +217,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Schächte, Platzhalter), Triebwerk mit Treibstoff, Reserve-Horizont,
       Systeme (v0.1.19)
 
-### v0.2: Angriff und Tarnung *(abgeschlossen bis auf den Joystick-Test)*
+### v0.2: Angriff und Tarnung *(abgeschlossen)*
 - [x] Bodenziele in neun eigenen Klassen, alle auf der Karte, Primär- und
       Sekundärziel; Zielerfassung optisch (mit Sichtlinie) und per Radar
       (abschaltbar, durch Berge), automatisch auf das nächste Ziel der
@@ -252,8 +252,6 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       erste Waffe in der Wahl GUN, BAY 1–4 (v0.2.8)
 - [x] Joystick statt Gamepad: Logitech Extreme 3D Pro unter Linux, Belegung als
       Textdatei, `--joystick-debug` (v0.2.8)
-- [ ] Joystick am echten Extreme 3D Pro testen (`--joystick-debug`): Achsen,
-      Richtungen und Tastennummern prüfen (vorgemerkt)
 - ~~Auslöseklammer für Bomben~~ (gestrichen, Spielerentscheidung v0.2.9: Aufschlagpunkt
       und Fall-Linie genügen)
 - [x] Bordkanone als eigenes Waffensystem: 600 Schuss (50/s), Rücktaste, 2 %
@@ -312,9 +310,10 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Schleudersitz (Strg+E), Gebiet entscheidet über Rettung,
       Zwischenfall oder Gefangenschaft; Ergebnistafel (v0.3)
 - [ ] Planquadrate auf Karte und Missionsseite; Geländeart als Radarfaktor
-- [ ] Missionsdaten: Primär- und Sekundärziel, Route, Bedrohungslage
-- [ ] Bewaffnung und Betankung vor dem Start (Zusatztanks), Missionsauswertung
-      mit Landebewertung, Verbrauchsvorschau auf der Karte
+- [x] Missionsdaten in der Lagebesprechung: Karte mit Zielen, Route, Radarkreisen
+      und Fliegerhorsten, Texte je Thema
+- [x] Bewaffnung und Betankung vor dem Start (Zusatztanks), Missionsauswertung
+- [ ] Verbrauchsvorschau je Wegabschnitt
 - [ ] Flugzeugträger
 
 ### v0.4: Luftkampf
@@ -350,9 +349,14 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [ ] Verlauf: Abschuss, Gefangennahme, Rettung, Ruhestand; Spielstände
 
 ### v0.6: Präsentation
-- [ ] Menüs, Briefing- und Debriefing-Bildschirme, Karte
-- [ ] Klang: Waffen, Radarwarnung; Musikdatei (`assets/music/theme.ogg`)
+- [x] Titelbild (Mockup), Menüs, Lagebesprechung mit Karte, Nachbesprechung –
+      bevy_ui in der Pixelschrift Departure Mono
+- [x] Klang: Waffen, Radarwarnung; Musik (Wiedergabe)
+- [ ] Titelgrafik und Musikdatei (`assets/title.png`, `assets/music/theme.ogg`)
+- [ ] Dienstplan mit Pilotenakten, Flugzeugerkennung
 - [ ] Einstellungen, frei belegbare Tasten, Joystick/HOTAS
+- [ ] Joystick am echten Extreme 3D Pro testen (`--joystick-debug`): Achsen,
+      Richtungen und Tastennummern prüfen
 
 ### v1.0: Vollständige Karriere
 - [ ] Karrieremodus mit mindestens vier Einsatzgebieten, kompletter Ordensliste und

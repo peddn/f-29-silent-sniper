@@ -7,30 +7,35 @@
 //! (höchstens vier Zeilen, gewählte invers) immer an derselben Stelle. Auf
 //! dem Bewaffnungsbildschirm liegen Umriss und Schächte (`hud.rs`) und die
 //! Bilder der Ausrüstung (`store_art.rs`) in Fensterauflösung im Bildfeld
-//! [`picture`] des Textfelds. Das Titelbild ist eine Rastergrafik
-//! (`assets/title.png`, 16:10, z. B. 320×200 oder 640×400), bildfüllend.
+//! [`picture`] des Textfelds, auf der Lagebesprechung ebenso die Linien der
+//! Karte ([`map_rect`]) über ihrem Geländebild. Das Titelbild ist eine
+//! Rastergrafik (`assets/title.png`, 16:10, z. B. 320×200 oder 640×400),
+//! bildfüllend.
 
 use crate::HUD_LAYER;
 use crate::menu::{self, Screen};
+use crate::mfd::MapAssets;
 use crate::sim::{SimState, SimSystems};
 use crate::view::ViewSettings;
+use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
 use bevy::camera::visibility::RenderLayers;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::image::{ImageLoaderSettings, ImageSampler};
 use bevy::prelude::*;
-use bevy::render::render_resource::TextureFormat;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::{FontSmoothing, LineHeight};
 use bevy::window::PrimaryWindow;
 use f29_hud::arming::{Arming, ROWS};
-use f29_hud::{Ink, MAX_OPTIONS, Page, Rect, debrief};
+use f29_hud::intel::{self, Label};
+use f29_hud::{Align, Ink, MAX_OPTIONS, Page, Rect, debrief};
 use f29_render::palette;
 
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(Update, show.in_set(SimSystems::Present));
+        app.add_systems(Startup, setup).add_systems(Update, (intel_map, show).in_set(SimSystems::Present));
     }
 }
 
@@ -54,6 +59,8 @@ const BODY_TOP: f32 = PAD + TITLE_H + GAP;
 const BODY_H: f32 = H - 2.0 * PAD - TITLE_H - 2.0 * GAP - OPTIONS_H;
 /// Bewaffnung: Breite der Textspalte links im Textfeld.
 const TEXT_COLUMN: f32 = 170.0;
+/// Lagebesprechung: Kantenlänge der Karte rechts im Textfeld.
+const MAP_PX: f32 = BODY_H - 2.0 * INSET;
 
 /// Was gerade zu sehen ist.
 #[derive(Clone, PartialEq)]
@@ -61,6 +68,7 @@ enum Content {
     Title,
     Page(Page),
     Arming(Arming),
+    Intel(Page, Vec<Label>),
 }
 
 #[derive(Resource)]
@@ -68,6 +76,9 @@ struct Ui {
     camera: Entity,
     font: Handle<Font>,
     title: Handle<Image>,
+    /// Geländebild der Lagebesprechung und die Mission, zu der es gehört.
+    intel_map: Handle<Image>,
+    intel_key: Option<(u64, f29_core::rules::Conflict)>,
     shown: Option<Content>,
     root: Option<Entity>,
 }
@@ -89,13 +100,27 @@ pub fn unit(window: &Window) -> f32 {
     scale(window) * H
 }
 
-/// Bildfeld der Bewaffnung (Einheiten des 16:10-Bildschirms): das Textfeld
-/// rechts der Textspalte.
-pub fn picture() -> Rect {
+/// Innenfläche des Textfelds ab `left` Pixeln vom Bildrand (Einheiten des
+/// 16:10-Bildschirms).
+fn body_from(left: f32) -> Rect {
     let units = |x: f32, y: f32| [(x - W * 0.5) / H, (H * 0.5 - y) / H];
-    let (left, top) = (PAD + INSET + TEXT_COLUMN, BODY_TOP + INSET);
-    let (right, bottom) = (W - PAD - INSET, BODY_TOP + BODY_H - INSET);
+    let (top, right, bottom) = (BODY_TOP + INSET, W - PAD - INSET, BODY_TOP + BODY_H - INSET);
     Rect { min: units(left, bottom), max: units(right, top) }
+}
+
+/// Bildfeld der Bewaffnung: das Textfeld rechts der Textspalte.
+pub fn picture() -> Rect {
+    body_from(PAD + INSET + TEXT_COLUMN)
+}
+
+/// Karte der Lagebesprechung: quadratisch rechts im Textfeld.
+pub fn map_rect() -> Rect {
+    body_from(W - PAD - INSET - MAP_PX)
+}
+
+/// Punkt des 16:10-Bildschirms → Bildpixel.
+fn to_px([x, y]: [f32; 2]) -> [f32; 2] {
+    [W * 0.5 + x * H, H * 0.5 - y * H]
 }
 
 fn color(ink: Ink) -> Color {
@@ -128,13 +153,43 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, assets: Res<
     let font = assets.load("fonts/departure-mono.ttf");
     let nearest = |s: &mut ImageLoaderSettings| s.sampler = ImageSampler::nearest();
     let title = assets.load_builder().with_settings(nearest).load("title.png");
-    commands.insert_resource(Ui { camera, font, title, shown: None, root: None });
+    let size = Extent3d { width: MAP_PX as u32, height: MAP_PX as u32, depth_or_array_layers: 1 };
+    let usage = RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD;
+    let mut map =
+        Image::new_fill(size, TextureDimension::D2, &[0, 0, 0, 255], TextureFormat::Rgba8UnormSrgb, usage);
+    map.sampler = ImageSampler::nearest();
+    let intel_map = images.add(map);
+    commands.insert_resource(Ui { camera, font, title, intel_map, intel_key: None, shown: None, root: None });
+}
+
+/// Geländebild der Lagebesprechung: einmal je Mission aus dem Höhenbild
+/// der Karte, sobald es berechnet ist.
+fn intel_map(
+    maps: Res<MapAssets>,
+    state: Res<SimState>,
+    mut ui: ResMut<Ui>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let key = maps.mission();
+    if state.menu != Some(Screen::Intel) || ui.intel_key == key {
+        return;
+    }
+    let (Some(map), Some(raster)) = (maps.map.as_deref(), maps.height_raster()) else { return };
+    let (center, half) = intel::view(map);
+    if let Some(mut image) = images.get_mut(&ui.intel_map) {
+        image.data = Some(raster.render_view(center, 0.0, half, MAP_PX as usize));
+        ui.intel_key = key;
+    }
 }
 
 /// Inhalt des offenen Bildschirms.
-fn content(state: &SimState, view: &ViewSettings) -> Option<Content> {
+fn content(state: &SimState, view: &ViewSettings, maps: &MapAssets) -> Option<Content> {
     match state.menu {
         Some(Screen::Title) => Some(Content::Title),
+        Some(Screen::Intel) => {
+            let labels = maps.map.as_deref().map(|m| intel::labels(m, menu::topic(state), map_rect()));
+            Some(Content::Intel(menu::page(state), labels.unwrap_or_default()))
+        }
         Some(Screen::Arming) => Some(Content::Arming(menu::arming(state))),
         Some(_) => Some(Content::Page(menu::page(state))),
         None if state.fd.mission_over => Some(Content::Page(debrief::page(&state.fd, view.debrief))),
@@ -143,16 +198,18 @@ fn content(state: &SimState, view: &ViewSettings) -> Option<Content> {
 }
 
 /// Baut die UI neu, sobald sich der Inhalt ändert.
+#[allow(clippy::too_many_arguments)]
 fn show(
     mut commands: Commands,
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
     view: Res<ViewSettings>,
+    maps: Res<MapAssets>,
     mut ui: ResMut<Ui>,
     mut cameras: Query<&mut Camera>,
     mut frame: Single<(&mut Sprite, &mut Visibility), With<Frame>>,
 ) {
-    let content = content(&state, &view);
+    let content = content(&state, &view, &maps);
     let on = content.is_some();
     *frame.1 = if on { Visibility::Visible } else { Visibility::Hidden };
     frame.0.custom_size = Some(Vec2::new(W, H) * scale(&window));
@@ -180,6 +237,10 @@ fn show(
             }
             Content::Arming(a) => {
                 root.with_children(|p| arming_ui(p, font, a));
+            }
+            Content::Intel(page, labels) => {
+                let map = ui.intel_map.clone();
+                root.with_children(|p| intel_ui(p, font, page, labels, map));
             }
         }
         ui.root = Some(root.id());
@@ -291,11 +352,49 @@ fn page_ui(p: &mut ChildSpawnerCommands, font: &Handle<Font>, page: &Page) {
             row(b, font, (&r.text, &r.value), if r.big { 2.0 } else { 1.0 }, r.ink, None);
         }
     });
+    options(p, font, page);
+}
+
+/// Die Auswahl der Seite, gewählte Zeile invers.
+fn options(p: &mut ChildSpawnerCommands, font: &Handle<Font>, page: &Page) {
     p.spawn(column(280.0)).with_children(|list| {
         for (k, o) in page.options.iter().enumerate() {
             option(list, font, o, (k == page.cursor).then_some(Ink::Hud));
         }
     });
+}
+
+/// Lagebesprechung: links der Text zum Thema, rechts die Karte (Geländebild,
+/// darüber Linien aus `hud.rs` und die Beschriftung).
+fn intel_ui(
+    p: &mut ChildSpawnerCommands,
+    font: &Handle<Font>,
+    page: &Page,
+    labels: &[Label],
+    map: Handle<Image>,
+) {
+    title(p, font, &page.title);
+    p.spawn(body(FlexDirection::Row)).with_children(|b| {
+        b.spawn(Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, ..default() }).with_children(
+            |c| {
+                for r in &page.rows {
+                    row(c, font, (&r.text, &r.value), 1.0, r.ink, None);
+                }
+            },
+        );
+        b.spawn((Node { width: px(MAP_PX), height: px(MAP_PX), ..default() }, ImageNode::new(map)));
+    });
+    options(p, font, page);
+    for l in labels {
+        let [x, y] = to_px(l.pos);
+        let (left, right) = match l.align {
+            Align::Right => (Val::Auto, px(W - x)),
+            _ => (px(x), Val::Auto),
+        };
+        let top = px(y - LINE + 2.0);
+        let node = Node { position_type: PositionType::Absolute, left, right, top, ..default() };
+        p.spawn((node, text(font, &l.text, 1.0, color(l.ink))));
+    }
 }
 
 /// Bewaffnung: links im Textfeld Treibstoff und Schächte (der im Fokus

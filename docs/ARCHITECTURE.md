@@ -37,7 +37,7 @@ engine-neutral (`Page`).
 | `f29-data` | Spieldaten als Typen und Konstanten |
 | `f29-world` | Einsatzgebiet als Daten (RON), Grobraster, Zielklassen, Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung, Flugplätze (Einebnung), Erstbefüllung (`populate`) |
 | `f29-core` | Flugmodell, Atmosphäre, Sim-Schleife, Navigation, Replays, Autopilot, deterministische Mathematik |
-| `f29-hud` | HUD und MFDs (Karte mit Höhenlinien, Ressourcen) als Liniensegmente, Vektorfont, SVG-Export; Inhalt der Menü- und Nachbesprechungsseiten |
+| `f29-hud` | HUD und MFDs (Karte mit Höhenlinien, Ressourcen) als Liniensegmente, Vektorfont, SVG-Export; Inhalt der Menü- und Nachbesprechungsseiten, Karte der Lagebesprechung |
 | `f29-audio` | Prozedurale Klangsynthese (Triebwerk, Systeme, Ereignisse), Formant-Sprachansagen, WAV-Ein-/Ausgabe |
 | `f29-render` | Terrain-Kachel-Meshes, Bahnen mit Markierungen und PAPI, Flugzeugmodell mit Fahrwerk, Satellitenkarte (Raster + kursbezogener Ausschnitt), Palette, NED → Y-up |
 | `f29-headless` | Simulation ohne Grafik: Demo, Replays, HUD als SVG, Höhenkarte, Benchmark |

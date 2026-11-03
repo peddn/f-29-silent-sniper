@@ -96,7 +96,11 @@ fn draw_hud(
     };
     // Außerhalb des Cockpits zeichnet die UI (ui.rs); auf dem
     // Bewaffnungsbildschirm liegen Umriss und Schächte in ihrem Rahmen darüber.
-    let (list, unit) = if state.menu == Some(crate::menu::Screen::Arming) {
+    let intel = state.menu == Some(crate::menu::Screen::Intel);
+    let (list, unit) = if let Some(map) = maps.map.as_deref().filter(|_| intel) {
+        let topic = crate::menu::topic(&state);
+        (f29_hud::intel::draw(map, &fd.threat.sites, topic, crate::ui::map_rect()), crate::ui::unit(&window))
+    } else if state.menu == Some(crate::menu::Screen::Arming) {
         (f29_hud::arming::draw(&crate::menu::arming(&state), crate::ui::picture()), crate::ui::unit(&window))
     } else if covered {
         (f29_hud::DisplayList::new(), h)
