@@ -1462,7 +1462,7 @@ impl Sim {
         }
     }
 
-    /// Turbulenz in Bodennähe: unter 500 ft über Grund, stärker je tiefer und
+    /// Turbulenz in Bodennähe: unter 300 m über Grund, stärker je tiefer und
     /// je schneller; Landeklappen halbieren sie. Zufall aus eigenem RNG-Strom,
     /// geglättet, damit es rüttelt statt zittert.
     fn update_turbulence(&mut self) {

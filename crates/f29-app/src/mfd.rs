@@ -19,7 +19,7 @@ use f29_render::map_raster::{MapRaster, MapStyle};
 use f29_render::palette;
 use std::sync::Arc;
 
-/// Pixel je Kante der Kartenraster (Kartengebiet 200 km ⇒ ≈ 98 m/px).
+/// Pixel je Kante der Kartenraster über das ganze Gebiet (500 km ⇒ ≈ 122 m/px).
 const SAT_RASTER_N: usize = 4_096;
 /// Pixel je Kante des Kartenausschnitts im MFD.
 const SAT_VIEW_PX: u32 = 256;

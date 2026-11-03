@@ -80,7 +80,7 @@ fn autopilot_turns_to_new_heading() {
 
 #[test]
 fn neutral_stick_holds_flight_path() {
-    // Fly-by-Wire mit Bahnhaltung: Knüppel los ⇒ Flugbahn bleibt annähernd gerade.
+    // Fly-by-Wire mit Lagehaltung: Knüppel los ⇒ Flugbahn bleibt annähernd gerade.
     let mut sim = high_sim(5_000.0, 220.0, 0.6);
     let start = sim.flight_data();
     fly_with(&mut sim, 30.0, ControlFrame::from_analog(0.0, 0.0, 0.0, 0.6, 0));
@@ -271,25 +271,30 @@ fn full_throttle_climbs_and_idle_descends() {
     assert!(e1 < e0 - 5_000.0, "kein Energieverlust im Leerlauf");
 }
 
+/// Höchstfahrt in Bodennähe: über offener See (ebener Grund, der Autopilot
+/// hält 300 m) mit Vollgas, bis die Fahrt nicht mehr wächst – Unterschall.
 #[test]
 fn top_speed_is_subsonic_at_sea_level() {
-    let mut sim = Sim::new(SimConfig::with(
-        SEED,
-        Spawn { altitude: 300.0, min_clearance: 300.0, speed: 230.0, throttle: 1.0, ..Spawn::default() },
-    ));
-    let mut ap = Autopilot::new(sim.flight_data().altitude_m, sim.flight_data().heading, 400.0);
+    let (north, east) = open_water(50);
+    let spawn = Spawn {
+        north,
+        east,
+        heading: 0.0,
+        altitude: 300.0,
+        min_clearance: 0.0,
+        speed: 315.0,
+        throttle: 1.0,
+        ..Spawn::default()
+    };
+    let mut sim = Sim::new(SimConfig::with(SEED, spawn));
+    let mut ap = Autopilot::new(300.0, 0.0, 400.0);
     for _ in 0..ticks(120.0) {
         let c = ap.control(sim.spec(), &sim.flight_data(), DT);
         sim.step(c);
-        if sim.status() != Status::Flying {
-            break;
-        }
     }
     let fd = sim.flight_data();
-    if sim.status() == Status::Flying {
-        assert!(fd.mach < 0.95, "Höchstgeschwindigkeit Mach {:.2}", fd.mach);
-        assert!(fd.mach > 0.7, "Höchstgeschwindigkeit nur Mach {:.2}", fd.mach);
-    }
+    assert_eq!(sim.status(), Status::Flying);
+    assert!((0.9..1.0).contains(&fd.mach), "Höchstfahrt Mach {:.3}", fd.mach);
 }
 
 #[test]

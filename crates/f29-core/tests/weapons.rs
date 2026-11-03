@@ -170,14 +170,7 @@ fn level_bomb_is_ineffective_against_a_bunker() {
 /// die Fallschirmbombe weit genug hinter dem Flugzeug.
 #[test]
 fn retarded_bomb_avoids_the_frag_warning_at_low_level() {
-    // Startpunkt über offenem Wasser mit 6 km freier Strecke nach Norden.
-    let probe = Sim::new(SimConfig::new(SEED));
-    let water =
-        |n: f64, e: f64| (0..=24).all(|k| probe.terrain().elevation(n + f64::from(k) * 250.0, e) <= 1.0);
-    let start = (-40..=40)
-        .flat_map(|i| (-40..=40).map(move |j| (f64::from(i) * 2_000.0, f64::from(j) * 2_000.0)))
-        .find(|&(n, e)| water(n, e))
-        .expect("6 km offene See nach Norden");
+    let start = open_water(6);
     let frag = |bay: usize| {
         let mut sim = Sim::new(SimConfig::with(
             SEED,

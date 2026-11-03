@@ -30,6 +30,18 @@ pub fn events_since(sim: &Sim, tick: u64) -> Vec<WeaponEvent> {
     sim.weapon_events().iter().filter(|(t, _)| *t > tick).map(|(_, e)| *e).collect()
 }
 
+/// Startpunkt (Nord, Ost) über offener See mit `km` freier Strecke nach
+/// Norden – ebener Grund auf Meereshöhe für Flugtests.
+pub fn open_water(km: u32) -> (f64, f64) {
+    let probe = Sim::new(SimConfig::new(SEED));
+    let water =
+        |n: f64, e: f64| (0..=km * 4).all(|k| probe.terrain().elevation(n + f64::from(k) * 250.0, e) <= 1.0);
+    (-120..=120)
+        .flat_map(|i| (-120..=120).map(move |j| (f64::from(i) * 2_000.0, f64::from(j) * 2_000.0)))
+        .find(|&(n, e)| water(n, e))
+        .expect("offene See nach Norden")
+}
+
 /// Ziel der Klasse im Gebiet, das am weitesten von anderen Radarstellungen
 /// entfernt ist – damit Tests eine Stellung allein betrachten.
 pub fn first_of(seed: u64, class: TargetClass) -> Option<(usize, Target)> {

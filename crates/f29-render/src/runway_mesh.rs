@@ -3,10 +3,10 @@
 //! Lokale Koordinaten (Y-up): Ursprung in der Bahnmitte auf Bahnhöhe;
 //! x = Ost, y = oben, z = −Nord – wie die Terrain-Kacheln.
 //!
-//! Die Heimatbasis bekommt eigene, vereinfachte Markierungen: Randlinien,
-//! Mittellinie, Schwellenbalken, Zielpunktmarken und Bahnnummern in einer
-//! 3×5-Blockschrift. Geheime Pisten sind eine unbefestigte Schneise mit nur
-//! wenigen weißen Eckmarken.
+//! Alle Bahnen (Heimatbasis und feindliche Horste) bekommen eigene,
+//! vereinfachte Markierungen: Randlinien, Mittellinie, Schwellenbalken,
+//! Zielpunktmarken und Bahnnummern in einer 3×5-Blockschrift; die
+//! PAPI-Anflughilfe hat nur die Heimatbasis.
 
 use crate::mesh::{MeshData, face_normal};
 use crate::palette;

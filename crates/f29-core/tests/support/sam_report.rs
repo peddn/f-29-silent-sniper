@@ -4,9 +4,10 @@
 //!
 //! Dient wie `envelope` zum Abstimmen
 //! (`cargo run --release -p f29-core --example sam_report`) und als Grundlage
-//! der Gefährlichkeits-Tests (`tests/sam.rs`): Von vorn und hinten treffen
-//! alle; Querflug schüttelt langsame Raketen mit engem Suchkegel ab, die
-//! moderne kaum; Täuschkörper wirken nach der Resistenz der Rakete.
+//! der Gefährlichkeits-Tests (`tests/sam.rs`): Von vorn treffen fast alle;
+//! auf der Flucht holen die langsamen (SA-13, SA-5) nicht auf; Querflug
+//! schüttelt die Raketen mit engem Suchkegel ab, die moderne SA-11 nicht;
+//! Täuschkörper wirken nach der Resistenz der Rakete.
 
 use f29_core::DT;
 use f29_core::autopilot::Autopilot;
