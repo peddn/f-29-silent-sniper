@@ -3,9 +3,9 @@
 //! Mitte 0,0, y nach oben). Immer zu sehen: Basis, Route und die beiden
 //! Ziele; je nach Thema hervorgehoben die Ziele, die Bedrohungen
 //! (Radarkreise, gepunktet Impuls, durchgezogen Doppler; feindliche
-//! Flugplätze) oder der Flugplan. Das Gelände legt das Frontend als
-//! Rasterbild darunter ([`view`]), die Beschriftung setzt es in seiner Schrift
-//! ([`labels`]).
+//! Flugplätze) oder der Flugplan. Den Ausschnitt ([`MapView`]) verschiebt
+//! und zoomt das Frontend mit der Maus; das Gelände legt es als Rasterbild
+//! darunter, die Beschriftung setzt es in seiner Schrift ([`labels`]).
 
 use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::map::{MapData, MapProjection};
@@ -48,30 +48,81 @@ pub struct Label {
     pub ink: Ink,
 }
 
-/// Kartenausschnitt: Mitte (Nord, Ost) und halbe Kantenlänge (m) – die Route
-/// mit Rand.
-pub fn view(map: &MapData) -> ([f64; 2], f64) {
-    let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
-    for p in &map.route {
-        for k in 0..2 {
-            lo[k] = lo[k].min(p.pos[k]);
-            hi[k] = hi[k].max(p.pos[k]);
-        }
-    }
-    let half = (hi[0] - lo[0]).max(hi[1] - lo[1]) * 0.6 + 20_000.0;
-    ([(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5], half)
+/// Engster Ausschnitt (halbe Kantenlänge, m): darunter würde das Höhenbild
+/// (rund 120 m je Bildpunkt) nur noch gröber.
+pub const MIN_HALF_M: f64 = 12_500.0;
+
+/// Kartenausschnitt: Mitte (Nord, Ost) und halbe Kantenlänge (m), immer im
+/// Gebiet mit der halben Kantenlänge `bound` um den Ursprung.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MapView {
+    pub center: [f64; 2],
+    pub half: f64,
 }
 
-/// Nordausgerichtete Abbildung des Ausschnitts auf das Bildfeld.
-fn projection(map: &MapData, area: Rect) -> MapProjection {
-    let (center, half) = view(map);
-    let size = (area.max[0] - area.min[0]).min(area.max[1] - area.min[1]);
-    MapProjection {
-        center_world: center,
-        heading: 0.0,
-        scale: f64::from(size * 0.5) / half,
-        center_screen: area.center(),
+impl MapView {
+    /// Die Route mit Rand.
+    pub fn fit(map: &MapData, bound: f64) -> Self {
+        let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
+        for p in &map.route {
+            for k in 0..2 {
+                lo[k] = lo[k].min(p.pos[k]);
+                hi[k] = hi[k].max(p.pos[k]);
+            }
+        }
+        let half = (hi[0] - lo[0]).max(hi[1] - lo[1]) * 0.6 + 20_000.0;
+        MapView { center: [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5], half }.within(bound)
     }
+
+    /// Meter je Bildschirmeinheit im Bildfeld.
+    fn m_per_unit(&self, area: Rect) -> f64 {
+        self.half / f64::from(size(area) * 0.5)
+    }
+
+    /// Weltpunkt (Nord, Ost) unter dem Punkt `p` des Bildfelds.
+    pub fn world(&self, area: Rect, p: [f32; 2]) -> [f64; 2] {
+        let (c, m) = (area.center(), self.m_per_unit(area));
+        [self.center[0] + f64::from(p[1] - c[1]) * m, self.center[1] + f64::from(p[0] - c[0]) * m]
+    }
+
+    /// Um `factor` zoomen (kleiner 1: hinein); der Weltpunkt unter `at`
+    /// bleibt stehen.
+    pub fn zoom(self, area: Rect, at: [f32; 2], factor: f64, bound: f64) -> Self {
+        let w = self.world(area, at);
+        let half = (self.half * factor).clamp(MIN_HALF_M, bound);
+        let k = half / self.half;
+        let center = [w[0] + (self.center[0] - w[0]) * k, w[1] + (self.center[1] - w[1]) * k];
+        MapView { center, half }.within(bound)
+    }
+
+    /// Um `delta` (Bildschirmeinheiten) verschieben: Die Karte folgt dem Zeiger.
+    pub fn drag(self, area: Rect, delta: [f32; 2], bound: f64) -> Self {
+        let m = self.m_per_unit(area);
+        let center = [self.center[0] - f64::from(delta[1]) * m, self.center[1] - f64::from(delta[0]) * m];
+        MapView { center, ..self }.within(bound)
+    }
+
+    /// Ganz im Gebiet.
+    fn within(self, bound: f64) -> Self {
+        let half = self.half.clamp(MIN_HALF_M, bound);
+        let lim = bound - half;
+        MapView { center: self.center.map(|c| c.clamp(-lim, lim)), half }
+    }
+
+    /// Nordausgerichtete Abbildung auf das Bildfeld.
+    fn projection(&self, area: Rect) -> MapProjection {
+        MapProjection {
+            center_world: self.center,
+            heading: 0.0,
+            scale: 1.0 / self.m_per_unit(area),
+            center_screen: area.center(),
+        }
+    }
+}
+
+/// Kantenlänge des quadratischen Bildfelds.
+fn size(area: Rect) -> f32 {
+    (area.max[0] - area.min[0]).min(area.max[1] - area.min[1])
 }
 
 /// Größe der Symbole (Bildschirmeinheiten).
@@ -79,9 +130,9 @@ fn symbol(area: Rect) -> f32 {
     (area.max[1] - area.min[1]) * 0.03
 }
 
-pub fn draw(map: &MapData, sites: &[RadarSiteInfo], topic: Topic, area: Rect) -> DisplayList {
+pub fn draw(map: &MapData, sites: &[RadarSiteInfo], topic: Topic, view: MapView, area: Rect) -> DisplayList {
     let mut dl = DisplayList::new();
-    let proj = projection(map, area);
+    let proj = view.projection(area);
     let s = symbol(area);
     dl.set_clip(Some(area));
     for rw in &map.runways {
@@ -135,8 +186,8 @@ pub fn draw(map: &MapData, sites: &[RadarSiteInfo], topic: Topic, area: Rect) ->
 }
 
 /// Beschriftungen zum Thema, nur innerhalb des Bildfelds.
-pub fn labels(map: &MapData, topic: Topic, area: Rect) -> Vec<Label> {
-    let proj = projection(map, area);
+pub fn labels(map: &MapData, topic: Topic, view: MapView, area: Rect) -> Vec<Label> {
+    let proj = view.projection(area);
     let off = symbol(area) * 2.0;
     let mut out = Vec::new();
     let mut add = |p: [f64; 2], text: String, ink: Ink| {

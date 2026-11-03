@@ -1552,7 +1552,13 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     durchgezogen Doppler, und die Horste), FLIGHT PLAN (Wegpunkte mit
     Teilstrecken, Gesamtstrecke, Treibstoff, Tageszeit; Route hervorgehoben),
     LEAVE BRIEFING (Übersicht; weiter zur Schlussauswahl). Die Karte zeichnen
-    Linien in Fensterauflösung, die Beschriftung setzt die UI.
+    Linien in Fensterauflösung, die Beschriftung setzt die UI. Maus über der
+    Karte (`MapView`): das Rad zoomt zum Zeiger hin (je Raste ×0,85), mit
+    gedrückter linker Taste geht die Karte mit dem Zeiger mit; vom ganzen
+    Gebiet bis 25 km Kantenlänge (darunter würde das Höhenbild mit rund 120 m
+    je Bildpunkt nur gröber), nie über den Gebietsrand. Jede neue Mission
+    beginnt wieder mit der Route, beim Wechsel der Themen bleibt der
+    Ausschnitt.
   - **Briefing-Übersicht** (`Sim::briefing`): je Auftrag Art, Ziel und
     Entfernung, Routenlänge, Treibstoff nötig und mitgeführt, CAMERA
     REQUIRED, Regelset mit Einschränkungen, Tageszeit. Bedarf (`fuel_required_kg`):
@@ -1593,7 +1599,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   zusammen (die Auswahl hat höchstens vier Zeilen), Raketenreichweiten stehen
   im Text statt als eigene Kreise; Richtung und Entfernung statt
   Gitterkoordinaten (Planquadrate fehlen noch, M-031), keine Fristen und
-  besonderen Ereignisse; Erkennung und Dienstplan sind Platzhalter; „leicht“ lockert die Landegrenzen
+  besonderen Ereignisse; die Karte ist mit der Maus zoom- und verschiebbar
+  (unsere Ergänzung); Erkennung und Dienstplan sind Platzhalter; „leicht“ lockert die Landegrenzen
   weniger als das Original, weil unsere schon großzügig sind (mehr wäre ein
   Aufprall).
 - **Status:** teilweise (es fehlen der Dienstplan mit Pilotenakten und das

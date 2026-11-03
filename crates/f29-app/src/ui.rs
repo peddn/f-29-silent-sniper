@@ -22,12 +22,14 @@ use bevy::camera::RenderTarget;
 use bevy::camera::visibility::RenderLayers;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::image::{ImageLoaderSettings, ImageSampler};
+use bevy::input::mouse::{AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::{FontSmoothing, LineHeight};
 use bevy::window::PrimaryWindow;
 use f29_hud::arming::{Arming, ROWS};
-use f29_hud::intel::{self, Label};
+use f29_hud::intel::{self, Label, MapView};
+use f29_hud::map::map_half_extent;
 use f29_hud::{Align, Ink, MAX_OPTIONS, Page, Rect, debrief};
 use f29_render::palette;
 
@@ -35,7 +37,10 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(Update, (intel_map, show).in_set(SimSystems::Present));
+        app.init_resource::<IntelView>()
+            .add_systems(Startup, setup)
+            .add_systems(Update, intel_input.in_set(SimSystems::Input))
+            .add_systems(Update, (intel_map, show).in_set(SimSystems::Present));
     }
 }
 
@@ -76,9 +81,9 @@ struct Ui {
     camera: Entity,
     font: Handle<Font>,
     title: Handle<Image>,
-    /// Geländebild der Lagebesprechung und die Mission, zu der es gehört.
+    /// Geländebild der Lagebesprechung und der Ausschnitt, den es zeigt.
     intel_map: Handle<Image>,
-    intel_key: Option<(u64, f29_core::rules::Conflict)>,
+    intel_shown: Option<MapView>,
     shown: Option<Content>,
     root: Option<Entity>,
 }
@@ -159,7 +164,15 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, assets: Res<
         Image::new_fill(size, TextureDimension::D2, &[0, 0, 0, 255], TextureFormat::Rgba8UnormSrgb, usage);
     map.sampler = ImageSampler::nearest();
     let intel_map = images.add(map);
-    commands.insert_resource(Ui { camera, font, title, intel_map, intel_key: None, shown: None, root: None });
+    commands.insert_resource(Ui {
+        camera,
+        font,
+        title,
+        intel_map,
+        intel_shown: None,
+        shown: None,
+        root: None,
+    });
 }
 
 /// Geländebild der Lagebesprechung: einmal je Mission aus dem Höhenbild
@@ -167,27 +180,77 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, assets: Res<
 fn intel_map(
     maps: Res<MapAssets>,
     state: Res<SimState>,
+    intel: Res<IntelView>,
     mut ui: ResMut<Ui>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let key = maps.mission();
-    if state.menu != Some(Screen::Intel) || ui.intel_key == key {
+    if state.menu != Some(Screen::Intel) || ui.intel_shown == intel.view {
         return;
     }
-    let (Some(map), Some(raster)) = (maps.map.as_deref(), maps.height_raster()) else { return };
-    let (center, half) = intel::view(map);
+    let (Some(view), Some(raster)) = (intel.view, maps.height_raster()) else { return };
     if let Some(mut image) = images.get_mut(&ui.intel_map) {
-        image.data = Some(raster.render_view(center, 0.0, half, MAP_PX as usize));
-        ui.intel_key = key;
+        image.data = Some(raster.render_view(view.center, 0.0, view.half, MAP_PX as usize));
+        ui.intel_shown = intel.view;
+    }
+}
+
+/// Ausschnitt der Lagebesprechungskarte; bei jeder neuen Mission wieder die
+/// Route, beim Wechsel der Themen bleibt er.
+#[derive(Resource, Default)]
+pub struct IntelView {
+    mission: Option<(u64, f29_core::rules::Conflict)>,
+    pub view: Option<MapView>,
+}
+
+/// Mausrad zoomt zum Zeiger hin, mit gedrückter linker Taste verschiebt die
+/// Maus die Karte – beides nur über der Karte. Verschoben wird um den Weg
+/// des Zeigers, damit die Karte genau mitgeht.
+fn intel_input(
+    state: Res<SimState>,
+    maps: Res<MapAssets>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    scroll: Res<AccumulatedMouseScroll>,
+    mut last: Local<Option<Vec2>>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    mut intel: ResMut<IntelView>,
+) {
+    let Some(map) = maps.map.as_deref() else { return };
+    let bound = map_half_extent(state.sim.terrain());
+    if intel.mission != maps.mission() {
+        intel.mission = maps.mission();
+        intel.view = Some(MapView::fit(map, bound));
+    }
+    let cursor = window.cursor_position();
+    let moved = cursor.zip(*last).map(|(c, l)| c - l);
+    *last = cursor;
+    let (Some(mut view), Some(cursor)) = (intel.view, cursor) else { return };
+    let (area, k) = (map_rect(), unit(&window));
+    let at = [(cursor.x - window.width() * 0.5) / k, (window.height() * 0.5 - cursor.y) / k];
+    if state.menu != Some(Screen::Intel) || !area.contains(at) {
+        return;
+    }
+    let lines = match scroll.unit {
+        MouseScrollUnit::Line => scroll.delta.y,
+        MouseScrollUnit::Pixel => scroll.delta.y / 40.0,
+    };
+    if lines != 0.0 {
+        view = view.zoom(area, at, 0.85_f64.powf(f64::from(lines)), bound);
+    }
+    if let Some(d) = moved.filter(|d| buttons.pressed(MouseButton::Left) && *d != Vec2::ZERO) {
+        view = view.drag(area, [d.x / k, -d.y / k], bound);
+    }
+    if intel.view != Some(view) {
+        intel.view = Some(view);
     }
 }
 
 /// Inhalt des offenen Bildschirms.
-fn content(state: &SimState, view: &ViewSettings, maps: &MapAssets) -> Option<Content> {
+fn content(state: &SimState, view: &ViewSettings, maps: &MapAssets, intel: &IntelView) -> Option<Content> {
     match state.menu {
         Some(Screen::Title) => Some(Content::Title),
         Some(Screen::Intel) => {
-            let labels = maps.map.as_deref().map(|m| intel::labels(m, menu::topic(state), map_rect()));
+            let labels = maps.map.as_deref().zip(intel.view);
+            let labels = labels.map(|(m, v)| intel::labels(m, menu::topic(state), v, map_rect()));
             Some(Content::Intel(menu::page(state), labels.unwrap_or_default()))
         }
         Some(Screen::Arming) => Some(Content::Arming(menu::arming(state))),
@@ -205,11 +268,12 @@ fn show(
     state: Res<SimState>,
     view: Res<ViewSettings>,
     maps: Res<MapAssets>,
+    intel: Res<IntelView>,
     mut ui: ResMut<Ui>,
     mut cameras: Query<&mut Camera>,
     mut frame: Single<(&mut Sprite, &mut Visibility), With<Frame>>,
 ) {
-    let content = content(&state, &view, &maps);
+    let content = content(&state, &view, &maps, &intel);
     let on = content.is_some();
     *frame.1 = if on { Visibility::Visible } else { Visibility::Hidden };
     frame.0.custom_size = Some(Vec2::new(W, H) * scale(&window));

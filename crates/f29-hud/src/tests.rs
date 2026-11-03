@@ -926,18 +926,42 @@ fn arming_fits_the_picture() {
 /// der Flugplan beschriftet die Wegpunkte; alles bleibt im Bildfeld.
 #[test]
 fn intel_map_shows_threats_and_plan() {
-    use crate::intel::{Topic, draw, labels};
+    use crate::intel::{MapView, Topic, draw, labels};
     let sim = Sim::new(SimConfig::runway(7));
     let map = crate::MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
+    let view = MapView::fit(&map, crate::map::map_half_extent(sim.terrain()));
     let fd = sim.flight_data();
     let area = Rect { min: [0.2, -0.25], max: [0.75, 0.3] };
-    let lines = |t| draw(&map, &fd.threat.sites, t, area).lines;
+    let lines = |t| draw(&map, &fd.threat.sites, t, view, area).lines;
     assert!(lines(Topic::Threats).len() > lines(Topic::Leave).len() + 64);
-    let plan = labels(&map, Topic::FlightPlan, area);
+    let plan = labels(&map, Topic::FlightPlan, view, area);
     let texts: Vec<&str> = plan.iter().map(|l| l.text.as_str()).collect();
     assert_eq!(texts, ["HOME", "2", "3"]);
     let inside = |p: [f32; 2]| {
         (area.min[0] - 0.1..area.max[0] + 0.1).contains(&p[0]) && area.contains([area.center()[0], p[1]])
     };
     assert!(plan.iter().all(|l| inside(l.pos)), "{plan:?}");
+}
+
+/// Lagebesprechung: Zoomen hält den Punkt unter dem Zeiger fest, Ziehen
+/// verschiebt die Karte mit dem Zeiger; der Ausschnitt bleibt im Gebiet
+/// und zwischen engstem Zoom und ganzem Gebiet.
+#[test]
+fn intel_map_zooms_and_drags_within_the_theater() {
+    use crate::intel::{MIN_HALF_M, MapView};
+    let area = Rect { min: [0.0, 0.0], max: [0.5, 0.5] };
+    let bound = 250_000.0;
+    let v = MapView { center: [10_000.0, -20_000.0], half: 80_000.0 };
+    let at = [0.4, 0.1];
+    let z = v.zoom(area, at, 0.5, bound);
+    assert!((z.half - 40_000.0).abs() < 1e-6);
+    let (a, b) = (v.world(area, at), z.world(area, at));
+    assert!((a[0] - b[0]).abs() < 1.0 && (a[1] - b[1]).abs() < 1.0, "{a:?} {b:?}");
+    assert_eq!(v.zoom(area, at, 1e-3, bound).half, MIN_HALF_M);
+    assert_eq!(v.zoom(area, at, 1e3, bound), MapView { center: [0.0, 0.0], half: bound });
+    // Zeiger nach rechts oben: Die Mitte rückt nach Südwest.
+    let d = v.drag(area, [0.05, 0.05], bound);
+    assert!(d.center[0] < v.center[0] && d.center[1] < v.center[1]);
+    let far = v.drag(area, [-100.0, 0.0], bound);
+    assert_eq!(far.center[1], bound - v.half, "am Gebietsrand");
 }
