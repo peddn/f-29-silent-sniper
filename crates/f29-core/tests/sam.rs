@@ -3,6 +3,9 @@
 
 mod common;
 use common::*;
+#[path = "support/sam_report.rs"]
+#[allow(dead_code)]
+mod sam_report;
 
 use f29_core::controls::weapon_flags;
 use f29_core::sim::Spawn;
@@ -312,7 +315,7 @@ fn jammers_switch_and_cost_stealth() {
 /// v0.2.9: „mit Querflug das meiste abschütteln“).
 #[test]
 fn beaming_shakes_off_all_but_the_modern_sam() {
-    use f29_core::sam_report::{Maneuver, engagement};
+    use sam_report::{Maneuver, engagement};
     let hit = |kind, m| engagement(SEED, kind, 0.5, 0.6, m).expect("Start ohne Absturz");
     for kind in [
         WeaponKind::ShortRangeSam,

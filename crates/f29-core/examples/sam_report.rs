@@ -1,7 +1,10 @@
 //! Trefferquoten der Boden-Luft-Raketen je Manöver (siehe
-//! `f29_core::sam_report`), optional nur für einzelne Raketen:
+//! `tests/support/sam_report.rs`), optional nur für einzelne Raketen:
 //! `cargo run --release -p f29-core --example sam_report [SA-6 …]`
-use f29_core::sam_report::{Maneuver, SAMS, hit_rate};
+#[path = "../tests/support/sam_report.rs"]
+mod sam_report;
+
+use sam_report::{Maneuver, SAMS, hit_rate};
 
 fn main() {
     let only: Vec<String> = std::env::args().skip(1).collect();

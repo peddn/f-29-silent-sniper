@@ -2,18 +2,18 @@
 //! deterministische Anflüge auf eine Stellung, je drei Startpunkte in drei
 //! Missionen (verschiedene Zufallsströme, z. B. für Täuschkörper).
 //!
-//! Dient wie [`crate::envelope`] zum Abstimmen
+//! Dient wie `envelope` zum Abstimmen
 //! (`cargo run --release -p f29-core --example sam_report`) und als Grundlage
 //! der Gefährlichkeits-Tests (`tests/sam.rs`): Von vorn und hinten treffen
 //! alle; Querflug schüttelt langsame Raketen mit engem Suchkegel ab, die
 //! moderne kaum; Täuschkörper wirken nach der Resistenz der Rakete.
 
-use crate::DT;
-use crate::autopilot::Autopilot;
-use crate::controls::weapon_flags;
-use crate::sim::{Sim, SimConfig, Spawn, Status};
-use crate::targets;
-use crate::weapons::{Seeker, WeaponEvent, WeaponKind};
+use f29_core::DT;
+use f29_core::autopilot::Autopilot;
+use f29_core::controls::weapon_flags;
+use f29_core::sim::{Sim, SimConfig, Spawn, Status};
+use f29_core::targets;
+use f29_core::weapons::{Seeker, WeaponEvent, WeaponKind};
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 const SEEDS: [u64; 3] = [0x0F29, 0x0F2A, 0x0F2B];
@@ -139,7 +139,7 @@ pub fn engagement(seed: u64, kind: WeaponKind, south: f64, west: f64, m: Maneuve
         if sim
             .weapon_events()
             .iter()
-            .any(|(_, e)| matches!(e, WeaponEvent::Hit { on: crate::weapons::Struck::Aircraft, .. }))
+            .any(|(_, e)| matches!(e, WeaponEvent::Hit { on: f29_core::weapons::Struck::Aircraft, .. }))
         {
             return Some(true);
         }

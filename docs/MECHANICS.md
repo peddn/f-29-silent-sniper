@@ -288,7 +288,7 @@ Format jedes Eintrags:
     die eigene Durchsacklinderung `flap_sink_relief` und die Ruderhilfe
     `flap_control_q_factor`. Der Ruderverlust im Abriss ist eine Konstante.
   - Verhaltenstests prüfen Kennwerte gegen Toleranzbänder
-    (`f29_core::envelope`, `tests/envelope.rs`) statt einzelner Flugbahnen.
+    (`tests/support/envelope.rs`, `tests/envelope.rs`) statt einzelner Flugbahnen.
     Die Übersicht liefert `cargo run --release -p f29-core --example
     flight_report`; es ersetzt die Beispiele `stall_loss`, `stall_trace`,
     `turn_trace`, `slow_trace` und `bank_stall`.

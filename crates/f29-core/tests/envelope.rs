@@ -1,8 +1,11 @@
-//! Verhaltenstests über die Kennwerte aus `f29_core::envelope`: jeder Wert
+//! Verhaltenstests über die Kennwerte aus `support/envelope.rs`: jeder Wert
 //! gegen ein Toleranzband statt einzelner, chaotischer Flugbahnen.
 //! Übersicht der aktuellen Werte: `cargo run --release -p f29-core --example flight_report`.
 
-use f29_core::envelope::{self, Metric};
+#[path = "support/envelope.rs"]
+mod envelope;
+
+use envelope::Metric;
 use std::sync::LazyLock;
 
 static REPORT: LazyLock<Vec<Metric>> = LazyLock::new(envelope::report);

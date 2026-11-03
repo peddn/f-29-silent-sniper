@@ -8,13 +8,13 @@
 //! jeder Änderung auf einen Blick, was sie bewirkt, und Tests kippen nicht
 //! wegen kleiner Verschiebungen chaotischer Flugbahnen.
 
-use crate::atmosphere::{self, G0};
-use crate::autopilot::{AIM_POINT_M, Approach, GLIDE_SLOPE};
-use crate::controls::{ControlFrame, flags};
-use crate::flight::{self, AircraftState, STALL_NOTICEABLE};
-use crate::math::{DQuat, DVec3};
-use crate::sim::{Spawn, SpawnKind};
-use crate::{DT, Sim, SimConfig, Status, units};
+use f29_core::atmosphere::{self, G0};
+use f29_core::autopilot::{AIM_POINT_M, Approach, GLIDE_SLOPE};
+use f29_core::controls::{ControlFrame, flags};
+use f29_core::flight::{self, AircraftState, STALL_NOTICEABLE};
+use f29_core::math::{DQuat, DVec3};
+use f29_core::sim::{Spawn, SpawnKind};
+use f29_core::{DT, Sim, SimConfig, Status, units};
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_world::AirfieldKind;
 
@@ -306,7 +306,7 @@ fn autopilot_landing() -> (f64, f64) {
         speed: 95.0,
         throttle: 0.3,
         // Nach der Mission: Schächte leer.
-        loadout: Some(crate::weapons::Loadout::EMPTY),
+        loadout: Some(f29_core::weapons::Loadout::EMPTY),
         night: false,
         awacs: true,
         visible: false,
