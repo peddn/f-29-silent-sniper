@@ -1551,7 +1551,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Fliegerhorste; auf der Karte alle Radarkreise, gepunktet Impuls,
     durchgezogen Doppler, und die Horste), FLIGHT PLAN (Wegpunkte mit
     Teilstrecken, Gesamtstrecke, Treibstoff, Tageszeit; Route hervorgehoben),
-    LEAVE BRIEFING (Übersicht; weiter zur Schlussauswahl). Die Karte zeichnen
+    LEAVE BRIEFING (weiter zur Schlussauswahl; die Ansicht bleibt beim
+    letzten Thema, das dann gedämpft invers markiert ist). Die Karte zeichnen
     Linien in Fensterauflösung, die Beschriftung setzt die UI. Maus über der
     Karte (`MapView`): das Rad zoomt zum Zeiger hin (je Raste ×0,85), mit
     gedrückter linker Taste geht die Karte mit dem Zeiger mit; vom ganzen
@@ -1589,8 +1590,11 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Titelbild genügt ein Klick irgendwohin, in der Nachbesprechung auf
     CONTINUE. Bewaffnung: Klick auf eine Waffe nimmt sie, dann wählt der
     Zeiger den Schacht (Tabelle oder Bild), Klick legt sie ab; ein Klick auf
-    eine andere Waffe tauscht sie. Getroffen wird aus denselben Maßen, mit
-    denen die Bildschirme aufgebaut sind (`ui::hit`).
+    eine andere Waffe tauscht sie. Lagebesprechung: Themen wechseln mit der
+    Maus nur per Klick, damit die Ansicht auf dem Weg zur Karte nicht
+    wechselt; LEAVE BRIEFING folgt dem Zeiger wie überall. Getroffen wird
+    aus denselben Maßen, mit denen die Bildschirme aufgebaut sind
+    (`ui::hit`).
   - **Darstellung** (`ui.rs`, Inhalt aus `f29-hud` als `Page`): Alle
     Bildschirme außerhalb des Cockpits, auch die Nachbesprechung, zeichnet
     bevy_ui in Departure Mono in ein Bild mit 640 × 400 Pixeln, ohne Glättung

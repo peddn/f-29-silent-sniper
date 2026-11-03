@@ -481,11 +481,16 @@ fn page_ui(p: &mut ChildSpawnerCommands, font: &Handle<Font>, page: &Page) {
     options(p, font, page);
 }
 
-/// Die Auswahl der Seite, gewählte Zeile invers.
+/// Die Auswahl der Seite, gewählte Zeile invers, markierte gedämpft invers.
 fn options(p: &mut ChildSpawnerCommands, font: &Handle<Font>, page: &Page) {
     p.spawn(column(OPTIONS_W)).with_children(|list| {
         for (k, o) in page.options.iter().enumerate() {
-            option(list, font, o, (k == page.cursor).then_some(Ink::Hud));
+            let bg = if k == page.cursor {
+                Some(Ink::Hud)
+            } else {
+                (page.marked == Some(k)).then_some(Ink::HudDim)
+            };
+            option(list, font, o, bg);
         }
     });
 }

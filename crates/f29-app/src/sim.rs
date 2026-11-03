@@ -84,6 +84,8 @@ pub struct SimState {
     pub cursor: usize,
     /// Bewaffnung: Fokus auf diesem Schacht statt auf der Liste.
     pub arm_bay: Option<usize>,
+    /// Lagebesprechung: gezeigtes Thema (folgt dem Cursor nur auf Themen).
+    pub intel_topic: f29_hud::intel::Topic,
     /// Momentaufnahme für alle Anzeigen, einmal je Bild nach dem Takten.
     pub fd: FlightData,
 }
@@ -105,6 +107,7 @@ impl SimState {
             menu: None,
             cursor: 0,
             arm_bay: None,
+            intel_topic: f29_hud::intel::Topic::Targets,
             fd,
         }
     }
@@ -133,9 +136,9 @@ impl SimState {
     /// Neue Simulation mit `config`; das Menü bleibt, wo es ist.
     pub fn reset(&mut self, config: SimConfig) {
         self.save_replay();
-        let (menu, cursor, arm_bay) = (self.menu, self.cursor, self.arm_bay);
+        let (menu, cursor, arm_bay, topic) = (self.menu, self.cursor, self.arm_bay, self.intel_topic);
         *self = Self::new(config);
-        (self.menu, self.cursor, self.arm_bay) = (menu, cursor, arm_bay);
+        (self.menu, self.cursor, self.arm_bay, self.intel_topic) = (menu, cursor, arm_bay, topic);
     }
 
     /// Deckt ein Bildschirm (Menü oder Nachbesprechung) die Ansicht zu?

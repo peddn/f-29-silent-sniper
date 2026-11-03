@@ -65,5 +65,5 @@ pub fn page(fd: &FlightData, index: usize) -> Page {
             ("MISSION RATING".to_string(), rows)
         }
     };
-    Page { title, rows, options: vec!["CONTINUE".into()], cursor: 0 }
+    Page { title, rows, options: vec!["CONTINUE".into()], cursor: 0, marked: None }
 }

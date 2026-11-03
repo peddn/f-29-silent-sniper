@@ -17,6 +17,9 @@ pub struct Page {
     pub options: Vec<String>,
     /// Gewählte Zeile der Auswahl.
     pub cursor: usize,
+    /// Zeile, die gedämpft invers bleibt, solange der Cursor anderswo steht
+    /// (z. B. das gezeigte Thema der Lagebesprechung).
+    pub marked: Option<usize>,
 }
 
 /// Eine Zeile des Textfelds: Text links, Wert rechtsbündig.

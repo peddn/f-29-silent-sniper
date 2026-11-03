@@ -102,8 +102,7 @@ pub fn page(state: &SimState) -> Page {
             let text = match topic(state) {
                 Topic::Targets => sim.briefing_targets(),
                 Topic::Threats => sim.briefing_threats(),
-                Topic::FlightPlan => sim.briefing_route(),
-                Topic::Leave => sim.briefing(),
+                Topic::FlightPlan | Topic::Leave => sim.briefing_route(),
             };
             ("INTELLIGENCE BRIEFING", text, Topic::ALL.map(|t| t.label().to_string()).into())
         }
@@ -115,12 +114,14 @@ pub fn page(state: &SimState) -> Page {
         ),
     };
     let rows = lines.into_iter().map(Row::from).collect();
-    Page { title: title.into(), rows, options, cursor: state.cursor }
+    let shown = Topic::ALL.iter().position(|&t| t == state.intel_topic);
+    let marked = shown.filter(|&k| state.menu == Some(Screen::Intel) && k != state.cursor);
+    Page { title: title.into(), rows, options, cursor: state.cursor, marked }
 }
 
-/// Thema der Lagebesprechung am Cursor.
+/// Gezeigtes Thema der Lagebesprechung.
 pub fn topic(state: &SimState) -> Topic {
-    Topic::ALL[state.cursor.min(Topic::ALL.len() - 1)]
+    state.intel_topic
 }
 
 /// Liste der Bewaffnung: die Waffen, „leer“, „fertig“.
@@ -332,7 +333,12 @@ fn menu_input(
         return;
     }
     let n = page(&state).options.len();
-    if let Some(Hit::Option(i)) = hit {
+    // Lagebesprechung: Themen nur per Klick (sonst wechselte die Ansicht auf
+    // dem Weg zur Karte); LEAVE BRIEFING folgt dem Zeiger wie überall.
+    let intel = state.menu == Some(Screen::Intel);
+    if let Some(Hit::Option(i)) = hit
+        && (!intel || click || Topic::ALL[i] == Topic::Leave)
+    {
         state.cursor = i;
     }
     let ok = ok || clicked;
@@ -346,5 +352,9 @@ fn menu_input(
         let choice = state.cursor;
         choose(&mut state, choice);
         *pilot = PilotInput::matching(&state.sim);
+    }
+    // Das gezeigte Thema folgt dem Cursor, solange er auf einem Thema steht.
+    if state.menu == Some(Screen::Intel) && Topic::ALL[state.cursor] != Topic::Leave {
+        state.intel_topic = Topic::ALL[state.cursor];
     }
 }
