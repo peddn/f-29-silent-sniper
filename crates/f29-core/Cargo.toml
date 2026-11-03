@@ -9,6 +9,8 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+ron = "0.12"
 f29-data.workspace = true
 f29-world.workspace = true
 

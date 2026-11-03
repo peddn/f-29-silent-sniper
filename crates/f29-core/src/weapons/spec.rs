@@ -3,7 +3,7 @@
 use super::*;
 
 /// Waffenarten (M-014), benannt nach den realen Vorbildern.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum WeaponKind {
     /// Freifallbombe.
     FreeFall,

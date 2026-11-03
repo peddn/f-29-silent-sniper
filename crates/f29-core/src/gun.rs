@@ -129,14 +129,6 @@ impl Gun {
         }
     }
 
-    pub fn rng_state(&self) -> (u64, u64) {
-        self.rng.raw_state()
-    }
-
-    pub fn pending(&self) -> f64 {
-        self.pending
-    }
-
     /// Abzug für einen Tick: `fire` = gedrückt und Schießen erlaubt.
     pub fn trigger(
         &mut self,

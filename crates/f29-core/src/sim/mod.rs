@@ -31,7 +31,6 @@ mod score;
 
 pub use score::{Score, ScoreLine};
 
-pub use hash::Fnv1a;
 pub use info::*;
 
 /// Abrisswarnung unterhalb dieses Vielfachen der Abrissgeschwindigkeit.
@@ -82,7 +81,7 @@ pub const TICK_HZ: u32 = 120;
 pub const DT: f64 = 1.0 / TICK_HZ as f64;
 
 /// Wo das Flugzeug startet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum SpawnKind {
     /// In der Luft, mit den Werten aus [`Spawn`].
     #[default]
@@ -94,7 +93,7 @@ pub enum SpawnKind {
 }
 
 /// Startbedingungen.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Spawn {
     pub kind: SpawnKind,
     /// Tankfüllung 0..1.
@@ -199,17 +198,6 @@ pub enum CrashCause {
 }
 
 impl CrashCause {
-    fn code(self) -> u64 {
-        match self {
-            Self::Terrain => 0,
-            Self::Water => 1,
-            Self::GearUp => 2,
-            Self::GearCollapse => 3,
-            Self::WingStrike => 4,
-            Self::OffRunway => 5,
-        }
-    }
-
     /// Kurztext für HUD und Nachbesprechung.
     pub fn label(self) -> &'static str {
         match self {

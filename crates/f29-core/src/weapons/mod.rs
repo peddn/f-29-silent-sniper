@@ -178,7 +178,7 @@ pub fn launch_zone(kind: WeaponKind, l: &Launch<'_>, i: usize) -> LaunchZone {
 }
 
 /// Beladung der vier Schächte (eine Waffenart je Schacht oder leer).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Loadout(pub [Option<WeaponKind>; BAYS]);
 
 impl Default for Loadout {
@@ -238,16 +238,6 @@ pub enum Launcher {
     Site(usize),
     /// Jäger (Index in `Fighters::list`).
     Fighter(usize),
-}
-
-impl Launcher {
-    /// Für den Zustandshash.
-    pub fn code(self) -> u64 {
-        match self {
-            Launcher::Site(i) => i as u64,
-            Launcher::Fighter(i) => 1 << 32 | i as u64,
-        }
-    }
 }
 
 /// Was eine Lenkwaffe verfolgt.
@@ -665,11 +655,6 @@ impl Stores {
             rng: Pcg32::new(seed, STREAM_WEAPONS),
             events: EventLog::default(),
         }
-    }
-
-    /// Zustand des Zufallsstroms (für den Zustandshash).
-    pub fn rng_state(&self) -> (u64, u64) {
-        self.rng.raw_state()
     }
 
     /// Masse der Waffen an Bord (kg).

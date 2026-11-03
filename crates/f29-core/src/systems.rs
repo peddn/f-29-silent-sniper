@@ -188,18 +188,6 @@ impl Systems {
     pub fn bay_door_speed(&self) -> f64 {
         if self.get(System::WeaponBay).is_failed() { 0.0 } else { self.capability(System::Hydraulics) }
     }
-
-    /// Für den Zustandshash: je System (Art, Leistung), dazu die Trefferzahl.
-    pub fn hash_parts(&self) -> impl Iterator<Item = (u64, f64)> + '_ {
-        self.conditions
-            .iter()
-            .map(|c| match c {
-                Condition::Ok => (0, 1.0),
-                Condition::Degraded(v) => (1, *v),
-                Condition::Failed => (2, 0.0),
-            })
-            .chain([(3, f64::from(self.hits)), (4, self.damage)])
-    }
 }
 
 #[cfg(test)]

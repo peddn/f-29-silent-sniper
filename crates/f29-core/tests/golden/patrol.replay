@@ -1,14 +1,5 @@
-F29REPLAY 12
-seed 3881
-spawn air 0000000000000000 0000000000000000 40a3880000000000 4089000000000000 3fe921fb54442d18 406a400000000000 3fe199999999999a 3ff0000000000000
-loadout fall,chute,lgb,agm
-time day
-awacs on
-stealth on
-damage on
-rules war
-opponents regular
-landings realistic
+F29REPLAY 13
+config (seed:3881,spawn:(kind:Air,fuel:1.0,north:0.0,east:0.0,altitude:2500.0,min_clearance:800.0,heading:0.7853981633974483,speed:210.0,throttle:0.55,loadout:Some(((Some(FreeFall),Some(Retarded),Some(GuidedBomb),Some(AirToGround)))),night:false,awacs:true,visible:false,invulnerable:false,conflict:War,opponents:Regular,landings:Realistic))
 theater ab8f65046263e6a2 NORTH COAST
 frames 9887
 1 11397 0 0 65535 0 0
@@ -9898,4 +9889,4 @@ frames 9887
 1 -3215 -22 0 44990 0 0
 1 -3234 -21 0 44993 0 0
 1 -3252 -20 0 44995 0 0
-hash 83f88d18e2c66739
+hash c4e488830892fbdc

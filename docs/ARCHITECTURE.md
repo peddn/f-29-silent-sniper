@@ -25,9 +25,8 @@
 
 Abhängigkeiten zeigen nur nach unten. **Nur `f29-app` kennt Bevy.** Alles andere
 kompiliert und testet ohne Grafikkarte und ohne Fenster. Fremde Crates nur, wo
-nötig: `serde`/`ron` (Gebietsdaten in `f29-world`), `png` (`f29-headless`),
-`resvg` (SVG-Grafiken der Ausrüstung in `f29-app`); der Simulationskern selbst
-hat keine eigenen.
+nötig: `serde`/`ron` (Gebietsdaten in `f29-world`, Replay-Kopf in `f29-core`),
+`png` (`f29-headless`), `resvg` (SVG-Grafiken der Ausrüstung in `f29-app`).
 
 | Crate | Aufgabe |
 |---|---|
@@ -104,6 +103,12 @@ Terrain-Streaming in Threads), solange es den Simulationszustand nur liest.
 ```sh
 F29_BLESS=1 cargo test -p f29-core --test determinism
 ```
+
+Der Zustandshash entsteht aus der Debug-Ausgabe des veränderlichen Zustands
+(`sim/hash.rs`, vollständige Zerlegung: ein neues Feld muss dort eingetragen
+oder ausdrücklich ausgelassen werden). Ändert eine neue Rust-Version das
+Debug-Format, schlagen die Golden-Replays fehl und werden einmal neu
+geschrieben – ein Fehler wird so nie verdeckt.
 
 ## Darstellung (f29-app)
 

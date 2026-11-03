@@ -2655,6 +2655,8 @@ version = "0.1.0"
 dependencies = [
  "f29-data",
  "f29-world",
+ "ron",
+ "serde",
 ]
 
 [[package]]

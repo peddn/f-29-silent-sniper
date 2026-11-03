@@ -4,7 +4,7 @@
 //! Konfliktstufe, M-030). „Offener Krieg“ ist das bisherige Verhalten.
 
 /// Konfliktlage einer Mission.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Conflict {
     /// Kalter Krieg: Der Gegner fängt ab und verfolgt, feuert aber nur, wenn
     /// das Flugzeug über feindlichem Gebiet ist; Entdeckung kostet viel.
@@ -117,7 +117,7 @@ mod tests {
 
 /// Gegnerqualität (Menü „Auftrag“, M-036): verschiebt das ausgewürfelte
 /// Pilotenkönnen der Jäger (M-022) und die Wertung.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Opponents {
     Green,
     #[default]
@@ -155,8 +155,8 @@ impl Opponents {
 }
 
 /// Flugverhalten (Menü „Auftrag“, M-036): wie nachsichtig die Landung
-/// bewertet wird (M-005).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+/// bewertet wird (M-042).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Landings {
     /// Aufsetzen auf einer Bahn zerstört nie; kein Wackeln in Bodennähe.
     NoCrash,

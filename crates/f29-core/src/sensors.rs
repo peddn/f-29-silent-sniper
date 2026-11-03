@@ -124,10 +124,6 @@ impl Seen {
     pub fn any(self) -> bool {
         self.radar || self.optical
     }
-
-    pub fn bits(self) -> u64 {
-        u64::from(self.optical) | u64::from(self.radar) << 1
-    }
 }
 
 /// Auswahl einer Zielart (Bodenziele, Jäger, Landebahnen) mit eigener

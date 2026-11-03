@@ -1,20 +1,11 @@
 //! Replays: Startkonfiguration + Eingabestrom + erwarteter End-Hash.
 //!
-//! Textformat (zeilenbasiert, Fließkommazahlen als Bitmuster in Hex, damit
-//! die Startbedingungen exakt erhalten bleiben):
+//! Textformat (zeilenbasiert; die Startkonfiguration als eine RON-Zeile,
+//! deren Fließkommazahlen exakt zurückgelesen werden):
 //!
 //! ```text
-//! F29REPLAY 12
-//! seed 3881
-//! spawn <air|runway> <north> <east> <altitude> <min_clearance> <heading> <speed> <throttle> <fuel>
-//! loadout <fall,chute,lgb,agm|auto>
-//! time <day|night>
-//! awacs <on|off>
-//! stealth <on|off>
-//! damage <on|off>
-//! rules <cold|limited|war>
-//! opponents <green|regular|veteran|elite>
-//! landings <nocrash|easy|realistic>
+//! F29REPLAY 13
+//! config (seed:3881,spawn:(kind:Air,fuel:1.0,…,landings:Realistic))
 //! theater <prüfsumme> <name>
 //! frames <anzahl Zeilen>
 //! <wiederholungen> <pitch> <roll> <yaw> <throttle> <flags> <waffen>
@@ -26,13 +17,19 @@
 //! Modell geändert, dieselben Eingaben ergäben einen anderen Flug.
 
 use crate::controls::ControlFrame;
-use crate::rules::{Conflict, Landings, Opponents};
-use crate::sim::{Sim, SimConfig, Spawn, SpawnKind};
-use crate::weapons::Loadout;
+use crate::sim::{Sim, SimConfig, Spawn};
 use f29_world::Theater;
 use std::fmt::Write as _;
 
-pub const MAGIC: &str = "F29REPLAY 12";
+pub const MAGIC: &str = "F29REPLAY 13";
+
+/// Was das Replay von der Konfiguration speichert (das Gebiet nur als
+/// Prüfsumme).
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Header {
+    seed: u64,
+    spawn: Spawn,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replay {
@@ -87,34 +84,9 @@ impl Replay {
 
     pub fn to_text(&self) -> String {
         let mut s = String::new();
-        let sp = &self.config.spawn;
-        let hex = |v: f64| format!("{:016x}", v.to_bits());
         let _ = writeln!(s, "{MAGIC}");
-        let _ = writeln!(s, "seed {}", self.config.seed);
-        let _ = writeln!(
-            s,
-            "spawn {} {} {} {} {} {} {} {} {}",
-            match sp.kind {
-                SpawnKind::Air => "air",
-                SpawnKind::Runway => "runway",
-            },
-            hex(sp.north),
-            hex(sp.east),
-            hex(sp.altitude),
-            hex(sp.min_clearance),
-            hex(sp.heading),
-            hex(sp.speed),
-            hex(sp.throttle),
-            hex(sp.fuel)
-        );
-        let _ = writeln!(s, "loadout {}", sp.loadout.map_or("auto".to_string(), |l| l.to_text()));
-        let _ = writeln!(s, "time {}", if sp.night { "night" } else { "day" });
-        let _ = writeln!(s, "awacs {}", if sp.awacs { "on" } else { "off" });
-        let _ = writeln!(s, "stealth {}", if sp.visible { "off" } else { "on" });
-        let _ = writeln!(s, "damage {}", if sp.invulnerable { "off" } else { "on" });
-        let _ = writeln!(s, "rules {}", sp.conflict.code());
-        let _ = writeln!(s, "opponents {}", sp.opponents.code());
-        let _ = writeln!(s, "landings {}", sp.landings.code());
+        let header = Header { seed: self.config.seed, spawn: self.config.spawn.clone() };
+        let _ = writeln!(s, "config {}", ron::to_string(&header).expect("Konfiguration als RON"));
         let th = &self.config.theater;
         let _ = writeln!(s, "theater {:016x} {}", th.checksum(), th.name);
         let _ = writeln!(s, "frames {}", self.frames.len());
@@ -143,65 +115,11 @@ impl Replay {
             return Err(err(ln, format!("erwartet `{MAGIC}`")));
         }
 
-        let (ln, seed_line) = next("seed")?;
-        let seed = seed_line
-            .strip_prefix("seed ")
-            .and_then(|v| v.parse::<u64>().ok())
-            .ok_or_else(|| err(ln, "erwartet `seed <zahl>`".into()))?;
-
-        let (ln, spawn_line) = next("spawn")?;
-        let mut tokens = spawn_line
-            .strip_prefix("spawn ")
-            .ok_or_else(|| err(ln, "erwartet `spawn ...`".into()))?
-            .split_whitespace()
-            .peekable();
-        let kind = match tokens.next() {
-            Some("air") => SpawnKind::Air,
-            Some("runway") => SpawnKind::Runway,
-            other => return Err(err(ln, format!("unbekannte Startart {other:?}"))),
-        };
-        let vals: Vec<f64> = tokens
-            .map(|t| u64::from_str_radix(t, 16).map(f64::from_bits))
-            .collect::<Result<_, _>>()
-            .map_err(|e| err(ln, format!("ungültiger Hexwert: {e}")))?;
-        let (north, east, altitude, min_clearance, heading, speed, throttle, fuel) = match vals[..] {
-            [n, e, a, m, h, s, t, f] => (n, e, a, m, h, s, t, f),
-            _ => return Err(err(ln, format!("spawn hat {} Werte", vals.len()))),
-        };
-
-        let (ln, l) = next("loadout")?;
-        let loadout = l
-            .strip_prefix("loadout ")
-            .and_then(|t| if t == "auto" { Some(None) } else { Loadout::parse(t).map(Some) })
-            .ok_or_else(|| err(ln, "erwartet `loadout a,b,c,d` oder `loadout auto`".into()))?;
-        // Schalterzeile `<name> <wahr>|<falsch>`.
-        let mut switch = |name: &str, yes: &str, no: &str| {
-            let (ln, l) = next(name)?;
-            match l.strip_prefix(name).and_then(|v| v.strip_prefix(' ')) {
-                Some(v) if v == yes => Ok(true),
-                Some(v) if v == no => Ok(false),
-                _ => Err(err(ln, format!("erwartet `{name} {yes}|{no}`"))),
-            }
-        };
-        let night = switch("time", "night", "day")?;
-        let awacs = switch("awacs", "on", "off")?;
-        let visible = switch("stealth", "off", "on")?;
-        let invulnerable = switch("damage", "off", "on")?;
-        let (ln, l) = next("rules")?;
-        let conflict = l
-            .strip_prefix("rules ")
-            .and_then(Conflict::from_code)
-            .ok_or_else(|| err(ln, "erwartet `rules cold|limited|war`".into()))?;
-        let (ln, l) = next("opponents")?;
-        let opponents = l
-            .strip_prefix("opponents ")
-            .and_then(Opponents::from_code)
-            .ok_or_else(|| err(ln, "erwartet `opponents green|regular|veteran|elite`".into()))?;
-        let (ln, l) = next("landings")?;
-        let landings = l
-            .strip_prefix("landings ")
-            .and_then(Landings::from_code)
-            .ok_or_else(|| err(ln, "erwartet `landings nocrash|easy|realistic`".into()))?;
+        let (ln, l) = next("config")?;
+        let header: Header = l
+            .strip_prefix("config ")
+            .ok_or_else(|| err(ln, "erwartet `config (…)`".into()))
+            .and_then(|t| ron::from_str(t).map_err(|e| err(ln, format!("Konfiguration: {e}"))))?;
         // Bisher nur das eingebaute Gebiet; die Prüfsumme sichert, dass es
         // dasselbe ist wie bei der Aufnahme.
         let (ln, l) = next("theater")?;
@@ -249,43 +167,21 @@ impl Replay {
             Err(_) => None,
         };
 
-        Ok(Self {
-            config: SimConfig::with(
-                seed,
-                Spawn {
-                    kind,
-                    fuel,
-                    north,
-                    east,
-                    altitude,
-                    min_clearance,
-                    heading,
-                    speed,
-                    throttle,
-                    loadout,
-                    night,
-                    awacs,
-                    visible,
-                    invulnerable,
-                    conflict,
-                    opponents,
-                    landings,
-                },
-            ),
-            frames,
-            final_hash,
-        })
+        Ok(Self { config: SimConfig::with(header.seed, header.spawn), frames, final_hash })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::weapons::Loadout;
 
     #[test]
     fn text_roundtrip() {
         let mut r = Replay::new(SimConfig::new(77));
         r.config.spawn.heading = 1.234_567_890_123;
+        r.config.spawn.altitude = 0.1 + 0.2;
+        r.config.spawn.north = -1.0 / 3.0 * 1e5;
         for i in 0..300 {
             r.push(ControlFrame::from_analog(if i < 100 { 0.5 } else { 0.0 }, -0.25, 0.0, 0.8, 0));
         }
@@ -312,6 +208,6 @@ mod tests {
     fn rejects_garbage() {
         assert!(Replay::from_text("hallo").is_err());
         assert!(Replay::from_text("F29REPLAY 5\nseed 9\n").is_err(), "alte Version");
-        assert!(Replay::from_text(&format!("{MAGIC}\nseed x\n")).is_err());
+        assert!(Replay::from_text(&format!("{MAGIC}\nconfig (seed:x)\n")).is_err());
     }
 }
