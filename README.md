@@ -362,8 +362,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 Wahlweise [MIT](LICENSE-MIT) oder [Apache 2.0](LICENSE-APACHE).
 
-Die Pixelschriften unter `crates/f29-app/assets/fonts/` haben eigene Lizenzen
-(Dateien `*.LICENSE` daneben: SIL OFL 1.1, WTFPL, MIT-artig).
+Die Pixelschrift Departure Mono unter `crates/f29-app/assets/fonts/` steht
+unter der SIL Open Font License 1.1 (`departure-mono.LICENSE` daneben).
 
 *F-19 Stealth Fighter* ist eine Marke ihrer jeweiligen Rechteinhaber. Dieses Projekt
 ist ein unabhängiges Fanprojekt und steht in keiner Verbindung zu MicroProse oder

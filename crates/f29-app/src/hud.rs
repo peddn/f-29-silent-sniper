@@ -77,8 +77,8 @@ fn draw_hud(
     let layout = layout_for(&window, &view);
 
     let fd = &state.fd;
-    // Hintergrund des Instrumentenbretts; nach dem Missionsende deckt er als
-    // Grund der Nachbesprechung das ganze Fenster (später ein Bild).
+    // Hintergrund des Instrumentenbretts; außerhalb des Cockpits füllt er das
+    // ganze Fenster um das Bild der UI.
     let covered = state.covered();
     let panel_h = if covered { h } else { layout.panel_fraction * h };
     let (transform, sprite) = &mut *panel;
@@ -88,34 +88,27 @@ fn draw_hud(
     transform.translation = Vec3::new(0.0, -h * 0.5 + panel_h * 0.5, -10.0);
 
     // Ein optisch erfasstes Ziel zeigt die Zielkamera (tgt_camera.rs) statt des Drahtgitters.
-    // Ausgestiegen bzw. Missionsende: Schirm bzw. Ergebnistafel immer.
-    let pilot_view = fd.pilot.is_some() || fd.mission_over;
+    // Ausgestiegen: Schirm immer.
     let opts = HudOptions {
-        show_hud: pilot_view || (view.hud && view.mode == ViewMode::Cockpit && view.look == LookDir::Forward),
+        show_hud: fd.pilot.is_some()
+            || (view.hud && view.mode == ViewMode::Cockpit && view.look == LookDir::Forward),
         hud_mode: view.hud_mode,
         show_panel: true,
         mfd: mfd.0,
         camera_feed: true,
-        debrief_screen: view.debrief,
     };
-    let blink = time.elapsed_secs().fract() < 0.5;
-    let list = if state.menu == Some(crate::menu::Screen::Arming) {
-        let mut a = crate::menu::arming(&state, blink);
-        a.art = fd.stores.bays.map(|b| b.kind.is_some_and(|k| art.has(k)));
-        f29_hud::arming::draw(&layout, &a)
-    } else if state.menu == Some(crate::menu::Screen::Final) {
-        f29_hud::DisplayList::new() // Prototyp mit bevy_ui (ui_proto.rs)
-    } else if state.menu.is_some() {
-        f29_hud::draw_menu(&layout, &crate::menu::page(&state))
+    // Außerhalb des Cockpits zeichnet die UI (ui.rs); auf dem
+    // Bewaffnungsbildschirm liegen Umriss und Schächte in ihrem Rahmen darüber.
+    let (list, unit) = if state.menu == Some(crate::menu::Screen::Arming) {
+        let blink = time.elapsed_secs().fract() < 0.5;
+        (f29_hud::arming::draw(&crate::menu::arming(&state, &art, blink)), crate::ui::unit(&window))
+    } else if covered {
+        (f29_hud::DisplayList::new(), h)
     } else {
-        f29_hud::build(fd, &layout, &opts, maps.map.as_deref())
+        (f29_hud::build(fd, &layout, &opts, maps.map.as_deref()), h)
     };
     for line in &list.lines {
-        gizmos.line_2d(
-            Vec2::new(line.a[0], line.a[1]) * h,
-            Vec2::new(line.b[0], line.b[1]) * h,
-            ink_color(line.ink),
-        );
+        gizmos.line_2d(Vec2::from_array(line.a) * unit, Vec2::from_array(line.b) * unit, ink_color(line.ink));
     }
     let banner = if state.paused { "PAUSE".to_string() } else { format!("{}X", state.time_scale) };
     if state.paused || state.time_scale > 1 {

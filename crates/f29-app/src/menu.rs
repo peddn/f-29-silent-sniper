@@ -12,12 +12,13 @@ use crate::actions::Actions;
 use crate::input::PilotInput;
 use crate::joystick_config::Action;
 use crate::sim::{SimState, SimSystems};
+use crate::store_art::StoreArt;
 use crate::view::ViewSettings;
 use bevy::prelude::*;
 use f29_core::rules::{Conflict, Landings, Opponents};
 use f29_core::weapons::{Loadout, WeaponKind};
-use f29_hud::Page;
 use f29_hud::arming::Arming;
+use f29_hud::{Page, Row};
 
 pub struct MenuPlugin;
 
@@ -90,22 +91,24 @@ pub fn page(state: &SimState) -> Page {
             ("FLIGHT PERFORMANCE", vec![], Landings::ALL.map(|l| l.label().to_string()).into())
         }
         Screen::Briefing => ("MISSION BRIEFING", sim.briefing(), list(&["CONTINUE"])),
-        // eigener Bildschirm (`arming`); hier nur die Zahl der Einträge
-        Screen::Arming => ("ARMING", vec![], vec![String::new(); ARM_ITEMS]),
+        // eigener Bildschirm (`arming`)
+        Screen::Arming => ("ARMING", vec![], vec![]),
+        // Das Briefing noch einmal, um die Mission einzuschätzen.
         Screen::Final => (
             "FINAL CHOICES",
-            vec![],
+            sim.briefing(),
             list(&["SELECT NEW MISSION", "INTELLIGENCE BRIEFING", "ARM YOUR PLANE", "BEGIN MISSION"]),
         ),
     };
-    Page { title: title.into(), lines, options, cursor: state.cursor }
+    let rows = lines.into_iter().map(Row::from).collect();
+    Page { title: title.into(), rows, options, cursor: state.cursor }
 }
 
 /// Liste der Bewaffnung: die Waffen, „leer“, „fertig“.
 const ARM_ITEMS: usize = WeaponKind::ALL.len() + 2;
 
 /// Inhalt des Bewaffnungsbildschirms; `blink` ist der Takt des Blinkens.
-pub fn arming(state: &SimState, blink: bool) -> Arming {
+pub fn arming(state: &SimState, art: &StoreArt, blink: bool) -> Arming {
     let sim = &state.sim;
     let bays = sim.stores().bays.map(|b| b.kind.map(|k| (k.label().to_string(), b.count)));
     let items = WeaponKind::ALL
@@ -119,7 +122,7 @@ pub fn arming(state: &SimState, blink: bool) -> Arming {
         bay: state.arm_bay,
         blink,
         fuel: (sim.fuel_required_kg(), sim.fuel_carried_kg()),
-        art: [false; 4],
+        art: sim.stores().bays.map(|b| b.kind.is_some_and(|k| art.has(k))),
     }
 }
 

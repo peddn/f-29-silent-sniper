@@ -1921,8 +1921,7 @@ Format jedes Eintrags:
     und Brett, über das ganze Fenster (dunkler Grund, später ein Bild):
     Ausgang mit den Aufträgen, die Ereignisse mit Zeit und Punkten (14 je
     Bildschirm), die Wertung mit Faktoren und Summe. Leertaste bzw. Auslöser
-    blättert weiter, R startet neu, Escape beendet. `f29-headless replay
-    DATEI --debrief PRÄFIX` schreibt die Bildschirme als SVG.
+    blättert weiter, R startet neu, Escape beendet.
 - **Status:** Auftragsarten, Kamera, Beladung, Flugprotokoll, Ausgang,
   Wertung und Nachbesprechung umgesetzt (v0.3); die Karte mit dem Flugweg
   aus der Nachbesprechung des Originals entfällt (Spielerentscheidung);
@@ -2109,5 +2108,13 @@ Format jedes Eintrags:
     Schacht. Gewählt pumpt der Auslöser in jedem HUD-Modus ohne Klappen in
     die Haupttanks („FUEL TRANSFERRED“), was nicht passt, geht verloren,
     der Schacht ist danach leer. WPN-Seite: „FUEL“, „READY“.
+- **Darstellung:** Alle Bildschirme außerhalb des Cockpits (auch die
+  Nachbesprechung, M-032) zeichnet bevy_ui in der Pixelschrift Departure
+  Mono in ein Bild mit 640×400 Pixeln, ohne Glättung in ganzen Vielfachen
+  vergrößert. Aufbau überall gleich: Titel invers, Textfeld fester Größe,
+  darunter die Auswahl (höchstens vier Zeilen, gewählte invers) immer an
+  derselben Stelle; keine Bedienhinweise. Die Schlussauswahl zeigt das
+  Briefing noch einmal. Auf dem Bewaffnungsbildschirm bleiben Umriss,
+  Schächte und Bilder der Ausrüstung Vektor bzw. Bild in Fensterauflösung.
 - **Status:** S1 und S2 umgesetzt (v0.3); S3 Lagebesprechungskarte, S4
   Dienstplan folgen

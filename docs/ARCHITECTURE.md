@@ -27,16 +27,17 @@ Abhängigkeiten zeigen nur nach unten. **Nur `f29-app` kennt Bevy.** Alles ander
 kompiliert und testet ohne Grafikkarte und ohne Fenster. Fremde Crates nur, wo
 nötig: `serde`/`ron` (Gebietsdaten in `f29-world`, Replay-Kopf in `f29-core`),
 `png` (`f29-headless`), `resvg` (SVG-Grafiken der Ausrüstung in `f29-app`).
-Die Menüs zeichnet die Vektorschrift; als Prototyp zeigt die Schlussauswahl
-bevy_ui mit Pixelschriften (`f29-app/src/ui_proto.rs`, Schriften samt
-Lizenzen unter `f29-app/assets/fonts/`).
+Die Bildschirme außerhalb des Cockpits (Menüs, Nachbesprechung) zeichnet
+bevy_ui in der Pixelschrift Departure Mono (`f29-app/src/ui.rs`, Schrift samt
+Lizenz unter `f29-app/assets/fonts/`); ihren Inhalt liefert `f29-hud`
+engine-neutral (`Page`).
 
 | Crate | Aufgabe |
 |---|---|
 | `f29-data` | Spieldaten als Typen und Konstanten |
 | `f29-world` | Einsatzgebiet als Daten (RON), Grobraster, Zielklassen, Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung, Flugplätze (Einebnung), Erstbefüllung (`populate`) |
 | `f29-core` | Flugmodell, Atmosphäre, Sim-Schleife, Navigation, Replays, Autopilot, deterministische Mathematik |
-| `f29-hud` | HUD und MFDs (Karte mit Höhenlinien, Ressourcen) als Liniensegmente, Vektorfont, SVG-Export |
+| `f29-hud` | HUD und MFDs (Karte mit Höhenlinien, Ressourcen) als Liniensegmente, Vektorfont, SVG-Export; Inhalt der Menü- und Nachbesprechungsseiten |
 | `f29-audio` | Prozedurale Klangsynthese (Triebwerk, Systeme, Ereignisse), Formant-Sprachansagen, WAV-Ein-/Ausgabe |
 | `f29-render` | Terrain-Kachel-Meshes, Bahnen mit Markierungen und PAPI, Flugzeugmodell mit Fahrwerk, Satellitenkarte (Raster + kursbezogener Ausschnitt), Palette, NED → Y-up |
 | `f29-headless` | Simulation ohne Grafik: Demo, Replays, HUD als SVG, Höhenkarte, Benchmark |

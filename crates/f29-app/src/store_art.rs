@@ -97,7 +97,7 @@ fn show(
     art: Res<StoreArt>,
     mut sprites: Query<(&BayArt, &mut Sprite, &mut Transform, &mut Visibility)>,
 ) {
-    let h = window.height();
+    let h = crate::ui::unit(&window);
     let arming = state.menu == Some(crate::menu::Screen::Arming);
     let bays = state.sim.stores().bays;
     for (bay, mut sprite, mut t, mut vis) in &mut sprites {

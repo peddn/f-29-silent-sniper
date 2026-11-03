@@ -84,12 +84,11 @@ fn ladder_moves_down_when_nose_goes_up() {
 }
 
 /// Missionsende (M-032): Die Nachbesprechung ersetzt HUD und Brett –
-/// Ausgang, Ereignisse seitenweise, Wertung; Absturz in Warnfarbe.
+/// Ausgang, Ereignisse seitenweise, Wertung; Absturz und Abzüge in Warnfarbe.
 #[test]
-fn debrief_screens_replace_hud() {
-    use crate::debrief::{EVENTS_PER_SCREEN, Screen, screens};
+fn debrief_pages_replace_hud() {
+    use crate::debrief::{EVENTS_PER_SCREEN, Screen, page, screens};
     use f29_core::{CrashCause, Score, ScoreLine, Side, Status};
-    let layout = ScreenLayout::cockpit(16.0 / 9.0);
     let line =
         |k: u64| ScoreLine { time_s: k, text: "TAKEOFF".into(), points: if k == 0 { 500 } else { -30 } };
     let score = Score {
@@ -102,20 +101,23 @@ fn debrief_screens_replace_hud() {
         screens(&score),
         [Screen::Outcome, Screen::Events(0), Screen::Events(EVENTS_PER_SCREEN), Screen::Rating]
     );
-    let end = |status: Status, screen: usize| {
-        let fd =
-            f29_core::FlightData { status, mission_over: true, debrief: Some(score.clone()), ..sample() };
-        build(&fd, &layout, &HudOptions { debrief_screen: screen, ..HudOptions::default() }, None).lines
+    let fd = |status: Status| f29_core::FlightData {
+        status,
+        mission_over: true,
+        debrief: Some(score.clone()),
+        ..sample()
     };
-    let crashed = end(Status::Crashed { tick: 1, cause: CrashCause::Terrain }, 0);
-    assert!(crashed.iter().any(|l| l.ink == Ink::HudWarning), "Absturz in Warnfarbe");
-    assert!(crashed.iter().all(|l| !matches!(l.ink, Ink::Panel | Ink::Mfd)), "kein Brett");
-    let landed = end(Status::Landed { tick: 1, side: Side::Friendly }, 0);
-    assert!(landed.iter().all(|l| l.ink != Ink::HudWarning), "gelungene Landung nicht in Warnfarbe");
-    // Abzüge in Warnfarbe; jeder Bildschirm sieht anders aus.
-    let events = end(Status::Landed { tick: 1, side: Side::Friendly }, 1);
-    assert!(events.iter().any(|l| l.ink == Ink::HudWarning));
-    assert_ne!(events, end(Status::Landed { tick: 1, side: Side::Friendly }, 3));
+    let warns = |p: &crate::Page| p.rows.iter().any(|r| r.ink == Ink::HudWarning);
+    let crashed = fd(Status::Crashed { tick: 1, cause: CrashCause::Terrain });
+    assert!(
+        build(&crashed, &ScreenLayout::cockpit(16.0 / 9.0), &HudOptions::default(), None).lines.is_empty()
+    );
+    assert!(warns(&page(&crashed, 0)), "Absturz in Warnfarbe");
+    let landed = fd(Status::Landed { tick: 1, side: Side::Friendly });
+    assert!(!warns(&page(&landed, 0)), "gelungene Landung nicht in Warnfarbe");
+    assert!(warns(&page(&landed, 1)), "Abzüge in Warnfarbe");
+    assert!(page(&landed, 3).rows.iter().any(|r| r.big && r.text == "TOTAL 500"));
+    assert_eq!(page(&landed, 9), page(&landed, 3), "über das Ende hinaus der letzte");
 }
 
 #[test]
@@ -903,22 +905,12 @@ fn ejected_pilot_sees_no_hud() {
     assert!(build(&fd, &layout, &opts, None).lines.is_empty());
 }
 
-/// Bewaffnung (M-036): Der Fokus blinkt zwischen zwei Farben – in der Liste
-/// der Eintrag am Cursor, sonst der gewählte Schacht.
+/// Bewaffnung (M-036): Der Schacht im Fokus blinkt zwischen zwei Farben.
 #[test]
 fn arming_focus_blinks() {
     use crate::arming::{Arming, draw};
-    let layout = ScreenLayout::cockpit(16.0 / 9.0);
-    let a = Arming {
-        bays: [Some(("AIM-9".into(), 4)), None, None, None],
-        items: vec!["A".into(), "B".into()],
-        fuel: (4_000.0, 5_200.0),
-        ..Arming::default()
-    };
-    let warn = |a: &Arming| draw(&layout, a).lines.iter().filter(|l| l.ink == Ink::HudWarning).count();
-    assert_eq!(warn(&a), 0);
-    assert!(warn(&Arming { blink: true, ..a.clone() }) > 0, "Liste blinkt");
-    let bay = Arming { blink: true, bay: Some(2), ..a.clone() };
-    assert!(warn(&bay) > warn(&Arming { blink: true, ..a.clone() }), "Schacht blinkt");
-    assert!(warn(&Arming { fuel: (6_000.0, 5_200.0), ..a }) > 0, "zu wenig Treibstoff");
+    let warn = |a: &Arming| draw(a).lines.iter().filter(|l| l.ink == Ink::HudWarning).count();
+    assert_eq!(warn(&Arming { blink: true, ..Arming::default() }), 0, "ohne Fokus kein Blinken");
+    assert!(warn(&Arming { blink: true, bay: Some(2), ..Arming::default() }) > 0);
+    assert_eq!(warn(&Arming { blink: false, bay: Some(2), ..Arming::default() }), 0);
 }

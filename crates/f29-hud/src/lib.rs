@@ -12,8 +12,8 @@ pub mod debrief;
 pub mod font;
 mod hud;
 pub mod map;
-mod menu;
 pub mod mfd;
+mod page;
 mod pages;
 pub mod svg;
 mod throttle;
@@ -23,8 +23,8 @@ use f29_core::FlightData;
 use f29_core::systems::{Condition, System};
 pub use hud::HudMode;
 pub use map::MapData;
-pub use menu::{Page, draw as draw_menu};
 pub use mfd::{MapMode, MfdLayout, MfdState, RightPage};
+pub use page::{MAX_OPTIONS, Page, Row};
 pub use pages::target_image_rect;
 
 /// Aufteilung des Fensters in 3D-Ansicht (oben) und Instrumentenbrett (unten).
@@ -98,8 +98,6 @@ pub struct HudOptions {
     /// Das Frontend legt ein gerendertes Kamerabild in das Bildfeld der
     /// TGT-Seite ([`target_image_rect`]); das Drahtgitter entfällt dann.
     pub camera_feed: bool,
-    /// Nach dem Missionsende: Nummer des Bildschirms der Nachbesprechung.
-    pub debrief_screen: usize,
 }
 
 impl Default for HudOptions {
@@ -110,7 +108,6 @@ impl Default for HudOptions {
             show_panel: true,
             mfd: MfdState::default(),
             camera_feed: false,
-            debrief_screen: 0,
         }
     }
 }
@@ -124,9 +121,8 @@ pub fn build(
     map: Option<&MapData>,
 ) -> DisplayList {
     let mut dl = DisplayList::new();
-    // Nach dem Missionsende nur noch die Nachbesprechung, übers ganze Fenster.
+    // Nach dem Missionsende zeigt das Frontend die Nachbesprechung ([`debrief::page`]).
     if fd.mission_over {
-        debrief::draw(&mut dl, fd, layout, opts.debrief_screen);
         return dl;
     }
     let on = displays_on(fd);
