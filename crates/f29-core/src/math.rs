@@ -7,6 +7,11 @@
 use crate::detmath;
 use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign};
 
+/// Grad → Bogenmaß.
+pub const fn deg(d: f64) -> f64 {
+    d * std::f64::consts::PI / 180.0
+}
+
 /// 3D-Vektor in doppelter Genauigkeit.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct DVec3 {

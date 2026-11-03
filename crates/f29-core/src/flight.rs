@@ -505,12 +505,6 @@ pub fn stall_speed(spec: &AircraftSpec, mass_kg: f64, density: f64, n: f64, flap
     (vs * vs + (n.max(1.0) - 1.0) * vs_clean * vs_clean).sqrt()
 }
 
-/// Flugbahnwinkel γ (rad, positiv = steigen).
-pub fn flight_path_angle(s: &AircraftState) -> f64 {
-    let v = s.velocity.length();
-    if v < MIN_AERO_SPEED { 0.0 } else { detmath::asin(-s.velocity.z / v) }
-}
-
 /// Ziel-Abrissstärke 0..1 aus zwei Auslösern: Fahrt unter der Abrissfahrt
 /// `vs` (bei der angeforderten g-Last; Defizit relativ, voll ab
 /// `stall_deficit_full`) oder Anstellwinkel über dem Abrisswinkel.

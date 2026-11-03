@@ -40,7 +40,7 @@ use crate::atmosphere::G0;
 use crate::detmath;
 use crate::events::EventLog;
 use crate::gun::{GSH_23L, GSH_30_1, Gun, GunSpec};
-use crate::math::DVec3;
+use crate::math::{DVec3, deg};
 use crate::radar::{Exposure, RadarKind, RadarSpec};
 use crate::rng::Pcg32;
 use crate::weapons::{DecoyKind, WeaponKind};
@@ -55,11 +55,11 @@ const ARRIVE_M: f64 = 3_000.0;
 /// Patrouille: so weit (m) fliegt er nach dem Überflug geradeaus weiter.
 const PATROL_LEG_M: f64 = 12_000.0;
 /// Rakete nur starten, wenn das Flugzeug so nah an der Nase liegt (rad).
-pub const LAUNCH_CONE_RAD: f64 = 30.0 * std::f64::consts::PI / 180.0;
+pub const LAUNCH_CONE_RAD: f64 = deg(30.0);
 /// Kanone: feuert, wenn das Flugzeug näher als so (m) und so nah an der
 /// Nase (rad) liegt (wie im Original: sehr nah, fast genau voraus).
 pub const GUN_RANGE_M: f64 = 1_200.0;
-pub const GUN_CONE_RAD: f64 = 3.0 * std::f64::consts::PI / 180.0;
+pub const GUN_CONE_RAD: f64 = deg(3.0);
 /// Eigener Zufallsstrom je Kanone (plus Nummer des Jägers) und fürs
 /// Pilotenkönnen.
 const STREAM_GUNS: u64 = 0x4A47_554E;
@@ -164,10 +164,6 @@ pub struct FighterSpec {
     pub missile: WeaponKind,
     /// Ausweichmanöver, je Rakete reihum.
     pub evasions: &'static [Evasion],
-}
-
-const fn deg(d: f64) -> f64 {
-    d * std::f64::consts::PI / 180.0
 }
 
 const SPECS: [FighterSpec; 2] = [

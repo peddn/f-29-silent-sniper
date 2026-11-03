@@ -90,9 +90,11 @@ impl Mission {
 
     /// Vorgeschlagene Beladung (wie im Original): Sidewinder und HARM, dazu je
     /// Ziel die Kamera bzw. eine Waffe gegen seine Klasse; die Kamera nur
-    /// einmal.
-    pub fn loadout(&self, targets: &[Target]) -> Loadout {
-        let mut bays = [Some(WeaponKind::Sidewinder), Some(WeaponKind::AntiRadar), None, None];
+    /// einmal. Reicht der Haupttank nicht (`fuel_short`), ersetzt ein
+    /// Zusatztank die HARM.
+    pub fn loadout(&self, targets: &[Target], fuel_short: bool) -> Loadout {
+        let second = if fuel_short { WeaponKind::DropTank } else { WeaponKind::AntiRadar };
+        let mut bays = [Some(WeaponKind::Sidewinder), Some(second), None, None];
         for (k, (i, task)) in self.objectives().enumerate() {
             bays[2 + k] = Some(match task {
                 Task::Recon if !bays.contains(&Some(WeaponKind::Camera)) => WeaponKind::Camera,

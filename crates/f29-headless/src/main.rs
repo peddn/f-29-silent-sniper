@@ -446,7 +446,7 @@ fn airfields(args: &Args) -> Result<(), String> {
         let t = &sim.targets()[i];
         println!("Auftrag: {} {} ({:?})", task.label(), t.name, t.class);
     }
-    println!("Beladung: {}", sim.mission().loadout(sim.targets()).to_text());
+    println!("Beladung: {}", f29_core::weapons::Loadout(sim.stores().bays.map(|b| b.kind)).to_text());
     Ok(())
 }
 

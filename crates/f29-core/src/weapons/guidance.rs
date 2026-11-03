@@ -39,10 +39,7 @@ impl View<'_> {
     /// `None`, wenn es nicht mehr da ist.
     pub(super) fn locate(&self, track: Track) -> Option<(DVec3, DVec3)> {
         match track {
-            Track::Ground(i) => {
-                let c = self.targets.get(i)?.center_ned();
-                Some((DVec3::new(c[0], c[1], c[2]), DVec3::ZERO))
-            }
+            Track::Ground(i) => Some((self.targets.get(i)?.center(), DVec3::ZERO)),
             Track::Aircraft => self.aircraft,
             Track::Fighter(i) => self.fighters.get(i).copied().flatten(),
         }
@@ -94,8 +91,7 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
                 w.tracking = v.designated == Some(i) && t.is_intact();
                 return None;
             }
-            let c = t.center_ned();
-            if angle_between(w.velocity, DVec3::new(c[0], c[1], c[2]) - w.position) > GIVE_UP_RAD {
+            if angle_between(w.velocity, t.center() - w.position) > GIVE_UP_RAD {
                 w.target = None;
                 w.tracking = false;
                 return None;
@@ -106,7 +102,7 @@ pub(super) fn seek(w: &mut Weapon, v: &View<'_>) -> Option<WeaponEvent> {
                     w.position,
                     w.velocity,
                     s.seeker_cone_rad,
-                    center(t),
+                    t.center(),
                     v.terrain,
                     v.los,
                 )

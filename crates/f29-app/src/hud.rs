@@ -42,19 +42,8 @@ fn setup(mut commands: Commands, mut config_store: ResMut<GizmoConfigStore>) {
 }
 
 fn ink_color(ink: Ink) -> Color {
-    match ink {
-        Ink::Hud => Color::srgb(0.35, 1.0, 0.45),
-        Ink::HudDim => Color::srgb(0.15, 0.62, 0.25),
-        Ink::Warning => Color::srgb(1.0, 0.33, 0.25),
-        Ink::WarningOptical => Color::srgb(1.0, 0.63, 0.19),
-        Ink::HudWarning => Color::srgb(0.35, 0.63, 1.0),
-        Ink::Panel => Color::srgb(0.82, 0.84, 0.86),
-        Ink::PanelDim => Color::srgb(0.42, 0.44, 0.48),
-        Ink::Needle => Color::srgb(1.0, 0.86, 0.3),
-        Ink::Mfd => Color::srgb(0.4, 0.87, 0.93),
-        Ink::MfdDim => Color::srgb(0.2, 0.47, 0.53),
-        Ink::MfdGrid => Color::srgb(0.13, 0.27, 0.33),
-    }
+    let [r, g, b] = ink.srgb();
+    Color::srgb(r, g, b)
 }
 
 /// Linienstärke wächst mit der Auflösung – das HUD sieht überall gleich aus.
@@ -87,7 +76,7 @@ fn draw_hud(
     }
     let layout = layout_for(&window, &view);
 
-    let fd = state.sim.flight_data();
+    let fd = &state.fd;
     // Hintergrund des Instrumentenbretts; nach dem Missionsende deckt er als
     // Grund der Nachbesprechung das ganze Fenster (später ein Bild).
     let covered = state.covered();
@@ -117,7 +106,7 @@ fn draw_hud(
     } else if state.menu.is_some() {
         f29_hud::draw_menu(&layout, &crate::menu::page(&state))
     } else {
-        f29_hud::build(&fd, &layout, &opts, maps.map.as_deref())
+        f29_hud::build(fd, &layout, &opts, maps.map.as_deref())
     };
     for line in &list.lines {
         gizmos.line_2d(

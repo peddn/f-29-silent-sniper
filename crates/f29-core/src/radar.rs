@@ -279,8 +279,7 @@ impl RadarNet {
             if !(tick + site.phase_ticks).is_multiple_of(site.sweep_ticks()) {
                 continue;
             }
-            let c = t.center_ned();
-            let at = DVec3::new(c[0], c[1], c[2]);
+            let at = t.center();
             let signal = x.signal(&site.spec, at);
             self.sites[k].painted = false;
             if signal <= 0.0 {

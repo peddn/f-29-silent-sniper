@@ -187,7 +187,7 @@ fn head_look(
     mut look: ResMut<HeadLook>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
 ) {
-    let fd = state.sim.flight_data();
+    let fd = &state.fd;
     let hanging = fd.pilot.is_some_and(|p| p.chute > 0.0) && !fd.mission_over && !state.paused;
     let grab = if hanging { CursorGrabMode::Locked } else { CursorGrabMode::None };
     if cursor.grab_mode != grab {
@@ -205,7 +205,7 @@ fn head_look(
 /// Der Schirm über dem Piloten: entfaltet sich, bleibt aufrecht.
 fn show_chute(state: Res<SimState>, mut chute: Single<(&mut Transform, &mut Visibility), With<Chute>>) {
     let (t, vis) = &mut *chute;
-    let open = state.sim.flight_data().pilot.map_or(0.0, |p| p.chute as f32);
+    let open = state.fd.pilot.map_or(0.0, |p| p.chute as f32);
     let want = if open > 0.0 { Visibility::Inherited } else { Visibility::Hidden };
     if **vis != want {
         **vis = want;

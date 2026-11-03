@@ -2,6 +2,7 @@
 //! und Rolle in der Mission. Klassen und Formen stehen in `f29_world`; ein
 //! Kennzeichen markiert zivile Ziele, die nicht angegriffen werden sollen.
 
+use crate::math::DVec3;
 use crate::radar::{self, RadarSpec};
 use crate::weapons::WeaponKind;
 use f29_world::theater::intern;
@@ -59,8 +60,8 @@ pub struct Target {
 
 impl Target {
     /// Mittelpunkt der Form in NED (für Erfassung und Anzeige).
-    pub fn center_ned(&self) -> [f64; 3] {
-        [self.north, self.east, -(self.elevation + self.class.height() * 0.5)]
+    pub fn center(&self) -> DVec3 {
+        DVec3::new(self.north, self.east, -(self.elevation + self.class.height() * 0.5))
     }
 
     pub fn is_intact(&self) -> bool {

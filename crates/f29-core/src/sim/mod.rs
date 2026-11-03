@@ -69,8 +69,7 @@ pub const CRUISE_FUEL_KG_PER_KM: f64 = 11.0;
 /// Treibstoffbedarf der Route samt Reserve (kg) – wie das „Fuel Estimate“
 /// des Originals allein aus der Streckenlänge (M-036).
 pub fn fuel_required_kg(route: &[Steerpoint]) -> f64 {
-    let m: f64 = route.windows(2).map(|w| (w[1].north - w[0].north).hypot(w[1].east - w[0].east)).sum();
-    m / 1_000.0 * CRUISE_FUEL_KG_PER_KM + FUEL_RESERVE_KG
+    crate::nav::route_length_m(route) / 1_000.0 * CRUISE_FUEL_KG_PER_KM + FUEL_RESERVE_KG
 }
 /// „FUEL LOW“ unter diesem Anteil der Tankfüllung.
 const FUEL_LOW_FRACTION: f64 = 0.15;
@@ -424,7 +423,6 @@ pub struct Sim {
     contact_cursor: usize,
     /// Auftrag (M-032) und erledigte Aufklärung je Ziel.
     mission: Mission,
-    /// Bodenziele, die das Flugzeug entdeckt haben (Einsatzregeln).
     /// Der eine Ereignisstrom (die letzten Ereignisse aller Teilsysteme).
     events: EventLog<Event, EVENTS_KEPT>,
     /// Flugprotokoll (M-032).
@@ -455,7 +453,7 @@ impl Sim {
         let mut aircraft = match (sp.kind, &home) {
             (SpawnKind::Runway, Some(rw)) => {
                 let p = rw.world(-rw.length_m * 0.5 + RUNWAY_START_OFFSET_M, 0.0);
-                let heading = rw.heading_deg * (std::f64::consts::PI / 180.0);
+                let heading = rw.heading_rad();
                 let mut a =
                     AircraftState::level(p[0], p[1], rw.elevation_m + spec.gear_height_m, heading, 0.0);
                 a.on_ground = true;
@@ -478,15 +476,7 @@ impl Sim {
             }
         }
         let route = mission::route(&plan, &terrain, &targets);
-        // Vorschlag wie im Original: reicht der Tank nicht, ersetzt ein
-        // Zusatztank die HARM.
-        let suggested = || {
-            let mut l = plan.loadout(&targets);
-            if fuel_required_kg(&route) > aircraft.fuel_kg {
-                l.0[1] = Some(WeaponKind::DropTank);
-            }
-            l
-        };
+        let suggested = || plan.loadout(&targets, fuel_required_kg(&route) > aircraft.fuel_kg);
         let stores = Stores::new(&sp.loadout.unwrap_or_else(suggested), seed);
         aircraft.stores_kg = stores.mass_kg();
         if !aircraft.on_ground {
@@ -592,7 +582,15 @@ impl Sim {
     }
 
     /// Einen Tick (1/120 s) simulieren.
+    /// Ein Takt; danach in jedem Fall die Ereignisse abholen und Auftrag und
+    /// Protokoll fortführen.
     pub fn step(&mut self, controls: ControlFrame) {
+        self.advance(controls);
+        self.collect_events();
+        self.update_mission();
+    }
+
+    fn advance(&mut self, controls: ControlFrame) {
         self.tick += 1;
         self.last_controls = controls;
         if controls.has(flags::NEXT_STEERPOINT) && !self.route.is_empty() {
@@ -609,14 +607,10 @@ impl Sim {
             self.fighters.step(self.tick, DT, &self.terrain, self.radar.latest_ping_point(), None);
             self.step_unmanned();
             self.step_pilot();
-            self.collect_events();
-            self.update_mission();
             return;
         }
         if controls.has_weapon(weapon_flags::EJECT) {
             self.eject();
-            self.collect_events();
-            self.update_mission();
             return;
         }
         self.update_weapon_controls(&controls);
@@ -651,8 +645,6 @@ impl Sim {
                 gun::predict_impact(a.position, a.velocity, a.attitude, &self.terrain)
             };
         }
-        self.collect_events();
-        self.update_mission();
     }
 
     /// Auftrag (M-032): Fotos der Aufklärungsziele abhaken; Einsatzregeln
@@ -1193,7 +1185,7 @@ impl Sim {
                 .iter()
                 .enumerate()
                 .filter(|(_, t)| t.is_intact())
-                .map(|(i, t)| (i, center(t)))
+                .map(|(i, t)| (i, t.center()))
                 .collect(),
             MarkKind::Air => self
                 .fighters
@@ -1245,7 +1237,7 @@ impl Sim {
         for _ in 0..CONTACTS_PER_UPDATE.min(n) {
             let i = self.contact_cursor % n;
             self.contact_cursor = (i + 1) % n;
-            self.ground_seen[i] = self.sensors.sees(&self.terrain, pos, center(&self.targets[i]));
+            self.ground_seen[i] = self.sensors.sees(&self.terrain, pos, self.targets[i].center());
         }
         if let Some(i) = self.picks.ground.index {
             self.ground_seen[i] = self.picks.ground.seen;
@@ -1563,12 +1555,6 @@ impl Sim {
 
 /// Nicklage beim Aufsetzen, unter der das Bugrad zuerst aufschlägt (rad).
 const NOSE_FIRST_PITCH: f64 = -0.087;
-
-/// Mitte eines Bodenziels (NED).
-fn center(t: &Target) -> DVec3 {
-    let c = t.center_ned();
-    DVec3::new(c[0], c[1], c[2])
-}
 
 /// Bahnmitte (NED).
 fn runway_point(r: &f29_world::Runway) -> DVec3 {

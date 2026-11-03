@@ -135,10 +135,6 @@ pub struct WeaponSpec {
     pub illuminated_beyond_m: f64,
 }
 
-pub(super) const fn deg(d: f64) -> f64 {
-    d * std::f64::consts::PI / 180.0
-}
-
 /// Gemeinsame Grundwerte einer 250-kg-Bombe.
 const BOMB: WeaponSpec = WeaponSpec {
     kind: WeaponKind::FreeFall,

@@ -66,12 +66,6 @@ impl ScreenLayout {
         Rect { min: [-self.aspect * 0.5, -0.5], max: [self.aspect * 0.5, -0.5 + self.panel_fraction] }
     }
 
-    /// 3D-Ansicht als Anteil des Fensters, Ursprung oben links (für Viewports).
-    /// Rückgabe: `(x, y, breite, höhe)` jeweils 0..1.
-    pub fn view_viewport_fraction(&self) -> (f32, f32, f32, f32) {
-        (0.0, 0.0, 1.0, 1.0 - self.panel_fraction)
-    }
-
     /// Brennweite der Ansicht in Bildschirmeinheiten.
     pub fn focal(&self) -> f32 {
         let vh = 1.0 - self.panel_fraction;

@@ -29,10 +29,8 @@ impl Sim {
             lines.push(format!("{label}: {} {}", task.label(), t.name));
             lines.push(format!("    {from} KM FROM {}", home.name));
         }
-        let route: f64 =
-            self.route.windows(2).map(|w| (w[1].north - w[0].north).hypot(w[1].east - w[0].east)).sum();
         lines.push(String::new());
-        lines.push(format!("ROUTE {} KM", km(route)));
+        lines.push(format!("ROUTE {} KM", km(crate::nav::route_length_m(&self.route))));
         let (need, have) = (self.fuel_required_kg(), self.fuel_carried_kg());
         lines.push(format!("FUEL ESTIMATE {need:.0} KG, CARRIED {have:.0} KG"));
         if self.mission.has_recon() {

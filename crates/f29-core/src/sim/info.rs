@@ -506,8 +506,7 @@ impl Sim {
             if !t.is_intact() {
                 continue;
             }
-            let c = t.center_ned();
-            let at = DVec3::new(c[0], c[1], c[2]);
+            let at = t.center();
             let range_m = (at - x.position).length();
             let signal = x.signal(&s.spec, at);
             if signal <= 0.0 {
@@ -569,7 +568,7 @@ impl Sim {
         let ground = self.targets.iter().enumerate().filter(|(_, t)| t.is_intact());
         let ground = ground.map(|(i, t)| {
             let selected = p.ground.index == Some(i);
-            (MarkKind::Ground, super::center(t), self.ground_seen[i], selected, selected && zone_locked)
+            (MarkKind::Ground, t.center(), self.ground_seen[i], selected, selected && zone_locked)
         });
         let air = self.fighters.list.iter().filter(|f| f.airborne()).map(|f| {
             let selected = p.air.index == Some(f.id as usize);
@@ -683,8 +682,7 @@ impl Sim {
         let target = self.picks.ground.index.and_then(|i| {
             let seen = self.picks.ground.seen;
             let t = self.targets.get(i)?;
-            let c = t.center_ned();
-            let to_center = DVec3::new(c[0] - a.position.x, c[1] - a.position.y, c[2] - a.position.z);
+            let to_center = t.center() - a.position;
             Some(TargetInfo {
                 index: i,
                 name: t.name,
@@ -721,7 +719,7 @@ impl Sim {
                 runway_heading: sp
                     .runway
                     .and_then(|i| self.terrain.runways().get(i))
-                    .map(|rw| rw.heading_deg * (std::f64::consts::PI / 180.0)),
+                    .map(|rw| rw.heading_rad()),
             }
         });
 

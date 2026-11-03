@@ -99,7 +99,7 @@ fn show(
 ) {
     let h = window.height();
     let arming = state.menu == Some(crate::menu::Screen::Arming);
-    let bays = state.sim.flight_data().stores.bays;
+    let bays = state.sim.stores().bays;
     for (bay, mut sprite, mut t, mut vis) in &mut sprites {
         let image = bays[bay.0].kind.filter(|_| arming).and_then(|k| art.0.get(&k));
         let Some((handle, aspect)) = image else {

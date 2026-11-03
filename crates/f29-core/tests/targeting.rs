@@ -39,8 +39,8 @@ fn nearest_in_cone(sim: &Sim, look: LookDir, range: f64) -> Option<usize> {
         .enumerate()
         .filter(|(_, t)| t.is_intact())
         .filter_map(|(i, t)| {
-            let c = t.center_ned();
-            let d = [c[0] - a.position.x, c[1] - a.position.y, c[2] - a.position.z];
+            let c = t.center();
+            let d = [c.x - a.position.x, c.y - a.position.y, c.z - a.position.z];
             let r = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
             let off = detmath::wrap_pi(detmath::atan2(d[1], d[0]) - heading).abs();
             (r <= range && off <= CONE_HALF_RAD).then_some((r, i))
@@ -113,12 +113,9 @@ fn optical_lock_needs_line_of_sight_and_is_shorter_ranged() {
         let Some(t) = sim.flight_data().target else { continue };
         let a = sim.aircraft().position;
         let tgt = &sim.targets()[t.index];
-        let c = tgt.center_ned();
-        let los = sensors::line_of_sight(
-            |n, e| sim.terrain().elevation(n, e),
-            [a.x, a.y, -a.z],
-            [c[0], c[1], -c[2]],
-        );
+        let c = tgt.center();
+        let los =
+            sensors::line_of_sight(|n, e| sim.terrain().elevation(n, e), [a.x, a.y, -a.z], [c.x, c.y, -c.z]);
         if t.optical {
             optical += 1;
             assert!(t.range <= OPTICAL_RANGE_M && los, "optisch ohne Sicht oder zu weit");
@@ -140,9 +137,9 @@ fn same_direction_cycles_through_targets_by_range() {
     step(&mut sim, ControlFrame::look_flags(LookDir::Forward.code()), 0);
     let first = sim.picks().ground.index.expect("Wahl");
     let range = |sim: &Sim, i: usize| {
-        let c = sim.targets()[i].center_ned();
+        let c = sim.targets()[i].center();
         let p = sim.aircraft().position;
-        ((c[0] - p.x).powi(2) + (c[1] - p.y).powi(2) + (c[2] - p.z).powi(2)).sqrt()
+        ((c.x - p.x).powi(2) + (c.y - p.y).powi(2) + (c.z - p.z).powi(2)).sqrt()
     };
     let mut seen = vec![first];
     for _ in 0..40 {
@@ -240,8 +237,8 @@ fn own_contacts_follow_sensor_ranges() {
     let p = sim.aircraft().position;
     let mut inside = 0;
     for (i, t) in sim.targets().iter().enumerate() {
-        let c = t.center_ned();
-        let r = ((c[0] - p.x).powi(2) + (c[1] - p.y).powi(2) + (c[2] - p.z).powi(2)).sqrt();
+        let c = t.center();
+        let r = ((c.x - p.x).powi(2) + (c.y - p.y).powi(2) + (c.z - p.z).powi(2)).sqrt();
         let own = fd.own_contacts.contains(&i);
         if r > RADAR_RANGE_M.max(OPTICAL_RANGE_M) + 2_000.0 {
             assert!(!own, "Ziel {i} in {r:.0} m ist kein eigener Kontakt");
@@ -250,7 +247,7 @@ fn own_contacts_follow_sensor_ranges() {
             && f29_core::sensors::line_of_sight(
                 |n, e| sim.terrain().elevation(n, e),
                 [p.x, p.y, -p.z],
-                [c[0], c[1], -c[2]],
+                [c.x, c.y, -c.z],
             )
         {
             assert!(own, "Ziel {i} in {r:.0} m sollte per Radar erfasst sein");

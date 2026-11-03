@@ -257,7 +257,7 @@ pub fn update_camera_and_aircraft(
 
     let (cam, retro, fog) = &mut *camera;
     fog.color = if night { night_sky_color() } else { haze_color() };
-    let pilot = state.sim.flight_data().pilot;
+    let pilot = state.fd.pilot;
     view.ejected = pilot.is_some();
     if let Some(p) = pilot {
         // Am Piloten: Weltursprung dort, das Flugzeug fliegt allein weiter.

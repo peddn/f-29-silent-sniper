@@ -24,7 +24,10 @@
 ```
 
 Abhängigkeiten zeigen nur nach unten. **Nur `f29-app` kennt Bevy.** Alles andere
-kompiliert und testet ohne Grafikkarte, ohne Fenster und ohne externe Crates.
+kompiliert und testet ohne Grafikkarte und ohne Fenster. Fremde Crates nur, wo
+nötig: `serde`/`ron` (Gebietsdaten in `f29-world`), `png` (`f29-headless`),
+`resvg` (SVG-Grafiken der Ausrüstung in `f29-app`); der Simulationskern selbst
+hat keine eigenen.
 
 | Crate | Aufgabe |
 |---|---|

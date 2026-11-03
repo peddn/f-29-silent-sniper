@@ -192,16 +192,6 @@ impl TargetClass {
             TargetClass::ShortRangeSam => (&["SHORT RANGE SAM"], &[]),
         }
     }
-
-    /// Anteil ziviler Objekte dieser Klasse.
-    pub fn civilian_share(self) -> f64 {
-        match self {
-            TargetClass::Building => 0.3,
-            TargetClass::ShipSmall => 0.3,
-            TargetClass::ShipLarge => 0.4,
-            _ => 0.0,
-        }
-    }
 }
 
 #[cfg(test)]

@@ -107,7 +107,7 @@ const ARM_ITEMS: usize = WeaponKind::ALL.len() + 2;
 /// Inhalt des Bewaffnungsbildschirms; `blink` ist der Takt des Blinkens.
 pub fn arming(state: &SimState, blink: bool) -> Arming {
     let sim = &state.sim;
-    let bays = sim.flight_data().stores.bays.map(|b| b.kind.map(|k| (k.label().to_string(), b.count)));
+    let bays = sim.stores().bays.map(|b| b.kind.map(|k| (k.label().to_string(), b.count)));
     let items = WeaponKind::ALL
         .iter()
         .map(|k| k.spec().name.to_string())
@@ -158,7 +158,7 @@ fn arm(state: &mut SimState, (up, down, left, right, ok): (bool, bool, bool, boo
             state.arm_bay = Some(k);
             if ok {
                 let mut config = state.sim.config().clone();
-                let mut l = Loadout(state.sim.flight_data().stores.bays.map(|b| b.kind));
+                let mut l = Loadout(state.sim.stores().bays.map(|b| b.kind));
                 l.0[k] = WeaponKind::ALL.get(state.cursor).copied();
                 config.spawn.loadout = Some(l);
                 state.reset(config);

@@ -40,7 +40,7 @@
 use crate::atmosphere::{self, G0};
 use crate::detmath;
 use crate::events::EventLog;
-use crate::math::{DQuat, DVec3};
+use crate::math::{DQuat, DVec3, deg};
 use crate::rng::Pcg32;
 use crate::rules::Rules;
 use crate::sensors::{self, line_of_sight};
@@ -98,7 +98,7 @@ const GIVE_UP_RAD: f64 = 3.0 * std::f64::consts::FRAC_PI_4;
 const PREDICT_STEPS: f64 = 4.0;
 /// Boden-Luft-Raketen starten mindestens so steil über der Linie zum
 /// Flugzeug (rad, 10° – innerhalb des Suchkegels).
-const SAM_DIRECT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
+const SAM_DIRECT_RAD: f64 = deg(10.0);
 /// Vorhalt höchstens für so viele Sekunden Restflugzeit.
 const MAX_LEAD_S: f64 = 10.0;
 /// Startgeschwindigkeit der Boden-Luft-Raketen (m/s).
@@ -332,7 +332,7 @@ impl Weapon {
                 } else {
                     let ground = lock.filter(|(_, t)| t.is_intact() && seeker.sees(t.class));
                     (
-                        ground.map(|(i, t)| (Track::Ground(i), center(t), l.lock_optical)),
+                        ground.map(|(i, t)| (Track::Ground(i), t.center(), l.lock_optical)),
                         sensors::GROUND_CIRCLE_RAD,
                     )
                 };
@@ -376,8 +376,7 @@ impl Weapon {
     /// solange der Suchkopf sie hat.
     pub fn aim_point(&self, targets: &[Target]) -> Option<DVec3> {
         let t = targets.get(self.ground_target()?).filter(|_| self.tracking)?;
-        let c = t.center_ned();
-        Some(DVec3::new(c[0], c[1], c[2]))
+        Some(t.center())
     }
 }
 
@@ -564,9 +563,9 @@ pub const PHOTO_INTERVAL_S: f64 = 0.8;
 /// Ein Foto zählt bis zu dieser Entfernung zum Ziel (m; Spielerwunsch v0.3).
 pub const PHOTO_RANGE_M: f64 = 1_500.0;
 /// … und so weit (rad) um die Sichtlinie der Kamera (Spielerwunsch v0.3).
-pub const PHOTO_CONE_RAD: f64 = 5.0 * std::f64::consts::PI / 180.0;
+pub const PHOTO_CONE_RAD: f64 = deg(5.0);
 /// Die Kamera blickt so weit (rad) unter die Rumpflängsachse.
-pub const CAMERA_TILT_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
+pub const CAMERA_TILT_RAD: f64 = deg(10.0);
 
 /// Sichtlinie der Kamera im Rumpfsystem (vorn, rechts, unten).
 pub fn camera_axis() -> DVec3 {
@@ -583,7 +582,7 @@ fn photo_target(l: &Launch<'_>) -> Option<usize> {
 
 /// Läge das (stehende) Ziel jetzt gültig im Bild der Kamera?
 pub fn in_photo(position: DVec3, attitude: DQuat, t: &Target) -> bool {
-    let to = center(t) - position;
+    let to = t.center() - position;
     t.is_intact()
         && to.length() <= PHOTO_RANGE_M
         && angle_between(attitude.rotate(camera_axis()), to) <= PHOTO_CONE_RAD
@@ -596,12 +595,6 @@ fn angle_between(a: DVec3, b: DVec3) -> f64 {
         return std::f64::consts::PI;
     }
     detmath::acos((a.dot(b) / (la * lb)).clamp(-1.0, 1.0))
-}
-
-/// Mitte eines Bodenziels (NED).
-fn center(t: &Target) -> DVec3 {
-    let c = t.center_ned();
-    DVec3::new(c[0], c[1], c[2])
 }
 
 /// Was der Suchkopf der Waffe `kind` überhaupt sucht, mit Ort: Jäger für
@@ -620,7 +613,7 @@ fn candidates(
     }
     let seeker = kind.spec().seeker;
     let ground = targets.iter().enumerate().filter(|(_, t)| t.is_intact() && seeker.sees(t.class));
-    ground.map(|(i, t)| (Track::Ground(i), center(t))).collect()
+    ground.map(|(i, t)| (Track::Ground(i), t.center())).collect()
 }
 
 /// Sieht der Suchkopf in `pos` mit Blickrichtung `dir` den Punkt `at`
@@ -980,8 +973,7 @@ impl Stores {
             .enumerate()
             .filter(|(_, t)| t.is_intact())
             .filter_map(|(i, t)| {
-                let c = t.center_ned();
-                let d = DVec3::new(c[0], c[1], c[2]) - p;
+                let d = t.center() - p;
                 let miss = ((d.x * d.x + d.y * d.y).sqrt() - t.class.radius())
                     .max(0.0)
                     .max(d.z.abs() - t.class.height());

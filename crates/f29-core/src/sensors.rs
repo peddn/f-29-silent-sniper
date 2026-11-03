@@ -19,7 +19,7 @@
 //! das Schalten des Radars wirkt sofort.
 
 use crate::detmath;
-use crate::math::DVec3;
+use crate::math::{DVec3, deg};
 use f29_world::Terrain;
 
 /// Reichweite des Radars (m, Spielerentscheidung v0.2.7), Tag wie Nacht.
@@ -35,8 +35,8 @@ pub const CONE_HALF_RAD: f64 = std::f64::consts::FRAC_PI_4;
 /// Erfassungskreis um die Nase (halber Öffnungswinkel, rad): Liegt das
 /// gewählte Ziel darin, ist es erfasst und wird an eine Rakete übergeben –
 /// eine Regel, die Größe je Zielart (Spielerentscheidung v0.2.9).
-pub const AIR_CIRCLE_RAD: f64 = 10.0 * std::f64::consts::PI / 180.0;
-pub const GROUND_CIRCLE_RAD: f64 = 6.0 * std::f64::consts::PI / 180.0;
+pub const AIR_CIRCLE_RAD: f64 = deg(10.0);
+pub const GROUND_CIRCLE_RAD: f64 = deg(6.0);
 /// Erfassung alle so viele Ticks (4 Hz).
 pub const UPDATE_TICKS: u64 = 30;
 /// Abstand der Prüfpunkte entlang der Sichtlinie (m).

@@ -2055,7 +2055,7 @@ Format jedes Eintrags:
     und ersetzt die Verschiebung durch das Regelset; das Regelset bestimmt
     nur noch Einsatzregeln und Bedrohungsdichte.
   - **Flugverhalten:** bezieht sich auf die Landung; über die
-    Landegrenzwerte umsetzen (M-005). Realistisch = heutige Werte
+    Landegrenzwerte umsetzen (M-042). Realistisch = heutige Werte
     (anspruchsvoll, aber gut machbar). Leicht das Anderthalbfache aller
     Grenzen (das Doppelte des Originals wäre bei unseren schon gelockerten
     Werten ein Aufprall): gut bis 6 m/s, Bruch ab 10,5 m/s, Querlage bis
@@ -2083,7 +2083,7 @@ Format jedes Eintrags:
   Blick vorn/hinten am Joystick wählen, Leertaste/Enter/Auslöser
   bestätigt. Die Simulation steht im Menü still und trägt schon die
   Mission. Nach der Nachbesprechung geht es mit einer neuen Mission zurück
-  zum Dienstplan. Gegnerqualität und Flugverhalten wirken (M-022, M-005) und
+  zum Dienstplan. Gegnerqualität und Flugverhalten wirken (M-022, M-042) und
   stehen im Replay (Format 12); „leicht“ = Landegrenzen ×1,5 (gut bis
   6 m/s, Bruch ab 10,5 m/s, 22,5° Querlage, −7,5° Nase).
 - **Umgesetzt S2 (v0.3):** **Bewaffnung** („Arm Your Plane“): oben

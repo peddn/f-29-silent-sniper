@@ -3,7 +3,7 @@
 use crate::input::PilotInput;
 use bevy::prelude::*;
 use f29_core::replay::Replay;
-use f29_core::{DQuat, DT, DVec3, Sim, SimConfig};
+use f29_core::{DQuat, DT, DVec3, FlightData, Sim, SimConfig};
 use std::path::PathBuf;
 
 pub const DEFAULT_SEED: u64 = 0x0F29;
@@ -84,11 +84,14 @@ pub struct SimState {
     pub cursor: usize,
     /// Bewaffnung: Fokus auf diesem Schacht statt auf der Liste.
     pub arm_bay: Option<usize>,
+    /// Momentaufnahme für alle Anzeigen, einmal je Bild nach dem Takten.
+    pub fd: FlightData,
 }
 
 impl SimState {
     pub fn new(config: SimConfig) -> Self {
         let sim = Sim::new(config);
+        let fd = sim.flight_data();
         let pose = Pose::of(&sim);
         let recorder = Replay::new(sim.config().clone());
         Self {
@@ -102,6 +105,7 @@ impl SimState {
             menu: None,
             cursor: 0,
             arm_bay: None,
+            fd,
         }
     }
 
@@ -172,6 +176,7 @@ fn step_simulation(
         return;
     }
     let state = &mut *state;
+    let start = state.sim.tick();
     state.accumulator += time.delta_secs_f64().min(0.25) * f64::from(state.time_scale);
     let mut steps = 0;
     while state.accumulator >= DT && steps < MAX_STEPS_PER_FRAME {
@@ -194,5 +199,8 @@ fn step_simulation(
     if steps == MAX_STEPS_PER_FRAME {
         // Rückstand verwerfen statt ihn aufzuholen
         state.accumulator = state.accumulator.min(DT);
+    }
+    if state.sim.tick() != start {
+        state.fd = state.sim.flight_data();
     }
 }

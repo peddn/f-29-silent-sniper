@@ -2,7 +2,7 @@
 
 use crate::font;
 
-/// Logische Farbe; das Frontend ordnet sie einer Palettenfarbe zu.
+/// Logische Farbe ([`Ink::srgb`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Ink {
     /// HUD-Symbolik (klassisch grün).
@@ -27,6 +27,25 @@ pub enum Ink {
     MfdDim,
     /// Kartengitter.
     MfdGrid,
+}
+
+impl Ink {
+    /// Farbe (sRGB 0..1) – eine Tabelle für Spiel und SVG-Export.
+    pub fn srgb(self) -> [f32; 3] {
+        match self {
+            Ink::Hud => [0.35, 1.0, 0.45],
+            Ink::HudDim => [0.15, 0.62, 0.25],
+            Ink::Warning => [1.0, 0.33, 0.25],
+            Ink::WarningOptical => [1.0, 0.63, 0.19],
+            Ink::HudWarning => [0.35, 0.63, 1.0],
+            Ink::Panel => [0.82, 0.84, 0.86],
+            Ink::PanelDim => [0.42, 0.44, 0.48],
+            Ink::Needle => [1.0, 0.86, 0.3],
+            Ink::Mfd => [0.4, 0.87, 0.93],
+            Ink::MfdDim => [0.2, 0.47, 0.53],
+            Ink::MfdGrid => [0.13, 0.27, 0.33],
+        }
+    }
 }
 
 /// Ein Liniensegment in Bildschirmeinheiten.

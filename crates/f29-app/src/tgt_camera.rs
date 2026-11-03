@@ -150,7 +150,7 @@ fn update(
     let (cam, cam_transform, projection, effect) = &mut *camera;
     let (sprite_transform, sprite, visibility) = &mut *screen;
     let h = window.height();
-    let fd = state.sim.flight_data();
+    let fd = &state.fd;
     let mfd = layout_for(&window, &settings).mfd_layout().filter(|_| !state.covered());
     // Neue Waffe mit Kamera abgefeuert: selbst auf die WPN-CAM-Seite schalten.
     let cam_id = fd.weapon_cam.map(|c| c.id);
@@ -161,7 +161,7 @@ fn update(
 
     // Augpunkt, Zielpunkt, halbes Sichtfeld und Rauschen je Seite.
     // Dunkle oder flackernde Anzeigen (Schadensmodell) zeigen kein Kamerabild.
-    let on = f29_hud::displays_on(&fd);
+    let on = f29_hud::displays_on(fd);
     let eye = || rotation(state.render_pose().attitude) * MOUNT;
     let optical = state.sim.sensors().optical_range().max(1.0);
     let shot = match view.0.right_page {
@@ -197,8 +197,7 @@ fn update(
         }),
         RightPage::Target => fd.target.filter(|t| t.optical && on).map(|t| {
             let tgt = &state.sim.targets()[t.index];
-            let [n, e, d] = tgt.center_ned();
-            let aim = place(f29_core::DVec3::new(n, e, d), origin.0);
+            let aim = place(tgt.center(), origin.0);
             let eye = eye();
             let half = (tgt.class.radius() / TARGET_FILL).atan2((aim - eye).length().max(1.0) as f64) as f32;
             (eye, aim, half, NEAR_M, 0.6 + 0.8 * (t.range / optical) as f32)

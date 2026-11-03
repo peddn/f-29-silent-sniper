@@ -297,7 +297,7 @@ fn sync_weapons(
     mut chutes: Query<(&ChildOf, &mut Visibility), With<Chute>>,
 ) {
     let seed = state.sim.config().seed;
-    let restarted = visuals.seed != Some(seed) || state.sim.flight_data().tick < visuals.last_event_tick;
+    let restarted = visuals.seed != Some(seed) || state.sim.tick() < visuals.last_event_tick;
     if restarted {
         for (_, e) in std::mem::take(&mut visuals.entities) {
             commands.entity(e).despawn();

@@ -71,6 +71,11 @@ const DIRECTIONS: [[f64; 2]; 8] = [
 ];
 
 impl Runway {
+    /// Bahnrichtung im Bogenmaß.
+    pub fn heading_rad(&self) -> f64 {
+        self.heading_deg * (std::f64::consts::PI / 180.0)
+    }
+
     /// Bahnkoordinaten: `u` entlang `dir`, `v` nach rechts quer dazu.
     pub fn local(&self, x: f64, y: f64) -> (f64, f64) {
         let dx = x - self.center[0];

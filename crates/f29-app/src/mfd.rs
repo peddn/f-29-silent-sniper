@@ -142,7 +142,7 @@ fn place_screens(
 ) {
     let h = window.height();
     let layout = layout_for(&window, &settings);
-    let fd = state.sim.flight_data();
+    let fd = &state.fd;
     // Nach dem Missionsende deckt die Nachbesprechung das Brett.
     let mfd = layout.mfd_layout().filter(|_| !state.covered());
     let raster = match view.0.map_mode {
@@ -150,7 +150,7 @@ fn place_screens(
         MapMode::Satellite => &assets.rasters[1],
     }
     .as_ref()
-    .filter(|_| f29_hud::displays_on(&fd));
+    .filter(|_| f29_hud::displays_on(fd));
     for (screen, mut transform, mut sprite, mut vis) in &mut screens {
         let Some(m) = mfd else {
             *vis = Visibility::Hidden;

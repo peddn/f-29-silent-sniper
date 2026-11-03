@@ -4,20 +4,9 @@
 use crate::{DisplayList, Ink, ScreenLayout};
 use std::fmt::Write as _;
 
-fn ink_color(ink: Ink) -> &'static str {
-    match ink {
-        Ink::Hud => "#55ff55",
-        Ink::HudDim => "#22aa22",
-        Ink::Warning => "#ff5555",
-        Ink::WarningOptical => "#ffa030",
-        Ink::HudWarning => "#5aa0ff",
-        Ink::Panel => "#cccccc",
-        Ink::PanelDim => "#666677",
-        Ink::Needle => "#ffff55",
-        Ink::Mfd => "#66ddee",
-        Ink::MfdDim => "#337788",
-        Ink::MfdGrid => "#224455",
-    }
+fn ink_color(ink: Ink) -> String {
+    let [r, g, b] = ink.srgb().map(|c| (c * 255.0).round() as u8);
+    format!("#{r:02x}{g:02x}{b:02x}")
 }
 
 /// Rendert die Display-Liste als SVG mit `height` Pixeln Höhe.

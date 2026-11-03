@@ -338,8 +338,8 @@ fn maverick_sends_its_seeker_image() {
     }
     let cam = sim.flight_data().weapon_cam.expect("Kamerabild");
     assert_eq!(cam.tracking.map(|(i, _)| i), Some(target));
-    let c = sim.targets()[target].center_ned();
-    let to = f29_core::DVec3::new(c[0], c[1], c[2]) - cam.position;
+    let c = sim.targets()[target].center();
+    let to = c - cam.position;
     assert!(cam.look.dot(to.normalize_or_zero()) > 0.9999);
     for _ in 0..ticks(60.0) {
         step(&mut sim, 0, 0);

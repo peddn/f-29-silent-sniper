@@ -132,7 +132,7 @@ impl Approach {
         pitch = pitch.min(alpha_limited_pull(spec, fd, 0.85));
 
         // Seitlich: Kurs auf die Mittellinie.
-        let hdg = rw.heading_deg * (std::f64::consts::PI / 180.0);
+        let hdg = rw.heading_rad();
         let hdg_cmd = hdg - (v * 0.004).clamp(-0.35, 0.35);
         let hdg_err = detmath::wrap_pi(hdg_cmd - fd.heading);
         let bank_cmd = if flare { 0.0 } else { (hdg_err * 2.0).clamp(-0.4, 0.4) };

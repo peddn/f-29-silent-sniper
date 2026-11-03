@@ -25,3 +25,8 @@ impl Steerpoint {
         }
     }
 }
+
+/// Länge der Route über alle Steuerpunkte (m, waagerecht).
+pub fn route_length_m(route: &[Steerpoint]) -> f64 {
+    route.windows(2).map(|w| (w[1].north - w[0].north).hypot(w[1].east - w[0].east)).sum()
+}

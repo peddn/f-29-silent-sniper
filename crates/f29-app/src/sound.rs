@@ -103,7 +103,7 @@ fn start_stream(mut commands: Commands, link: Res<SoundLink>, mut streams: ResMu
 }
 
 fn feed_stream(link: Res<SoundLink>, state: Res<SimState>) {
-    let input = AudioInput::from_flight(&state.sim.flight_data(), state.paused || state.covered());
+    let input = AudioInput::from_flight(&state.fd, state.paused || state.covered());
     if let Ok(mut shared) = link.shared.lock() {
         *shared = input;
     }

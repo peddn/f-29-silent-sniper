@@ -137,8 +137,8 @@ fn missile_pursues_and_fuzes_at_the_target() {
         }
     }
     let Fate::Fuze(p) = fate else { panic!("kein Zünder: {fate:?}") };
-    let c = targets[0].center_ned();
-    assert!((p - DVec3::new(c[0], c[1], c[2])).length() < WeaponKind::AirToGround.spec().lethal_radius_m);
+    let c = targets[0].center();
+    assert!((p - c).length() < WeaponKind::AirToGround.spec().lethal_radius_m);
 }
 
 #[test]
