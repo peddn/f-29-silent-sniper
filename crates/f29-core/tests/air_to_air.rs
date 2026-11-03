@@ -6,7 +6,7 @@ use common::*;
 use f29_core::controls::weapon_flags;
 use f29_core::fighters::Mode;
 use f29_core::sim::Spawn;
-use f29_core::weapons::{Loadout, WeaponEvent, WeaponKind};
+use f29_core::weapons::{Loadout, Struck, WeaponEvent, WeaponKind};
 use f29_core::{DVec3, Sim, SimConfig};
 
 /// Hoch über der Karte, Schacht 1 mit `kind`, ohne Flugabwehr; ein Jäger
@@ -48,7 +48,10 @@ fn shoot(sim: &mut Sim) -> bool {
     step(sim, 0, weapon_flags::RELEASE);
     for _ in 0..ticks(25.0) {
         step(sim, 0, 0);
-        if events_since(sim, t0).iter().any(|e| matches!(e, WeaponEvent::FighterHit { fighter: 0, .. })) {
+        if events_since(sim, t0)
+            .iter()
+            .any(|e| matches!(e, WeaponEvent::Hit { on: f29_core::weapons::Struck::Fighter(0), .. }))
+        {
             return true;
         }
     }
@@ -164,12 +167,17 @@ fn fighter_gun_hits_with_its_strength() {
     fly(&mut sim, 15.0, 0, 0);
     let s = sim.systems();
     assert!(s.hits > 0, "keine Kanonentreffer");
-    let strength = sim.fighters().list[0].spec().gun.strength;
-    assert!((s.damage - strength * f64::from(s.hits)).abs() < 1e-9);
-    let hit = f29_core::sim::Event::Fighter(f29_core::fighters::FighterEvent::GunHit {
-        kind: f29_core::fighters::FighterKind::MiG21,
-    });
-    assert!(sim.events().iter().any(|(_, e)| *e == hit));
+    let strength_of = sim.fighters().list[0].spec().gun.strength;
+    assert!((s.damage - strength_of * f64::from(s.hits)).abs() < 1e-9);
+    // Ein Ereignis je Treffer, mit der Stärke seiner Kanone.
+    use f29_core::sim::{Event, HitBy};
+    let gun = HitBy::Gun(Some(f29_core::fighters::FighterKind::MiG21));
+    let n = sim
+        .events()
+        .iter()
+        .filter(|(_, e)| matches!(e, Event::Hit { on: Struck::Aircraft, by, strength } if *by == gun && *strength == strength_of))
+        .count();
+    assert!(n > 0, "kein Treffer-Ereignis");
 }
 
 /// Kommt eine Rakete nah, dreht der Jäger querab zu ihr.

@@ -387,10 +387,6 @@ pub enum FighterEvent {
         kind: FighterKind,
         id: u32,
     },
-    /// Seine Kanone hat das Flugzeug getroffen.
-    GunHit {
-        kind: FighterKind,
-    },
 }
 
 /// Alle feindlichen Jäger.

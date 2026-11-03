@@ -470,24 +470,28 @@ pub enum WeaponEvent {
     },
     /// Täuschkörper dieser Art sind aufgebraucht.
     DecoyEmpty(DecoyKind),
-    /// Eine eigene Luft-Luft-Rakete hat einen Jäger (Index in
-    /// `Fighters::list`) getroffen.
-    FighterHit {
-        kind: WeaponKind,
-        id: u32,
-        fighter: usize,
-    },
     /// Foto Nummer `n` der Kamera; `target`: das gewählte Ziel, wenn es
     /// gültig im Bild ist (M-032).
     Photo {
         n: u32,
         target: Option<usize>,
     },
-    /// Eine feindliche Rakete hat das Flugzeug getroffen.
-    AircraftHit {
+    /// Eine Rakete hat ein Flugzeug getroffen und detoniert (die Folgen
+    /// bucht das Sim als [`crate::sim::Event::Hit`]).
+    Hit {
         kind: WeaponKind,
         id: u32,
+        on: Struck,
     },
+}
+
+/// Wer getroffen wurde.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Struck {
+    /// Das eigene Flugzeug.
+    Aircraft,
+    /// Ein Jäger (Index in `Fighters::list`).
+    Fighter(usize),
 }
 
 /// Bestand und Zustand der Waffen.
@@ -890,11 +894,13 @@ impl Stores {
                 Fate::Fuze(_) if matches!(w.target, Some(Track::Fighter(_))) => {
                     self.in_flight.remove(i);
                     let Some(Track::Fighter(fighter)) = w.target else { unreachable!() };
-                    self.events.push(world.tick, WeaponEvent::FighterHit { kind: w.kind, id: w.id, fighter });
+                    let on = Struck::Fighter(fighter);
+                    self.events.push(world.tick, WeaponEvent::Hit { kind: w.kind, id: w.id, on });
                 }
                 Fate::Fuze(_) if w.target == Some(Track::Aircraft) => {
                     self.in_flight.remove(i);
-                    self.events.push(world.tick, WeaponEvent::AircraftHit { kind: w.kind, id: w.id });
+                    let on = Struck::Aircraft;
+                    self.events.push(world.tick, WeaponEvent::Hit { kind: w.kind, id: w.id, on });
                 }
                 // Feindlich im Gelände: wirkungslos.
                 Fate::Fuze(p) | Fate::Ground(p) if w.owner.is_some() => {

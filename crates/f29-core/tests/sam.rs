@@ -8,7 +8,7 @@ use f29_core::controls::weapon_flags;
 use f29_core::sim::Spawn;
 use f29_core::systems::System;
 use f29_core::targets::TargetClass;
-use f29_core::weapons::{WeaponEvent, WeaponKind};
+use f29_core::weapons::{Struck, WeaponEvent, WeaponKind};
 use f29_core::{ControlFrame, Sim, SimConfig, TICK_HZ};
 
 /// Luftstart `dist` m südlich der ersten Stellung der Klasse, Kurs Nord auf
@@ -71,7 +71,9 @@ fn sam_site_fires_after_radar_id() {
 #[test]
 fn missile_hit_damages_two_systems() {
     let (mut sim, _) = toward_site(TargetClass::AirDefense, 7_000.0, 800.0);
-    let hit = |s: &Sim| s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. }));
+    let hit = |s: &Sim| {
+        s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::Hit { on: Struck::Aircraft, .. }))
+    };
     assert!(fly_until(&mut sim, 60.0, hit), "kein Treffer");
     // Klang: Treffer am eigenen Flugzeug
     let blast = sim.flight_data().blast.expect("Detonation");
@@ -128,7 +130,9 @@ fn turning_into_the_missile_does_not_help() {
         },
     ));
     assert!(fly_until(&mut sim, 40.0, |s| launched(s).is_some()), "kein Start");
-    let hit = |s: &Sim| s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. }));
+    let hit = |s: &Sim| {
+        s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::Hit { on: Struck::Aircraft, .. }))
+    };
     let mut was_hit = false;
     for _ in 0..(30 * TICK_HZ) {
         let fd = sim.flight_data();
@@ -228,7 +232,7 @@ fn chaff_decoys_the_radar_missile() {
         ev.iter().any(|e| matches!(e, WeaponEvent::Decoyed { kind: WeaponKind::MediumRangeSam, .. })),
         "{ev:?}"
     );
-    assert!(!ev.iter().any(|e| matches!(e, WeaponEvent::AircraftHit { .. })), "{ev:?}");
+    assert!(!ev.iter().any(|e| matches!(e, WeaponEvent::Hit { on: Struck::Aircraft, .. })), "{ev:?}");
 }
 
 /// Die Infrarotrakete (SA-13) lässt sich von Düppeln nicht beirren, wohl
@@ -248,7 +252,7 @@ fn flare_decoys_the_infrared_missile_but_chaff_does_not() {
     let flare = decoy_run(TargetClass::ShortRangeSam, 8_000.0, 3_000.0, weapon_flags::FLARE, 1_500.0);
     let id = decoyed(&flare).expect("SA-13 abgelenkt");
     assert!(
-        !flare.iter().any(|e| matches!(e, WeaponEvent::AircraftHit { id: x, .. } if *x == id)),
+        !flare.iter().any(|e| matches!(e, WeaponEvent::Hit { id: x, on: Struck::Aircraft, .. } if *x == id)),
         "{flare:?}"
     );
 }
@@ -341,7 +345,9 @@ fn no_damage_reports_hits_without_consequences() {
         },
     ));
     step(&mut sim, 0, weapon_flags::NEXT_BAY | weapon_flags::BAY_DOORS);
-    let hit = |s: &Sim| s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. }));
+    let hit = |s: &Sim| {
+        s.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::Hit { on: Struck::Aircraft, .. }))
+    };
     assert!(fly_until(&mut sim, 60.0, hit), "kein Treffer");
     assert!(System::ALL.iter().all(|s| sim.systems().get(*s).is_ok()), "Schaden trotz --no-damage");
     assert_eq!(sim.systems().hits, 0);

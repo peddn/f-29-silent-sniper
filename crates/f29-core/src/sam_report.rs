@@ -136,7 +136,11 @@ pub fn engagement(seed: u64, kind: WeaponKind, south: f64, west: f64, m: Maneuve
             return Some(false);
         }
         sim.step(ap.control(sim.spec(), &fd, DT).with_weapons(weapons));
-        if sim.weapon_events().iter().any(|(_, e)| matches!(e, WeaponEvent::AircraftHit { .. })) {
+        if sim
+            .weapon_events()
+            .iter()
+            .any(|(_, e)| matches!(e, WeaponEvent::Hit { on: crate::weapons::Struck::Aircraft, .. }))
+        {
             return Some(true);
         }
         if sim.status() != Status::Flying {

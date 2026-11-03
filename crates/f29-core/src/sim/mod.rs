@@ -3,7 +3,7 @@
 use crate::controls::{ControlFrame, flags, weapon_flags};
 use crate::detmath;
 use crate::events::EventLog;
-use crate::fighters::{self, FighterEvent, Fighters};
+use crate::fighters::{self, FighterEvent, FighterKind, Fighters};
 use crate::flight::{self, AeroData, AircraftState};
 use crate::flightlog::{Detector, LogEntry};
 use crate::gun::{self, Gun, GunEvent};
@@ -17,7 +17,7 @@ use crate::sensors::{self, LookDir, Pick, Seen, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
 use crate::weapons::{
-    self, Bay, DecoyKind, ImpactResult, LaunchZone, Launcher, Loadout, Seeker, Stores, Track, Weapon,
+    self, Bay, DecoyKind, ImpactResult, LaunchZone, Launcher, Loadout, Seeker, Stores, Struck, Track, Weapon,
     WeaponEvent, WeaponKind,
 };
 use f29_data::{AircraftSpec, F29_SPEC};
@@ -334,13 +334,29 @@ impl Pilot {
     }
 }
 
-/// Ein Ereignis eines Teilsystems im einen Ereignisstrom der Simulation.
+/// Ein Ereignis im einen Ereignisstrom der Simulation: von einem
+/// Teilsystem oder ein Treffer mit seinen Folgen.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     Weapon(WeaponEvent),
     Radar(RadarEvent),
     Gun(GunEvent),
     Fighter(FighterEvent),
+    /// Ein Treffer der Stärke `strength` (Rakete 1) – die eine
+    /// Schadensregel (M-015), gebucht in [`Sim::hit`].
+    Hit {
+        on: Struck,
+        by: HitBy,
+        strength: f64,
+    },
+}
+
+/// Womit getroffen wurde.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HitBy {
+    Missile(WeaponKind),
+    /// Eigene Kanone (`None`) bzw. die eines Jägers.
+    Gun(Option<FighterKind>),
 }
 
 /// So viele Ereignisse hält der Strom (reicht für Meldungen und Effekte).
@@ -697,10 +713,8 @@ impl Sim {
                     ground.push(i);
                     log.push(LogEntry::Destroyed(i));
                 }
-                Event::Weapon(WeaponEvent::FighterHit { fighter, .. })
-                | Event::Gun(GunEvent::AirHit(fighter)) => air.push(fighter),
-                Event::Weapon(WeaponEvent::AircraftHit { .. })
-                | Event::Fighter(FighterEvent::GunHit { .. }) => log.push(LogEntry::Hit),
+                Event::Hit { on: Struck::Fighter(f), .. } => air.push(f),
+                Event::Hit { on: Struck::Aircraft, .. } => log.push(LogEntry::Hit),
                 Event::Radar(RadarEvent::Alert { site, level: 3 }) => {
                     log.push(LogEntry::RadarId(self.radar.sites[site].target))
                 }
@@ -904,20 +918,26 @@ impl Sim {
             let hits = gun.events.take().iter().filter(|(_, e)| *e == GunEvent::AirHit(0)).count();
             let strength = gun.spec.strength;
             for _ in 0..hits {
-                self.fighters.events.push(self.tick, FighterEvent::GunHit { kind: f.kind });
-                self.damage_aircraft(strength);
+                self.hit(Struck::Aircraft, HitBy::Gun(Some(f.kind)), strength);
             }
         }
     }
 
-    /// Ein Treffer der Stärke `strength` am eigenen Flugzeug (Rakete 1): die
-    /// eine Schadensregel für Raketen und Kanonen (M-015).
-    fn damage_aircraft(&mut self, strength: f64) {
-        if !self.config.spawn.invulnerable {
-            let systems = self.stores.roll_systems(strength);
-            self.systems.hit(strength, &systems);
-            self.apply_systems();
+    /// Ein Treffer der Stärke `strength` (Rakete 1): die eine Schadensregel
+    /// für Raketen und Kanonen (M-015) – am Jäger bis zum Abschuss, am
+    /// eigenen Flugzeug über die Bordsysteme. Steht danach als
+    /// [`Event::Hit`] im Ereignisstrom.
+    fn hit(&mut self, on: Struck, by: HitBy, strength: f64) {
+        match on {
+            Struck::Fighter(i) => self.fighters.hit(self.tick, i, strength),
+            Struck::Aircraft if self.config.spawn.invulnerable => {}
+            Struck::Aircraft => {
+                let systems = self.stores.roll_systems(strength);
+                self.systems.hit(strength, &systems);
+                self.apply_systems();
+            }
         }
+        self.events.push(self.tick, Event::Hit { on, by, strength });
     }
 
     /// Regelset der Mission.
@@ -979,12 +999,9 @@ impl Sim {
             || self.events.recent(now, 0).any(|(_, e)| {
                 matches!(
                     e,
-                    Event::Weapon(
-                        WeaponEvent::SamLaunch { .. }
-                            | WeaponEvent::AirLaunch { .. }
-                            | WeaponEvent::AircraftHit { .. }
-                    ) | Event::Radar(RadarEvent::Alert { .. })
-                        | Event::Fighter(FighterEvent::GunHit { .. })
+                    Event::Weapon(WeaponEvent::SamLaunch { .. } | WeaponEvent::AirLaunch { .. })
+                        | Event::Radar(RadarEvent::Alert { .. })
+                        | Event::Hit { on: Struck::Aircraft, .. }
                 )
             })
     }
@@ -1095,9 +1112,10 @@ impl Sim {
         let jets: Vec<(usize, DVec3)> =
             self.fighters.list.iter().filter(|f| f.airborne()).map(|f| (f.id as usize, f.position)).collect();
         self.gun.step(self.tick, &self.terrain, &mut self.targets, &jets, self.aircraft.position, DT);
-        for (_, e) in self.gun.events.iter() {
-            if let GunEvent::AirHit(i) = *e {
-                self.fighters.hit(self.tick, i, self.gun.spec.strength);
+        let now: Vec<_> = self.gun.events.iter().map(|&(_, e)| e).collect();
+        for e in now {
+            if let GunEvent::AirHit(i) = e {
+                self.hit(Struck::Fighter(i), HitBy::Gun(None), self.gun.spec.strength);
             }
         }
     }
@@ -1126,14 +1144,10 @@ impl Sim {
         // Die Wahl bleibt auch auf einem zerstörten Ziel, bis der
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
         self.stores.step(&mut world);
-        // Raketentreffer: am Jäger zerstörend, am Flugzeug über die
-        // Bordsysteme (M-015).
         let now: Vec<_> = self.stores.events.iter().map(|&(_, e)| e).collect();
         for e in now {
-            match e {
-                WeaponEvent::FighterHit { fighter, .. } => self.fighters.hit(self.tick, fighter, 1.0),
-                WeaponEvent::AircraftHit { .. } => self.damage_aircraft(1.0),
-                _ => {}
+            if let WeaponEvent::Hit { kind, on, .. } = e {
+                self.hit(on, HitBy::Missile(kind), 1.0);
             }
         }
     }

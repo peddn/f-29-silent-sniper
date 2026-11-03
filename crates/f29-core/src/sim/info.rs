@@ -979,9 +979,11 @@ impl Sim {
                     let hit = matches!(result, ImpactResult::Destroyed { .. } | ImpactResult::Damaged(_));
                     (id, if hit { BlastKind::TargetHit } else { BlastKind::Miss }, position)
                 }
-                WeaponEvent::AircraftHit { id, .. } => (id, BlastKind::AircraftHit, self.aircraft.position),
-                WeaponEvent::FighterHit { id, fighter, .. } => {
-                    (id, BlastKind::TargetHit, self.fighters.list[fighter].position)
+                WeaponEvent::Hit { id, on: Struck::Aircraft, .. } => {
+                    (id, BlastKind::AircraftHit, self.aircraft.position)
+                }
+                WeaponEvent::Hit { id, on: Struck::Fighter(f), .. } => {
+                    (id, BlastKind::TargetHit, self.fighters.list[f].position)
                 }
                 _ => return None,
             };
@@ -1058,8 +1060,7 @@ impl Sim {
                             let by = self.fighters.list[fighter].spec().label;
                             (format!("MISSILE LAUNCH {} - {by}", kind.label()), true)
                         }
-                        WeaponEvent::AircraftHit { kind, .. } => (format!("{} HIT", kind.label()), true),
-                        WeaponEvent::FighterHit { kind, .. } => (format!("{} HIT", kind.label()), false),
+                        WeaponEvent::Hit { .. } => return None,
                         WeaponEvent::Photo { n, .. } => (format!("PHOTO {n}"), false),
                         WeaponEvent::FuelTransfer { .. } => ("FUEL TRANSFERRED".to_string(), false),
                         WeaponEvent::Decoyed { kind, .. } => (format!("{} DECOYED", kind.label()), false),
@@ -1115,7 +1116,13 @@ impl Sim {
                         FighterEvent::Destroyed { kind, .. } => {
                             (format!("{} DESTROYED", kind.spec().label), false)
                         }
-                        FighterEvent::GunHit { kind } => (format!("{} GUN HIT", kind.spec().label), true),
+                    },
+                    // Treffer: Rakete „AA-8 HIT“, Kanone eines Jägers
+                    // „MIG-21 GUN HIT“; eigene Kanonentreffer ohne Meldung.
+                    Event::Hit { on, by, .. } => match by {
+                        HitBy::Missile(kind) => (format!("{} HIT", kind.label()), on == Struck::Aircraft),
+                        HitBy::Gun(Some(kind)) => (format!("{} GUN HIT", kind.spec().label), true),
+                        HitBy::Gun(None) => return None,
                     },
                 };
                 Some(message(tick, text))
