@@ -27,6 +27,9 @@ Abhängigkeiten zeigen nur nach unten. **Nur `f29-app` kennt Bevy.** Alles ander
 kompiliert und testet ohne Grafikkarte und ohne Fenster. Fremde Crates nur, wo
 nötig: `serde`/`ron` (Gebietsdaten in `f29-world`, Replay-Kopf in `f29-core`),
 `png` (`f29-headless`), `resvg` (SVG-Grafiken der Ausrüstung in `f29-app`).
+Die Menüs zeichnet die Vektorschrift; als Prototyp zeigt die Schlussauswahl
+bevy_ui mit Pixelschriften (`f29-app/src/ui_proto.rs`, Schriften samt
+Lizenzen unter `f29-app/assets/fonts/`).
 
 | Crate | Aufgabe |
 |---|---|

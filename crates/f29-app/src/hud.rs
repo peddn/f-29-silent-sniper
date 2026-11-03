@@ -103,6 +103,8 @@ fn draw_hud(
         let mut a = crate::menu::arming(&state, blink);
         a.art = fd.stores.bays.map(|b| b.kind.is_some_and(|k| art.has(k)));
         f29_hud::arming::draw(&layout, &a)
+    } else if state.menu == Some(crate::menu::Screen::Final) {
+        f29_hud::DisplayList::new() // Prototyp mit bevy_ui (ui_proto.rs)
     } else if state.menu.is_some() {
         f29_hud::draw_menu(&layout, &crate::menu::page(&state))
     } else {

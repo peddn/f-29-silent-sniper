@@ -362,6 +362,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 Wahlweise [MIT](LICENSE-MIT) oder [Apache 2.0](LICENSE-APACHE).
 
+Die Pixelschriften unter `crates/f29-app/assets/fonts/` haben eigene Lizenzen
+(Dateien `*.LICENSE` daneben: SIL OFL 1.1, WTFPL, MIT-artig).
+
 *F-19 Stealth Fighter* ist eine Marke ihrer jeweiligen Rechteinhaber. Dieses Projekt
 ist ein unabhängiges Fanprojekt und steht in keiner Verbindung zu MicroProse oder
 dessen Rechtsnachfolgern.

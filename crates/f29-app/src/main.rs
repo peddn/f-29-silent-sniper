@@ -34,6 +34,7 @@ mod store_art;
 mod targets;
 mod terrain;
 mod tgt_camera;
+mod ui_proto;
 mod view;
 mod weapons;
 
@@ -125,7 +126,12 @@ fn main() {
         // Ohne Klang wird auch kein Audiogerät geöffnet.
         app.add_plugins(DefaultPlugins.set(window).disable::<bevy::audio::AudioPlugin>());
     }
-    app.add_plugins((actions::ActionsPlugin, menu::MenuPlugin, store_art::StoreArtPlugin));
+    app.add_plugins((
+        actions::ActionsPlugin,
+        menu::MenuPlugin,
+        store_art::StoreArtPlugin,
+        ui_proto::UiProtoPlugin,
+    ));
     app.add_plugins((
         sim::SimPlugin { config, menu },
         airfield::AirfieldPlugin,
