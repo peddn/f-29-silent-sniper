@@ -19,7 +19,7 @@ pub struct SimPlugin {
 impl Plugin for SimPlugin {
     fn build(&self, app: &mut App) {
         let mut state = SimState::new(self.config.clone());
-        state.menu = self.menu.then_some(crate::menu::Screen::Identification);
+        state.menu = self.menu.then_some(crate::menu::Screen::Title);
         let pilot = PilotInput::matching(&state.sim);
         app.insert_resource(state)
             .insert_resource(pilot)

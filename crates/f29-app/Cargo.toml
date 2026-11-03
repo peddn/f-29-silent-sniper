@@ -20,9 +20,9 @@ f29-hud.workspace = true
 f29-render.workspace = true
 f29-world.workspace = true
 
-# Nur die benötigten Teile von Bevy: 2D (HUD-Overlay), 3D, Klang und die UI für die
-# Bildschirme außerhalb des Cockpits (Menüs).
-bevy = { version = "0.20", default-features = false, features = ["2d", "3d", "bevy_audio", "ui_bevy_render"] }
+# Nur die benötigten Teile von Bevy: 2D (HUD-Overlay), 3D, Klang (Ogg Vorbis für die
+# Musik) und die UI für die Bildschirme außerhalb des Cockpits (Menüs).
+bevy = { version = "0.20", default-features = false, features = ["2d", "3d", "bevy_audio", "vorbis", "ui_bevy_render"] }
 # SVG-Grafiken der Ausrüstung (Bewaffnung), ohne Schriften und Rasterbilder.
 resvg = { version = "0.45", default-features = false }
 

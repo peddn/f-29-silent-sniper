@@ -58,10 +58,7 @@ fn scale_line_width(
     config.line.width = (window.physical_height() as f32 / 420.0).clamp(1.0, 6.0);
 }
 
-#[allow(clippy::too_many_arguments)]
 fn draw_hud(
-    time: Res<Time>,
-    art: Res<crate::store_art::StoreArt>,
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
     view: Res<ViewSettings>,
@@ -100,8 +97,7 @@ fn draw_hud(
     // Außerhalb des Cockpits zeichnet die UI (ui.rs); auf dem
     // Bewaffnungsbildschirm liegen Umriss und Schächte in ihrem Rahmen darüber.
     let (list, unit) = if state.menu == Some(crate::menu::Screen::Arming) {
-        let blink = time.elapsed_secs().fract() < 0.5;
-        (f29_hud::arming::draw(&crate::menu::arming(&state, &art, blink)), crate::ui::unit(&window))
+        (f29_hud::arming::draw(&crate::menu::arming(&state), crate::ui::picture()), crate::ui::unit(&window))
     } else if covered {
         (f29_hud::DisplayList::new(), h)
     } else {

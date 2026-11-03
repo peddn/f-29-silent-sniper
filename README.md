@@ -27,9 +27,10 @@ Schadensmodell, Täuschkörper und Störer. Als Nächstes: v0.3 (Missionen).
 Voraussetzung: aktuelles stabiles Rust (≥ 1.97).
 
 ```sh
-# Spiel starten (beim ersten Mal dauert der Build einige Minuten): Menüs wie
-# im Original – Auftrag, Briefing, Schlussauswahl mit „Select New Mission“;
-# Pfeile wählen, Leertaste bestätigt
+# Spiel starten (beim ersten Mal dauert der Build einige Minuten): Titelbild,
+# dann Menüs wie im Original – Auftrag, Briefing, Schlussauswahl mit „Select New
+# Mission“; Pfeile wählen, Leertaste bestätigt. Eigene Grafik und Musik:
+# crates/f29-app/assets/title.png (16:10, Pixelart) und assets/music/theme.ogg
 cargo run --release -p f29-app
 
 # ohne Menü gleich fliegen (auch mit --start oder --screenshot)
@@ -350,7 +351,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### v0.6: Präsentation
 - [ ] Menüs, Briefing- und Debriefing-Bildschirme, Karte
-- [ ] Klang: Waffen, Radarwarnung; Musik im Startbildschirm
+- [ ] Klang: Waffen, Radarwarnung; Musikdatei (`assets/music/theme.ogg`)
 - [ ] Einstellungen, frei belegbare Tasten, Joystick/HOTAS
 
 ### v1.0: Vollständige Karriere

@@ -28,12 +28,6 @@ impl Plugin for StoreArtPlugin {
 #[derive(Resource, Default)]
 pub struct StoreArt(HashMap<WeaponKind, (Handle<Image>, f32)>);
 
-impl StoreArt {
-    pub fn has(&self, kind: WeaponKind) -> bool {
-        self.0.contains_key(&kind)
-    }
-}
-
 /// Bild im Schacht `k`.
 #[derive(Component)]
 struct BayArt(usize);
@@ -106,7 +100,7 @@ fn show(
             *vis = Visibility::Hidden;
             continue;
         };
-        let r = f29_hud::arming::art_rect(bay.0);
+        let r = f29_hud::arming::art_rect(bay.0, crate::ui::picture());
         let (w, rh) = (r.max[0] - r.min[0], r.max[1] - r.min[1]);
         let size = if w / rh > *aspect { Vec2::new(rh * aspect, rh) } else { Vec2::new(w, w / aspect) };
         sprite.image = handle.clone();

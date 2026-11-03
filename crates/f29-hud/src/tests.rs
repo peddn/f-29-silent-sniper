@@ -905,12 +905,19 @@ fn ejected_pilot_sees_no_hud() {
     assert!(build(&fd, &layout, &opts, None).lines.is_empty());
 }
 
-/// Bewaffnung (M-036): Der Schacht im Fokus blinkt zwischen zwei Farben.
+/// Bewaffnung (M-036): Der ganze Umriss liegt im Bildfeld, die Schächte im
+/// Umriss; der Schacht im Fokus ist doppelt gerahmt.
 #[test]
-fn arming_focus_blinks() {
-    use crate::arming::{Arming, draw};
-    let warn = |a: &Arming| draw(a).lines.iter().filter(|l| l.ink == Ink::HudWarning).count();
-    assert_eq!(warn(&Arming { blink: true, ..Arming::default() }), 0, "ohne Fokus kein Blinken");
-    assert!(warn(&Arming { blink: true, bay: Some(2), ..Arming::default() }) > 0);
-    assert_eq!(warn(&Arming { blink: false, bay: Some(2), ..Arming::default() }), 0);
+fn arming_fits_the_picture() {
+    use crate::arming::{Arming, bay_rect, draw};
+    let area = Rect { min: [-0.3, -0.2], max: [0.7, 0.3] };
+    let inside =
+        |p: [f32; 2], r: Rect| (r.min[0]..=r.max[0]).contains(&p[0]) && (r.min[1]..=r.max[1]).contains(&p[1]);
+    let plain = draw(&Arming::default(), area).lines;
+    assert!(plain.iter().all(|l| inside(l.a, area) && inside(l.b, area)), "Umriss ragt hinaus");
+    for k in 0..4 {
+        let r = bay_rect(k, area);
+        assert!(inside(r.min, area) && inside(r.max, area));
+    }
+    assert!(draw(&Arming { bay: Some(2), ..Arming::default() }, area).lines.len() > plain.len());
 }

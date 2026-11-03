@@ -427,9 +427,13 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     `over_g.wav`: CC0-Platzhalter aus Kenneys Voiceover Pack („Look out!“, „Hold!“),
     weil keine freie Aufnahme mit dem richtigen Wortlaut zu finden war (Herkunft:
     `sounds/README.md`). Radarwarnempfänger: M-020, Raketenwarnung: M-021.
+  - **Musik** (`f29-app/src/music.rs`): `assets/music/theme.ogg` (Ogg Vorbis)
+    läuft in Schleife auf allen Bildschirmen außerhalb des Cockpits (Titelbild,
+    Menüs, Nachbesprechung) und pausiert im Flug, wie im Original. Ohne Datei
+    bleibt es still; die Datei liefert der Spieler.
 - **Abweichungen:** eigene Synthese statt FM-Treiber; die Tonhöhe folgt der Drehzahl
   statt Fahrt und Schub.
-- **Status:** umgesetzt; Musik folgt als eigener Kanal (Bevys Dateiwiedergabe).
+- **Status:** umgesetzt; die Musikdatei fehlt noch.
 
 ### M-002 Prozedurales Gelände
 
@@ -1520,7 +1524,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   `--start` oder `--screenshot` überspringen die Menüs. Mit Menü ist die erste
   Mission zufällig, sonst fest (`--seed` gilt immer); im Menü steht die
   Simulation still, trägt aber schon die Mission.
-  - **Ablauf:** Erkennung, Dienstplan (Platzhalter) → Auftrag (ACCEPT MISSION
+  - **Ablauf:** Titelbild (nur beim Start) → Erkennung, Dienstplan (Platzhalter)
+    → Auftrag (ACCEPT MISSION
     oder CHANGE CHOICES durch die Listen) → Briefing → FINAL CHOICES (SELECT NEW
     MISSION, INTELLIGENCE BRIEFING, ARM YOUR PLANE, BEGIN MISSION). Neue Mission
     = nächster Seed mit denselben Einstellungen und vorgeschlagener Beladung,
@@ -1540,16 +1545,19 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Routenlänge × 11 kg/km (gemessen mit dem Autopiloten bei 250 m/s in 3000 m)
     plus 450 kg Reserve; reicht der Haupttank (5200 kg) nicht, kommt ein
     Zusatztank in den Vorschlag (M-032).
-  - **Bewaffnung** (ARMING; `f29_hud::arming`, `store_art.rs`): oben FUEL
-    REQUIRED / CARRIED (Warnfarbe bei Mangel; mitgeführt = Haupttank plus volle
-    Zusatztanks), in der Mitte die Unterseite der F-29 nach dem Grundriss des
-    3D-Modells, Nase links, mit vier Schächten 2 × 2 (vorn 1 oben und 2 unten,
-    hinten 3 und 4; 40 % der Höhe) samt Nummer, Grafik und Stückzahl, unten die
-    Liste in zwei Spalten (zehn Ausrüstungen, EMPTY, ARMING COMPLETE).
-    Bestätigen nimmt die Waffe, die Pfeile wählen einen Schacht (er blinkt),
-    Bestätigen legt sie ab. Grafiken: `assets/stores/<code>.svg` (Code wie bei
-    `--loadout`, etwa 2:1, Nase links, Text als Pfade), mit resvg gerastert,
-    sonst der Kurzname; die mitgelieferten sind schlichte Platzhalter.
+  - **Bewaffnung** (ARMING; `f29_hud::arming`, `store_art.rs`): im Textfeld
+    links FUEL REQUIRED / CARRIED (Warnfarbe bei Mangel; mitgeführt = Haupttank
+    plus volle Zusatztanks) und die vier Schächte mit Kurzname und Stückzahl,
+    rechts die ganze Unterseite der F-29 nach dem Grundriss des 3D-Modells,
+    Nase links, mit vier flachen Schächten 2 × 2 im breiten hinteren Teil (vorn
+    1 oben und 2 unten, hinten 3 und 4), darin die Grafik der Ausrüstung. Die
+    Liste (zehn Ausrüstungen, EMPTY, ARMING COMPLETE) steht in der Auswahl in
+    drei Spalten zu vier Zeilen. Bestätigen nimmt die Waffe (sie bleibt
+    gedämpft invers), die Pfeile wählen einen Schacht (in der Tabelle invers,
+    im Bild doppelt gerahmt), Bestätigen legt sie ab. Grafiken:
+    `assets/stores/<code>.svg` (Code wie bei `--loadout`, etwa 2:1, Nase links,
+    Text als Pfade), mit resvg gerastert; die mitgelieferten sind schlichte
+    Platzhalter.
   - **Zusatztank** (`tank`): 1000 kg Treibstoff, voll 1120 kg, einer je
     Schacht. Gewählt pumpt der Auslöser im Flug in jedem HUD-Modus ohne Klappen
     in die Haupttanks („FUEL TRANSFERRED“); was nicht passt, geht verloren, der
@@ -1561,9 +1569,12 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Bildschirme außerhalb des Cockpits, auch die Nachbesprechung, zeichnet
     bevy_ui in Departure Mono in ein Bild mit 640 × 400 Pixeln, ohne Glättung
     ganzzahlig vergrößert (Schriftpixel scharf, gleich groß). Überall Titel
-    invers, Textfeld fester Größe, darunter die Auswahl (höchstens vier Zeilen,
-    gewählte invers) an derselben Stelle, keine Bedienhinweise. Auf der
-    Bewaffnung liegen Umriss, Schächte und Grafiken in Fensterauflösung darüber.
+    invers, Textfeld fester Größe und so breit wie der Titel, darunter die
+    Auswahl (höchstens vier Zeilen, gewählte invers) an derselben Stelle, keine
+    Bedienhinweise, kein Blinken. Auf der Bewaffnung liegen Umriss, Schächte
+    und Grafiken in Fensterauflösung darüber. Das Titelbild ist eine
+    Rastergrafik `assets/title.png` (16:10, z. B. 320 × 200 oder 640 × 400,
+    Pixelart), bildfüllend ohne Glättung; die mitgelieferte ist ein Mockup.
 - **Abweichungen:** Lagebesprechung vorerst nur als Text, ohne Karte;
   Erkennung und Dienstplan sind Platzhalter; „leicht“ lockert die Landegrenzen
   weniger als das Original, weil unsere schon großzügig sind (mehr wäre ein

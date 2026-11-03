@@ -1,9 +1,8 @@
 //! Klang: der Datenstrom aus `f29-audio` als eigene Bevy-Audioquelle.
 //!
 //! Die Simulation schreibt jedes Bild eine Momentaufnahme in einen geteilten
-//! Speicher; der Audio-Thread liest sie blockweise und synthetisiert. Musik
-//! (z. B. im Startbildschirm) kann später als gewöhnlicher `AudioPlayer` mit
-//! einer Ogg-Datei daneben laufen – dafür genügt das Bevy-Feature `vorbis`.
+//! Speicher; der Audio-Thread liest sie blockweise und synthetisiert. Die
+//! Musik läuft daneben als gewöhnlicher `AudioPlayer` (`music.rs`).
 
 use crate::sim::{SimState, SimSystems};
 use bevy::audio::{AddAudioSource, ChannelCount, Decodable, SampleRate, Source};

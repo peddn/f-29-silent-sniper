@@ -1,8 +1,8 @@
-//! Menüführung vor dem Flug (M-036), Ablauf wie im Original: Erkennung
-//! (Platzhalter) → Dienstplan (Platzhalter) → Auftrag (annehmen oder der
-//! Reihe nach ändern: Gebiet, Konfliktlage, Missionsart, Gegnerqualität,
-//! Flugverhalten) → Briefing → Schlussauswahl (neue Mission, Briefing,
-//! Bewaffnung, Start). Eine neue Mission und das Ende der Nachbesprechung
+//! Menüführung vor dem Flug (M-036), Ablauf wie im Original: Titelbild →
+//! Erkennung (Platzhalter) → Dienstplan (Platzhalter) → Auftrag (annehmen
+//! oder der Reihe nach ändern: Gebiet, Konfliktlage, Missionsart,
+//! Gegnerqualität, Flugverhalten) → Briefing → Schlussauswahl (neue Mission,
+//! Briefing, Bewaffnung, Start). Eine neue Mission und das Ende der Nachbesprechung
 //! führen zurück zum Dienstplan.
 //!
 //! Die Simulation steht still, solange ein Menü offen ist; sie trägt aber
@@ -12,7 +12,6 @@ use crate::actions::Actions;
 use crate::input::PilotInput;
 use crate::joystick_config::Action;
 use crate::sim::{SimState, SimSystems};
-use crate::store_art::StoreArt;
 use crate::view::ViewSettings;
 use bevy::prelude::*;
 use f29_core::rules::{Conflict, Landings, Opponents};
@@ -38,6 +37,8 @@ impl Plugin for MenuPlugin {
 /// Die Bildschirme vor dem Flug.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
+    /// Titelbild (`assets/title.png`), nur beim Start.
+    Title,
     Identification,
     Roster,
     Assignment,
@@ -58,6 +59,8 @@ pub fn page(state: &SimState) -> Page {
     let region = sim.config().theater.name.to_uppercase();
     let list = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     let (title, lines, options) = match state.menu.unwrap_or(Screen::Final) {
+        // eigene Bildschirme (`ui.rs`)
+        Screen::Title | Screen::Arming => ("", vec![], vec![]),
         Screen::Identification => (
             "AIRCRAFT IDENTIFICATION",
             list(&["PLACEHOLDER - THE IDENTIFICATION", "QUIZ FOLLOWS IN A LATER VERSION."]),
@@ -91,8 +94,6 @@ pub fn page(state: &SimState) -> Page {
             ("FLIGHT PERFORMANCE", vec![], Landings::ALL.map(|l| l.label().to_string()).into())
         }
         Screen::Briefing => ("MISSION BRIEFING", sim.briefing(), list(&["CONTINUE"])),
-        // eigener Bildschirm (`arming`)
-        Screen::Arming => ("ARMING", vec![], vec![]),
         // Das Briefing noch einmal, um die Mission einzuschätzen.
         Screen::Final => (
             "FINAL CHOICES",
@@ -107,8 +108,8 @@ pub fn page(state: &SimState) -> Page {
 /// Liste der Bewaffnung: die Waffen, „leer“, „fertig“.
 const ARM_ITEMS: usize = WeaponKind::ALL.len() + 2;
 
-/// Inhalt des Bewaffnungsbildschirms; `blink` ist der Takt des Blinkens.
-pub fn arming(state: &SimState, art: &StoreArt, blink: bool) -> Arming {
+/// Inhalt des Bewaffnungsbildschirms.
+pub fn arming(state: &SimState) -> Arming {
     let sim = &state.sim;
     let bays = sim.stores().bays.map(|b| b.kind.map(|k| (k.label().to_string(), b.count)));
     let items = WeaponKind::ALL
@@ -120,14 +121,12 @@ pub fn arming(state: &SimState, art: &StoreArt, blink: bool) -> Arming {
         items: items.collect(),
         cursor: state.cursor,
         bay: state.arm_bay,
-        blink,
         fuel: (sim.fuel_required_kg(), sim.fuel_carried_kg()),
-        art: sim.stores().bays.map(|b| b.kind.is_some_and(|k| art.has(k))),
     }
 }
 
 /// Bewaffnung bedienen: in der Liste eine Waffe nehmen, dann mit den Pfeilen
-/// einen Schacht wählen und sie dort ablegen; zurück in der Liste blinkt sie.
+/// einen Schacht wählen und sie dort ablegen.
 fn arm(state: &mut SimState, (up, down, left, right, ok): (bool, bool, bool, bool, bool)) {
     match state.arm_bay {
         None => {
@@ -141,11 +140,10 @@ fn arm(state: &mut SimState, (up, down, left, right, ok): (bool, bool, bool, boo
             } else {
                 c
             };
+            // Spalten zu je `ROWS` Einträgen
+            let rows = f29_hud::arming::ROWS;
             if left || right {
-                c = step(
-                    c,
-                    if c < f29_hud::arming::ROWS { f29_hud::arming::ROWS } else { n - f29_hud::arming::ROWS },
-                );
+                c = step(c, if right { rows } else { n - rows });
             }
             state.cursor = c.min(n - 1);
             if ok && state.cursor == n - 1 {
@@ -198,6 +196,7 @@ fn new_mission(state: &mut SimState) {
 fn choose(state: &mut SimState, choice: usize) {
     let mut config = state.sim.config().clone();
     let next = match state.menu {
+        Some(Screen::Title) => Some(Screen::Identification),
         Some(Screen::Identification) => Some(Screen::Roster),
         Some(Screen::Roster) => Some(Screen::Assignment),
         Some(Screen::Assignment) => Some(if choice == 0 { Screen::Briefing } else { Screen::Region }),
@@ -269,6 +268,13 @@ fn menu_input(
     let left = keys.any_just_pressed([KeyCode::ArrowLeft, KeyCode::KeyA]) || act(Action::LookLeft);
     let right = keys.any_just_pressed([KeyCode::ArrowRight, KeyCode::KeyD]) || act(Action::LookRight);
     actions.0.retain(|&(a, ..)| a == Action::Quit);
+    // Das Titelbild hat keine Auswahl.
+    if state.menu == Some(Screen::Title) {
+        if ok {
+            choose(&mut state, 0);
+        }
+        return;
+    }
     if state.menu == Some(Screen::Arming) {
         arm(&mut state, (up, down, left, right, ok));
         *pilot = PilotInput::matching(&state.sim);

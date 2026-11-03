@@ -27,6 +27,7 @@ mod joystick;
 mod joystick_config;
 mod menu;
 mod mfd;
+mod music;
 mod retro;
 mod sim;
 mod sound;
@@ -121,7 +122,8 @@ fn main() {
     let mut app = App::new();
     app.insert_resource(ClearColor(view::sky_color())).insert_resource(view_settings);
     if volume > 0.0 {
-        app.add_plugins(DefaultPlugins.set(window)).add_plugins(sound::SoundPlugin { volume });
+        app.add_plugins(DefaultPlugins.set(window))
+            .add_plugins((sound::SoundPlugin { volume }, music::MusicPlugin { volume }));
     } else {
         // Ohne Klang wird auch kein Audiogerät geöffnet.
         app.add_plugins(DefaultPlugins.set(window).disable::<bevy::audio::AudioPlugin>());
