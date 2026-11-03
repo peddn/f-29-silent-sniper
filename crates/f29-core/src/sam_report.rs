@@ -111,7 +111,7 @@ pub fn engagement(seed: u64, kind: WeaponKind, south: f64, west: f64, m: Maneuve
     let (mut launched, mut thrown) = (false, 0);
     for _ in 0..(200.0 / DT) as usize {
         let fd = sim.flight_data();
-        let missile = sim.weapons_in_flight().iter().find(|w| w.owner.is_some()).copied();
+        let missile = sim.munitions().in_flight.iter().find(|w| w.owner.is_some()).copied();
         let mut weapons = 0;
         if let Some(w) = missile {
             launched = true;

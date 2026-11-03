@@ -17,8 +17,8 @@ use crate::sensors::{self, LookDir, Pick, Seen, Sensors};
 use crate::systems::{Condition, System, Systems};
 use crate::targets::{self, Target, TargetClass, TargetRole};
 use crate::weapons::{
-    self, Bay, DecoyKind, ImpactResult, LaunchZone, Launcher, Loadout, Seeker, Stores, Struck, Track, Weapon,
-    WeaponEvent, WeaponKind,
+    self, Bay, DecoyKind, ImpactResult, LaunchZone, Launcher, Loadout, Munitions, Seeker, Stores, Struck,
+    Track, WeaponEvent, WeaponKind,
 };
 use f29_data::{AircraftSpec, F29_SPEC};
 use f29_world::{AirfieldKind, Side, Terrain, Theater};
@@ -360,7 +360,8 @@ const CONTACTS_PER_UPDATE: usize = 4;
 const BOMB_AIM_TICKS: u64 = 6;
 
 /// Momentane Abschusslage für das Auslösen und die Vorausberechnung (ein
-/// Makro, damit `self.stores` daneben veränderlich geliehen werden kann).
+/// Makro, damit `self.stores` und `self.munitions` daneben veränderlich
+/// geliehen werden können).
 macro_rules! launch {
     ($sim:expr) => {
         weapons::Launch {
@@ -405,6 +406,7 @@ pub struct Sim {
     targets: Vec<Target>,
     sensors: Sensors,
     stores: Stores,
+    munitions: Munitions,
     gun: Gun,
     /// Feindliche Radarstellungen mit Alarmstufen (M-020).
     radar: RadarNet,
@@ -481,7 +483,7 @@ impl Sim {
         }
         let route = mission::route(&plan, &terrain, &targets);
         let suggested = || plan.loadout(&targets, fuel_required_kg(&route) > aircraft.fuel_kg);
-        let stores = Stores::new(&sp.loadout.unwrap_or_else(suggested), seed);
+        let stores = Stores::new(&sp.loadout.unwrap_or_else(suggested));
         aircraft.stores_kg = stores.mass_kg();
         if !aircraft.on_ground {
             // Getrimmt starten: Nase um den Anstellwinkel anheben, bei dem der
@@ -526,6 +528,7 @@ impl Sim {
             targets,
             sensors,
             stores,
+            munitions: Munitions::new(seed),
             gun: Gun::new(seed),
             radar: RadarNet::default(),
             fighters,
@@ -743,7 +746,7 @@ impl Sim {
     /// Übernimmt die Ereignisse der Teilsysteme aus diesem Tick in den einen
     /// Ereignisstrom.
     fn collect_events(&mut self) {
-        let weapons = self.stores.events.take().into_iter().map(|(t, e)| (t, Event::Weapon(e)));
+        let weapons = self.munitions.events.take().into_iter().map(|(t, e)| (t, Event::Weapon(e)));
         let radar = self.radar.events.take().into_iter().map(|(t, e)| (t, Event::Radar(e)));
         let gun = self.gun.events.take().into_iter().map(|(t, e)| (t, Event::Gun(e)));
         let fighters = self.fighters.events.take().into_iter().map(|(t, e)| (t, Event::Fighter(e)));
@@ -854,7 +857,7 @@ impl Sim {
             let Some(kind) = targets::sam_of(&self.targets, i) else { continue };
             let from = DVec3::new(t.north, t.east, -t.elevation - t.class.height());
             let max = self.rules().max_hostile_missiles;
-            self.stores.launch_sam(self.tick, kind, i, from, self.aircraft.position, max);
+            self.munitions.launch_sam(self.tick, kind, i, from, self.aircraft.position, max);
         }
     }
 
@@ -875,7 +878,14 @@ impl Sim {
                 && ahead >= fighters::LAUNCH_CONE_RAD.cos()
                 && to.length() <= kind.spec().max_range_m * f.skill.spec().launch_share
             {
-                self.stores.launch_air(self.tick, kind, f.id as usize, (f.position, f.velocity()), a, rules);
+                self.munitions.launch_air(
+                    self.tick,
+                    kind,
+                    f.id as usize,
+                    (f.position, f.velocity()),
+                    a,
+                    rules,
+                );
             }
         }
     }
@@ -920,7 +930,7 @@ impl Sim {
             Struck::Fighter(i) => self.fighters.hit(self.tick, i, strength),
             Struck::Aircraft if self.config.spawn.invulnerable => {}
             Struck::Aircraft => {
-                let systems = self.stores.roll_systems(strength);
+                let systems = self.munitions.roll_systems(strength);
                 self.systems.hit(strength, &systems);
                 self.apply_systems();
             }
@@ -1041,14 +1051,15 @@ impl Sim {
         for (flag, kind) in [(weapon_flags::CHAFF, DecoyKind::Chaff), (weapon_flags::FLARE, DecoyKind::Flare)]
         {
             if controls.has_weapon(flag) && !self.aircraft.on_ground {
-                self.stores.drop_decoy(self.tick, kind, self.aircraft.position);
+                self.stores.drop_decoy(&mut self.munitions, self.tick, kind, self.aircraft.position);
             }
         }
         // Bei gewählter Kanone löst die Auslösetaste keine Schachtwaffe aus.
         if controls.has_weapon(weapon_flags::RELEASE) && !self.stores.gun_selected {
             let launch = launch!(self);
             let tank = self.stores.selected_weapon() == Some(WeaponKind::DropTank);
-            let dropped = if self.aircraft.on_ground { 0.0 } else { self.stores.release(&launch) };
+            let dropped =
+                if self.aircraft.on_ground { 0.0 } else { self.stores.release(&mut self.munitions, &launch) };
             self.aircraft.stores_kg = (self.aircraft.stores_kg - dropped).max(0.0);
             // Umgepumpt wird, was in die Haupttanks passt; der Rest geht verloren.
             if tank && dropped > 0.0 {
@@ -1064,7 +1075,7 @@ impl Sim {
         for f in &mut self.fighters.list {
             f.threat = None;
         }
-        for w in self.stores.in_flight.iter().filter(|w| w.owner.is_none() && w.tracking) {
+        for w in self.munitions.in_flight.iter().filter(|w| w.owner.is_none() && w.tracking) {
             if let Some(Track::Fighter(i)) = w.target {
                 let f = &mut self.fighters.list[i];
                 let d = (f.position - w.position).length();
@@ -1090,7 +1101,7 @@ impl Sim {
             {
                 f.decoys -= 1;
                 f.decoy_tick = Some(self.tick);
-                self.stores.push_decoy(self.tick, kind, f.position, Some(Launcher::Fighter(i)));
+                self.munitions.push_decoy(self.tick, kind, f.position, Some(Launcher::Fighter(i)));
             }
         }
     }
@@ -1109,7 +1120,7 @@ impl Sim {
     }
 
     fn step_weapons(&mut self) {
-        if self.stores.in_flight.is_empty() && self.stores.countermeasures.decoys.is_empty() {
+        if self.munitions.in_flight.is_empty() && self.munitions.decoys.is_empty() {
             return;
         }
         let sites = self.radar.sites.iter().filter(|s| s.painted).map(|s| Launcher::Site(s.target));
@@ -1128,11 +1139,12 @@ impl Sim {
             flying: self.status == Status::Flying,
             painting: &painting,
             fighters: &fighters,
+            jammed: (self.stores.countermeasures.ecm, self.stores.countermeasures.ir_active()),
         };
         // Die Wahl bleibt auch auf einem zerstörten Ziel, bis der
         // Spieler ein neues wählt (Wracks sind dann nicht mehr anwählbar).
-        self.stores.step(&mut world);
-        let now: Vec<_> = self.stores.events.iter().map(|&(_, e)| e).collect();
+        self.munitions.step(&mut world);
+        let now: Vec<_> = self.munitions.events.iter().map(|&(_, e)| e).collect();
         for e in now {
             if let WeaponEvent::Hit { kind, on, .. } = e {
                 self.hit(on, HitBy::Missile(kind), 1.0);
@@ -1539,7 +1551,7 @@ impl Sim {
         &self.picks
     }
 
-    /// Waffenbestand, Schacht und Waffen im Flug (M-014).
+    /// Waffenbestand, Schacht, Klappen, Selbstschutz (M-014).
     pub fn stores(&self) -> &Stores {
         &self.stores
     }
@@ -1549,9 +1561,9 @@ impl Sim {
         &self.gun
     }
 
-    /// Waffen im Flug (für die Darstellung).
-    pub fn weapons_in_flight(&self) -> &[Weapon] {
-        &self.stores.in_flight
+    /// Waffen und Täuschkörper im Flug.
+    pub fn munitions(&self) -> &Munitions {
+        &self.munitions
     }
 }
 

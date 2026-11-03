@@ -218,7 +218,7 @@ fn spawn_puffs(mut commands: Commands, state: Res<SimState>, mut visuals: ResMut
     visuals.last_gun_tick = visuals.last_gun_tick.max(newest);
     // Rauchspur: alle Raketen (nicht die Bomben) und abstürzende Jäger, diese
     // dicker und länger stehend.
-    let missiles = state.sim.weapons_in_flight().iter().filter(|w| w.kind.spec().cruise_mps > 0.0);
+    let missiles = state.sim.munitions().in_flight.iter().filter(|w| w.kind.spec().cruise_mps > 0.0);
     let falling = state.sim.fighters().list.iter().filter(|f| f.mode == f29_core::fighters::Mode::Falling);
     // Das verlassene eigene Flugzeug raucht ebenfalls bis zum Aufschlag.
     let unmanned = (state.sim.pilot().is_some() && state.sim.wreck_tick().is_none())
@@ -242,7 +242,7 @@ fn spawn_puffs(mut commands: Commands, state: Res<SimState>, mut visuals: ResMut
         ));
     }
     // Täuschkörper: Düppel als helle Wolke, Fackel als glühender Punkt
-    let decoys = &state.sim.stores().countermeasures.decoys;
+    let decoys = &state.sim.munitions().decoys;
     visuals.decoys_seen.retain(|id| decoys.iter().any(|d| d.id == *id));
     for d in decoys {
         if visuals.decoys_seen.contains(&d.id) {
@@ -305,7 +305,7 @@ fn sync_weapons(
         visuals.seed = Some(seed);
         visuals.last_event_tick = 0;
     }
-    let flying = state.sim.weapons_in_flight();
+    let flying = &state.sim.munitions().in_flight;
     // Gelandete Waffen entfernen.
     let gone: Vec<u32> =
         visuals.entities.keys().copied().filter(|id| !flying.iter().any(|w| w.id == *id)).collect();

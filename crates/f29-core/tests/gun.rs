@@ -82,7 +82,7 @@ fn trigger_fires_the_selected_gun() {
     hold(&mut sim, 0.5, weapon_flags::TRIGGER | weapon_flags::RELEASE);
     let after = sim.flight_data().gun.rounds;
     assert!(after < gun::ROUNDS - 20, "{after}");
-    assert!(sim.weapons_in_flight().is_empty(), "keine Schachtwaffe");
+    assert!(sim.munitions().in_flight.is_empty(), "keine Schachtwaffe");
     hold(&mut sim, 0.1, 0);
     hold(&mut sim, 1.0 / f64::from(TICK_HZ), weapon_flags::NEXT_BAY);
     hold(&mut sim, 0.5, weapon_flags::TRIGGER);

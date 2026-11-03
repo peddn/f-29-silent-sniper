@@ -62,7 +62,7 @@ fn release_needs_open_bay_and_drops_mass() {
         [WeaponEvent::Released { kind: WeaponKind::FreeFall, bay: 0, .. }]
     ));
     assert_eq!(sim.stores().bays[0].count, bay0.count - 1);
-    assert_eq!(sim.weapons_in_flight().len(), 1);
+    assert_eq!(sim.munitions().in_flight.len(), 1);
     let dropped = mass0 - sim.flight_data().mass_kg;
     assert!(dropped > WeaponKind::FreeFall.spec().mass_kg - 5.0, "Masse {dropped:.0} kg");
 
@@ -119,7 +119,7 @@ fn bomb_run(class: TargetClass, east_shift: f64) -> Run {
             }
         }
         step(&mut sim, 0, w);
-        if released.is_some() && sim.weapons_in_flight().is_empty() {
+        if released.is_some() && sim.munitions().in_flight.is_empty() {
             break;
         }
     }
@@ -208,7 +208,7 @@ fn retarded_bomb_avoids_the_frag_warning_at_low_level() {
         for _ in 0..ticks(12.0) {
             hold(&mut sim, 0);
         }
-        assert!(sim.weapons_in_flight().is_empty(), "noch im Flug");
+        assert!(sim.munitions().in_flight.is_empty(), "noch im Flug");
         assert_eq!(sim.status(), f29_core::Status::Flying);
         sim.weapon_events().iter().any(|(_, e)| *e == WeaponEvent::FragWarning)
     };
@@ -244,7 +244,7 @@ fn release_cue_puts_the_bomb_on_the_target_along_track() {
             0
         };
         step(&mut sim, 0, w);
-        if released.is_some() && sim.weapons_in_flight().is_empty() {
+        if released.is_some() && sim.munitions().in_flight.is_empty() {
             break;
         }
     }

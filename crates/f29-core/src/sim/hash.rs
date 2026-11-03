@@ -26,6 +26,7 @@ impl Sim {
             targets,
             sensors,
             stores,
+            munitions,
             gun,
             radar,
             fighters,
@@ -54,7 +55,10 @@ impl Sim {
             "{:?}{tick}{aircraft:?}{status:?}{active_steerpoint}{last_controls:?}{turbulence_rng:?}{gust:?}",
             (config.seed, &config.spawn)
         );
-        let _ = write!(text, "{touchdown:?}{targets:?}{sensors:?}{stores:?}{gun:?}{radar:?}{fighters:?}");
+        let _ = write!(
+            text,
+            "{touchdown:?}{targets:?}{sensors:?}{stores:?}{munitions:?}{gun:?}{radar:?}{fighters:?}"
+        );
         let _ = write!(text, "{picks:?}{systems:?}{contact_cursor}{events:?}{log:?}{has_flown}{pilot:?}");
         text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
     }

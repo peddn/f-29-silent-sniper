@@ -55,14 +55,12 @@ fn unit(a: u32, b: u32) -> f64 {
     (x >> 11) as f64 / (1_u64 << 53) as f64
 }
 
-/// Selbstschutz: Täuschkörper und Störer.
+/// Selbstschutz an Bord: Vorrat an Täuschkörpern, Störer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Countermeasures {
     /// Vorrat an Düppeln und Fackeln.
     pub chaff: u8,
     pub flares: u8,
-    /// Täuschkörper in der Luft.
-    pub decoys: Vec<Decoy>,
     /// Störsender (gegen Radarlenkung) an.
     pub ecm: bool,
     /// Infrarotstörer: Restzeit aus Wirkdauer und anschließender
@@ -73,7 +71,7 @@ pub struct Countermeasures {
 
 impl Default for Countermeasures {
     fn default() -> Self {
-        Self { chaff: DECOY_STOCK, flares: DECOY_STOCK, decoys: Vec::new(), ecm: false, ir_jammer_s: 0.0 }
+        Self { chaff: DECOY_STOCK, flares: DECOY_STOCK, ecm: false, ir_jammer_s: 0.0 }
     }
 }
 

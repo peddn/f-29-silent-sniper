@@ -765,7 +765,7 @@ impl Sim {
             gear_up: airborne && !a.gear_down() && approach,
             missile: airborne
                 && self
-                    .stores
+                    .munitions
                     .in_flight
                     .iter()
                     .any(|w| w.owner.is_some() && w.target == Some(Track::Aircraft)),
@@ -822,7 +822,7 @@ impl Sim {
                 selected: self.stores.selected,
                 gun_selected: self.stores.gun_selected,
                 door: self.stores.door,
-                in_flight: self.stores.in_flight.iter().filter(|w| w.owner.is_none()).count(),
+                in_flight: self.munitions.in_flight.iter().filter(|w| w.owner.is_none()).count(),
                 chaff: cm.chaff,
                 flares: cm.flares,
                 mass_kg: self.stores.mass_kg(),
@@ -893,7 +893,7 @@ impl Sim {
             threat: self.threat_info(),
             blast: self.blast(),
             munitions: self
-                .stores
+                .munitions
                 .in_flight
                 .iter()
                 .map(|w| MunitionInfo {
@@ -904,7 +904,12 @@ impl Sim {
                     optical: w.kind.spec().seeker == weapons::Seeker::Optical,
                 })
                 .collect(),
-            decoys: cm.decoys.iter().map(|d| DecoyInfo { kind: d.kind, position: d.position }).collect(),
+            decoys: self
+                .munitions
+                .decoys
+                .iter()
+                .map(|d| DecoyInfo { kind: d.kind, position: d.position })
+                .collect(),
             air_target: self
                 .picks
                 .air
@@ -948,7 +953,7 @@ impl Sim {
                 })
                 .collect(),
             weapon_cam: self
-                .stores
+                .munitions
                 .in_flight
                 .iter()
                 .rev()

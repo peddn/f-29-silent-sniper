@@ -14,7 +14,7 @@ use crate::events::EventLog;
 use crate::math::{DQuat, DVec3};
 use crate::rng::Pcg32;
 use crate::targets::Target;
-use crate::weapons::{ImpactResult, Stores, ground_crossing};
+use crate::weapons::{ImpactResult, Munitions, ground_crossing};
 use f29_world::Terrain;
 
 /// Eigener Zufallsstrom der Kanone (Streuung).
@@ -215,7 +215,7 @@ impl Gun {
                 self.events.push(tick, GunEvent::AirHit(i));
                 Some((at, true))
             } else if let Some((i, at)) = hit {
-                let result = Stores::apply_damage(&mut targets[i], i, self.spec.strength * GROUND_DAMAGE);
+                let result = Munitions::apply_damage(&mut targets[i], i, self.spec.strength * GROUND_DAMAGE);
                 if matches!(result, ImpactResult::Destroyed { .. }) {
                     self.events.push(tick, GunEvent::Destroyed(i));
                 }

@@ -66,7 +66,7 @@ fn shoot(sim: &mut Sim) -> Vec<WeaponEvent> {
     step(sim, 0, weapon_flags::RELEASE);
     for _ in 0..ticks(90.0) {
         step(sim, 0, 0);
-        if sim.weapons_in_flight().is_empty() {
+        if sim.munitions().in_flight.is_empty() {
             break;
         }
     }
@@ -152,7 +152,7 @@ fn target_outside_the_launch_circle_is_not_handed_over() {
         step(&mut sim, 0, 0);
     }
     step(&mut sim, 0, weapon_flags::RELEASE);
-    let w = sim.weapons_in_flight()[0];
+    let w = sim.munitions().in_flight[0];
     assert!(w.searching && w.target.is_none(), "{w:?}");
 }
 
@@ -219,7 +219,7 @@ fn laser_run(seed: u64, mut after: impl FnMut(&mut Sim, u64)) -> Option<(Sim, us
             step(&mut sim, 0, weapon_flags::RELEASE);
             for k in 0..ticks(60.0) {
                 after(&mut sim, k as u64);
-                if sim.weapons_in_flight().is_empty() {
+                if sim.munitions().in_flight.is_empty() {
                     break;
                 }
             }
@@ -343,7 +343,7 @@ fn maverick_sends_its_seeker_image() {
     assert!(cam.look.dot(to.normalize_or_zero()) > 0.9999);
     for _ in 0..ticks(60.0) {
         step(&mut sim, 0, 0);
-        if sim.weapons_in_flight().is_empty() {
+        if sim.munitions().in_flight.is_empty() {
             break;
         }
     }

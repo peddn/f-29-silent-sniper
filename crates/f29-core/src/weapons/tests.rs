@@ -47,22 +47,22 @@ fn bridge() -> Target {
 fn damage_accumulates_and_critical_destroys_at_once() {
     let e = WeaponKind::FreeFall.effectiveness(TargetClass::Bridge, 0.5);
     let mut t = bridge();
-    assert_eq!(Stores::apply(&mut t, 7, e, false), ImpactResult::Damaged(7));
+    assert_eq!(Munitions::apply(&mut t, 7, e, false), ImpactResult::Damaged(7));
     assert_eq!(t.state, TargetState::Damaged);
     assert!(t.is_intact());
-    assert_eq!(Stores::apply(&mut t, 7, e, false), ImpactResult::Destroyed { target: 7, critical: false });
+    assert_eq!(Munitions::apply(&mut t, 7, e, false), ImpactResult::Destroyed { target: 7, critical: false });
     assert!(!t.is_intact());
     let mut t = bridge();
-    assert_eq!(Stores::apply(&mut t, 7, e, true), ImpactResult::Destroyed { target: 7, critical: true });
+    assert_eq!(Munitions::apply(&mut t, 7, e, true), ImpactResult::Destroyed { target: 7, critical: true });
     // Drei Drittel zählen als ganz.
     let mut t = bridge();
     for _ in 0..3 {
-        Stores::apply(&mut t, 7, 0.34 - 0.0067, false);
+        Munitions::apply(&mut t, 7, 0.34 - 0.0067, false);
     }
     assert_eq!(t.state, TargetState::Damaged, "0,99 ist noch nicht zerstört");
     let mut t = bridge();
     for _ in 0..3 {
-        Stores::apply(&mut t, 7, 1.0 / 3.0, false);
+        Munitions::apply(&mut t, 7, 1.0 / 3.0, false);
     }
     assert_eq!(t.state, TargetState::Destroyed);
 }

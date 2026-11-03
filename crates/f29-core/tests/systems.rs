@@ -124,5 +124,5 @@ fn failed_bay_jams_the_doors_and_blocks_release() {
     assert_eq!(sim.stores().door, 0.0, "Klappen klemmen");
     sim.step(level(0.6, 0).with_weapons(weapon_flags::RELEASE));
     assert!(sim.weapon_events().iter().any(|(_, e)| *e == WeaponEvent::BayFault));
-    assert!(sim.weapons_in_flight().is_empty());
+    assert!(sim.munitions().in_flight.is_empty());
 }

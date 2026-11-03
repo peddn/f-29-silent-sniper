@@ -53,7 +53,7 @@ fn sam_site_fires_after_radar_id() {
     assert!(fly_until(&mut sim, 30.0, |s| launched(s).is_some()), "kein Start");
     assert_eq!(launched(&sim), Some((WeaponKind::MediumRangeSam, site)));
     assert_eq!(sim.radar().sites.iter().find(|s| s.target == site).unwrap().alert, 3);
-    let hostile: Vec<_> = sim.weapons_in_flight().iter().filter(|w| w.owner.is_some()).collect();
+    let hostile: Vec<_> = sim.munitions().in_flight.iter().filter(|w| w.owner.is_some()).collect();
     assert_eq!(hostile.len(), 1, "eine Rakete je Stellung");
     fly(&mut sim, 1.0, 0, 0);
     let fd = sim.flight_data();
@@ -136,7 +136,7 @@ fn turning_into_the_missile_does_not_help() {
     let mut was_hit = false;
     for _ in 0..(30 * TICK_HZ) {
         let fd = sim.flight_data();
-        let Some(m) = sim.weapons_in_flight().iter().find(|w| w.owner.is_some()) else { break };
+        let Some(m) = sim.munitions().in_flight.iter().find(|w| w.owner.is_some()) else { break };
         // Peilung zur Rakete relativ zum Kurs: Vorzeichen = Kurvenrichtung.
         let to = m.position - fd.position;
         let rel = (to.y.atan2(to.x) - fd.heading + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU)
@@ -160,7 +160,7 @@ fn short_range_sam_fires_directly() {
     let (mut sim, site) = toward_site_with(TargetClass::ShortRangeSam, 8_000.0, 1_500.0, true);
     assert!(fly_until(&mut sim, 30.0, |s| launched(s).is_some()), "kein Start");
     assert_eq!(launched(&sim), Some((WeaponKind::ShortRangeSam, site)));
-    let w = sim.weapons_in_flight().iter().find(|w| w.owner.is_some()).unwrap();
+    let w = sim.munitions().in_flight.iter().find(|w| w.owner.is_some()).unwrap();
     let to = sim.aircraft().position - w.position;
     let off = (w.velocity.normalize_or_zero().dot(to.normalize_or_zero())).acos().to_degrees();
     assert!(off < 25.0, "startet {off:.0}° neben dem Flugzeug");
@@ -172,9 +172,9 @@ fn short_range_sam_fires_directly() {
 fn long_range_sam_climbs_and_lofts() {
     let (mut sim, _) = toward_site(TargetClass::EarlyWarning, 20_000.0, 3_000.0);
     assert!(fly_until(&mut sim, 60.0, |s| launched(s).is_some()), "kein Start");
-    let start = sim.weapons_in_flight().iter().find(|w| w.owner.is_some()).unwrap().position;
+    let start = sim.munitions().in_flight.iter().find(|w| w.owner.is_some()).unwrap().position;
     let mut top: f64 = 0.0;
-    fly_until(&mut sim, 30.0, |s| match s.weapons_in_flight().iter().find(|w| w.owner.is_some()) {
+    fly_until(&mut sim, 30.0, |s| match s.munitions().in_flight.iter().find(|w| w.owner.is_some()) {
         Some(w) => {
             top = top.max(start.z - w.position.z);
             false
@@ -203,7 +203,8 @@ fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) 
     let mut thrown = false;
     for _ in 0..(20 * TICK_HZ) {
         let near = sim
-            .weapons_in_flight()
+            .munitions()
+            .in_flight
             .iter()
             .filter(|w| w.owner.is_some())
             .any(|w| (w.position - sim.aircraft().position).length() < at_m);
@@ -215,7 +216,7 @@ fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) 
         let (roll, pull) =
             if thrown { (((75f64.to_radians() - fd.roll) * 2.0).clamp(-1.0, 1.0), 0.8) } else { (0.0, 0.0) };
         sim.step(ControlFrame::from_analog(pull, roll, 0.0, 0.7, 0).with_weapons(w));
-        if thrown && sim.weapons_in_flight().iter().all(|w| w.owner.is_none()) {
+        if thrown && sim.munitions().in_flight.iter().all(|w| w.owner.is_none()) {
             break;
         }
     }
