@@ -248,6 +248,10 @@ fn menu_input(
     mut view: ResMut<ViewSettings>,
 ) {
     if state.menu.is_none() {
+        // Enter blättert die Nachbesprechung wie Leertaste und Auslöser.
+        if state.sim.mission_over() && keys.just_pressed(KeyCode::Enter) {
+            view.debrief += 1;
+        }
         let done =
             state.sim.mission_over() && view.debrief >= f29_hud::debrief::screens(&state.sim.score()).len();
         if done {

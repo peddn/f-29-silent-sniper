@@ -27,8 +27,7 @@ pub const CONTROL_BACKUP: f64 = 0.3;
 /// Restleistung eines Systems nach dem ersten Treffer.
 pub const HIT_CAPABILITY: f64 = 0.5;
 /// Ist das Triebwerk beschädigt, kostet jeder Treffer der Stärke 1 so viel
-/// Höchstschub (Original 4 %, hier doppelt so viel, Spielerwunsch v0.2.9;
-/// ausfallen kann es nicht).
+/// Höchstschub (mehr als im Original; ausfallen kann es nicht).
 pub const THRUST_LOSS_PER_HIT: f64 = 0.08;
 
 /// Ein Bordsystem.

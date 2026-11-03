@@ -75,7 +75,7 @@ fn main() {
         match f29_core::weapons::Loadout::parse(&text) {
             Some(l) => config.spawn.loadout = Some(l),
             None => eprintln!(
-                "--loadout: vier Einträge aus fall, chute, lgb, agm, arm, ship, aim9, aim120, cam oder - erwartet"
+                "--loadout: vier Einträge aus fall, chute, lgb, agm, arm, ship, aim9, aim120, cam, tank oder - erwartet"
             ),
         }
     }

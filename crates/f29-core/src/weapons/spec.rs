@@ -210,7 +210,7 @@ const SAM: WeaponSpec = WeaponSpec {
     boost_s: 1.5,
     loft: 0.1,
     max_range_m: 25_000.0,
-    // Etwas breiter als im Original (22°): Querflug schüttelt sie meist,
+    // Etwas breiter als im Original: Querflug schüttelt sie meist,
     // aber nicht immer ab.
     seeker_cone_rad: deg(26.0),
     lethal_radius_m: 30.0,
