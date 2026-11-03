@@ -1584,7 +1584,13 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Schacht ist danach leer. WPN-Seite FUEL, READY.
   - **Bedienung:** Pfeile, W/S oder Blick vorn/hinten (I/K, Joystick) wählen,
     auf der Bewaffnung auch links/rechts; Leertaste, Enter bzw. Auslöser
-    bestätigen.
+    bestätigen. Maus: Die Wahl folgt dem Zeiger, sobald er sich bewegt
+    (ruhend lässt er die Tasten gewähren), ein Linksklick bestätigt; auf dem
+    Titelbild genügt ein Klick irgendwohin, in der Nachbesprechung auf
+    CONTINUE. Bewaffnung: Klick auf eine Waffe nimmt sie, dann wählt der
+    Zeiger den Schacht (Tabelle oder Bild), Klick legt sie ab; ein Klick auf
+    eine andere Waffe tauscht sie. Getroffen wird aus denselben Maßen, mit
+    denen die Bildschirme aufgebaut sind (`ui::hit`).
   - **Darstellung** (`ui.rs`, Inhalt aus `f29-hud` als `Page`): Alle
     Bildschirme außerhalb des Cockpits, auch die Nachbesprechung, zeichnet
     bevy_ui in Departure Mono in ein Bild mit 640 × 400 Pixeln, ohne Glättung
@@ -1599,8 +1605,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   zusammen (die Auswahl hat höchstens vier Zeilen), Raketenreichweiten stehen
   im Text statt als eigene Kreise; Richtung und Entfernung statt
   Gitterkoordinaten (Planquadrate fehlen noch, M-031), keine Fristen und
-  besonderen Ereignisse; die Karte ist mit der Maus zoom- und verschiebbar
-  (unsere Ergänzung); Erkennung und Dienstplan sind Platzhalter; „leicht“ lockert die Landegrenzen
+  besonderen Ereignisse; Mausbedienung der Menüs und der Karte (zoom- und
+  verschiebbar) ist unsere Ergänzung; Erkennung und Dienstplan sind Platzhalter; „leicht“ lockert die Landegrenzen
   weniger als das Original, weil unsere schon großzügig sind (mehr wäre ein
   Aufprall).
 - **Status:** teilweise (es fehlen der Dienstplan mit Pilotenakten und das

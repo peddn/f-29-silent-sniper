@@ -13,8 +13,10 @@ use crate::actions::Actions;
 use crate::input::PilotInput;
 use crate::joystick_config::Action;
 use crate::sim::{SimState, SimSystems};
+use crate::ui::{self, Hit};
 use crate::view::ViewSettings;
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use f29_core::rules::{Conflict, Landings, Opponents};
 use f29_core::weapons::{Loadout, WeaponKind};
 use f29_hud::arming::Arming;
@@ -142,8 +144,28 @@ pub fn arming(state: &SimState) -> Arming {
 }
 
 /// Bewaffnung bedienen: in der Liste eine Waffe nehmen, dann mit den Pfeilen
-/// einen Schacht wählen und sie dort ablegen.
-fn arm(state: &mut SimState, (up, down, left, right, ok): (bool, bool, bool, bool, bool)) {
+/// einen Schacht wählen und sie dort ablegen. Mit der Maus ebenso: Zeiger
+/// über Waffe bzw. Schacht (Tabelle oder Bild), Klick bestätigt; ein Klick
+/// auf eine andere Waffe tauscht sie, solange ein Schacht gewählt wird.
+fn arm(
+    state: &mut SimState,
+    (up, down, left, right, ok): (bool, bool, bool, bool, bool),
+    hit: Option<Hit>,
+    click: bool,
+) {
+    let mut ok = ok;
+    match (state.arm_bay, hit) {
+        (None, Some(Hit::Option(i))) => {
+            state.cursor = i;
+            ok |= click;
+        }
+        (Some(_), Some(Hit::Bay(k))) => {
+            state.arm_bay = Some(k);
+            ok |= click;
+        }
+        (Some(_), Some(Hit::Option(i))) if click => state.cursor = i,
+        _ => {}
+    }
     match state.arm_bay {
         None => {
             let n = ARM_ITEMS;
@@ -254,19 +276,30 @@ fn choose(state: &mut SimState, choice: usize) {
 }
 
 /// Bedienung: Pfeile bzw. W/S oder Blick vorn/hinten am Joystick wählen,
-/// Leertaste, Enter bzw. Auslöser bestätigen. Alle anderen Aktionen ruhen
-/// im Menü (nur Escape beendet). Am Ende der Nachbesprechung öffnet sich der
-/// Dienstplan mit einer neuen Mission.
+/// Leertaste, Enter bzw. Auslöser bestätigen. Mit der Maus folgt die Wahl
+/// dem Zeiger, sobald er sich bewegt, und ein Linksklick bestätigt. Alle
+/// anderen Aktionen ruhen im Menü (nur Escape beendet). Am Ende der
+/// Nachbesprechung öffnet sich der Dienstplan mit einer neuen Mission.
+#[allow(clippy::too_many_arguments)]
 fn menu_input(
     keys: Res<ButtonInput<KeyCode>>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    mut last: Local<Option<Vec2>>,
     mut actions: ResMut<Actions>,
     mut state: ResMut<SimState>,
     mut pilot: ResMut<PilotInput>,
     mut view: ResMut<ViewSettings>,
 ) {
+    let pointer = ui::cursor_px(&window);
+    let (moved, click) = (pointer != *last, buttons.just_pressed(MouseButton::Left));
+    *last = pointer;
+    let hit = pointer.filter(|_| moved || click).and_then(|p| ui::hit(&state, p));
+    let clicked = click && hit.is_some();
     if state.menu.is_none() {
-        // Enter blättert die Nachbesprechung wie Leertaste und Auslöser.
-        if state.sim.mission_over() && keys.just_pressed(KeyCode::Enter) {
+        // Enter oder ein Klick auf CONTINUE blättert die Nachbesprechung wie
+        // Leertaste und Auslöser.
+        if state.sim.mission_over() && (keys.just_pressed(KeyCode::Enter) || clicked) {
             view.debrief += 1;
         }
         let done =
@@ -286,19 +319,23 @@ fn menu_input(
     let left = keys.any_just_pressed([KeyCode::ArrowLeft, KeyCode::KeyA]) || act(Action::LookLeft);
     let right = keys.any_just_pressed([KeyCode::ArrowRight, KeyCode::KeyD]) || act(Action::LookRight);
     actions.0.retain(|&(a, ..)| a == Action::Quit);
-    // Das Titelbild hat keine Auswahl.
+    // Das Titelbild hat keine Auswahl; ein Klick irgendwo genügt.
     if state.menu == Some(Screen::Title) {
-        if ok {
+        if ok || click {
             choose(&mut state, 0);
         }
         return;
     }
     if state.menu == Some(Screen::Arming) {
-        arm(&mut state, (up, down, left, right, ok));
+        arm(&mut state, (up, down, left, right, ok), hit, click);
         *pilot = PilotInput::matching(&state.sim);
         return;
     }
     let n = page(&state).options.len();
+    if let Some(Hit::Option(i)) = hit {
+        state.cursor = i;
+    }
+    let ok = ok || clicked;
     if up {
         state.cursor = (state.cursor + n - 1) % n;
     }

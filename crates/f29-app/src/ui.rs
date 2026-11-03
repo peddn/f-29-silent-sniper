@@ -27,7 +27,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::{FontSmoothing, LineHeight};
 use bevy::window::PrimaryWindow;
-use f29_hud::arming::{Arming, ROWS};
+use f29_hud::arming::{Arming, ROWS, bay_rect};
 use f29_hud::intel::{self, Label, MapView};
 use f29_hud::map::map_half_extent;
 use f29_hud::{Align, Ink, MAX_OPTIONS, Page, Rect, debrief};
@@ -66,6 +66,12 @@ const BODY_H: f32 = H - 2.0 * PAD - TITLE_H - 2.0 * GAP - OPTIONS_H;
 const TEXT_COLUMN: f32 = 170.0;
 /// Lagebesprechung: Kantenlänge der Karte rechts im Textfeld.
 const MAP_PX: f32 = BODY_H - 2.0 * INSET;
+/// Auswahl: Oberkante, Breite der Spalte, Breite und Abstand der Spalten
+/// der Bewaffnung.
+const OPTIONS_TOP: f32 = BODY_TOP + BODY_H + GAP;
+const OPTIONS_W: f32 = 280.0;
+const ARM_COL_W: f32 = 192.0;
+const ARM_GAP: f32 = 8.0;
 
 /// Was gerade zu sehen ist.
 #[derive(Clone, PartialEq)]
@@ -126,6 +132,63 @@ pub fn map_rect() -> Rect {
 /// Punkt des 16:10-Bildschirms → Bildpixel.
 fn to_px([x, y]: [f32; 2]) -> [f32; 2] {
     [W * 0.5 + x * H, H * 0.5 - y * H]
+}
+
+/// Bildpixel → Punkt des 16:10-Bildschirms.
+fn to_units(p: Vec2) -> [f32; 2] {
+    [(p.x - W * 0.5) / H, (H * 0.5 - p.y) / H]
+}
+
+/// Mauszeiger in Bildpixeln: Fensterpixel ohne Rand, durch die
+/// Vergrößerung; außerhalb des Bildes `None`.
+pub fn cursor_px(window: &Window) -> Option<Vec2> {
+    let c = window.cursor_position()?;
+    let p = (c - Vec2::new(window.width(), window.height()) * 0.5) / scale(window) + Vec2::new(W, H) * 0.5;
+    (p.x >= 0.0 && p.y >= 0.0 && p.x < W && p.y < H).then_some(p)
+}
+
+/// Was unter dem Mauszeiger liegt: eine Zeile der Auswahl oder ein Schacht.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Hit {
+    Option(usize),
+    Bay(usize),
+}
+
+/// Zeile `0..n` einer Auswahlspalte ab `x0` mit Breite `w` unter `p`.
+fn slot(p: Vec2, x0: f32, w: f32, n: usize) -> Option<usize> {
+    let (dx, dy) = (p.x - x0, p.y - OPTIONS_TOP);
+    let k = (dy / OPTION_H) as usize;
+    (dx >= 0.0 && dx < w && dy >= 0.0 && dy % OPTION_H < OPTION_H - 2.0 && k < n).then_some(k)
+}
+
+/// Treffer an `p` (Bildpixel) auf dem offenen Bildschirm – aus denselben
+/// Maßen, mit denen die Bildschirme aufgebaut sind.
+pub fn hit(state: &SimState, p: Vec2) -> Option<Hit> {
+    match state.menu {
+        Some(Screen::Arming) => {
+            let table = |k: usize| {
+                let top = BODY_TOP + INSET + (3 + k) as f32 * LINE;
+                (PAD + INSET..PAD + INSET + TEXT_COLUMN - 8.0).contains(&p.x)
+                    && (top..top + LINE).contains(&p.y)
+            };
+            if let Some(k) = (0..4).find(|&k| table(k) || bay_rect(k, picture()).contains(to_units(p))) {
+                return Some(Hit::Bay(k));
+            }
+            let n = menu::arming(state).items.len();
+            let cols = n.div_ceil(ROWS);
+            let x0 = (W - cols as f32 * (ARM_COL_W + ARM_GAP) + ARM_GAP) * 0.5;
+            (0..cols).find_map(|c| {
+                let k = slot(p, x0 + c as f32 * (ARM_COL_W + ARM_GAP), ARM_COL_W, ROWS)?;
+                (c * ROWS + k < n).then_some(Hit::Option(c * ROWS + k))
+            })
+        }
+        Some(Screen::Title) => None,
+        // Menüs; ohne Menü die Nachbesprechung mit „CONTINUE“
+        Some(_) => {
+            slot(p, (W - OPTIONS_W) * 0.5, OPTIONS_W, menu::page(state).options.len()).map(Hit::Option)
+        }
+        None => slot(p, (W - OPTIONS_W) * 0.5, OPTIONS_W, 1).map(Hit::Option),
+    }
 }
 
 fn color(ink: Ink) -> Color {
@@ -220,12 +283,11 @@ fn intel_input(
         intel.mission = maps.mission();
         intel.view = Some(MapView::fit(map, bound));
     }
-    let cursor = window.cursor_position();
+    let cursor = cursor_px(&window);
     let moved = cursor.zip(*last).map(|(c, l)| c - l);
     *last = cursor;
     let (Some(mut view), Some(cursor)) = (intel.view, cursor) else { return };
-    let (area, k) = (map_rect(), unit(&window));
-    let at = [(cursor.x - window.width() * 0.5) / k, (window.height() * 0.5 - cursor.y) / k];
+    let (area, at) = (map_rect(), to_units(cursor));
     if state.menu != Some(Screen::Intel) || !area.contains(at) {
         return;
     }
@@ -237,7 +299,7 @@ fn intel_input(
         view = view.zoom(area, at, 0.85_f64.powf(f64::from(lines)), bound);
     }
     if let Some(d) = moved.filter(|d| buttons.pressed(MouseButton::Left) && *d != Vec2::ZERO) {
-        view = view.drag(area, [d.x / k, -d.y / k], bound);
+        view = view.drag(area, [d.x / H, -d.y / H], bound);
     }
     if intel.view != Some(view) {
         intel.view = Some(view);
@@ -421,7 +483,7 @@ fn page_ui(p: &mut ChildSpawnerCommands, font: &Handle<Font>, page: &Page) {
 
 /// Die Auswahl der Seite, gewählte Zeile invers.
 fn options(p: &mut ChildSpawnerCommands, font: &Handle<Font>, page: &Page) {
-    p.spawn(column(280.0)).with_children(|list| {
+    p.spawn(column(OPTIONS_W)).with_children(|list| {
         for (k, o) in page.options.iter().enumerate() {
             option(list, font, o, (k == page.cursor).then_some(Ink::Hud));
         }
@@ -485,11 +547,15 @@ fn arming_ui(p: &mut ChildSpawnerCommands, font: &Handle<Font>, a: &Arming) {
             }
         });
     });
-    let cols =
-        Node { width: percent(100), justify_content: JustifyContent::Center, column_gap: px(8), ..default() };
+    let cols = Node {
+        width: percent(100),
+        justify_content: JustifyContent::Center,
+        column_gap: px(ARM_GAP),
+        ..default()
+    };
     p.spawn(cols).with_children(|cols| {
         for (c, items) in a.items.chunks(ROWS).enumerate() {
-            cols.spawn(column(192.0)).with_children(|list| {
+            cols.spawn(column(ARM_COL_W)).with_children(|list| {
                 for (i, item) in items.iter().enumerate() {
                     let bg = (c * ROWS + i == a.cursor).then_some(if a.bay.is_some() {
                         Ink::HudDim
