@@ -6,11 +6,13 @@
 //! ([`page_bar`]).
 
 use crate::canvas::{Align, DisplayList, Ink, Rect};
+use crate::font::text_width;
 use crate::heading_deg;
 use crate::hud::HudMode;
 use crate::map::MapData;
 use crate::mfd::{RightPage, WEAPON_STATIONS, fuel_bar};
 use f29_core::mission::Task;
+use f29_core::sim::{CRUISE_FUEL_KG_PER_KM, FUEL_RESERVE_KG};
 use f29_core::systems::{Condition, System};
 use f29_core::targets::TargetRole;
 use f29_core::units;
@@ -251,8 +253,8 @@ pub(crate) fn engine(dl: &mut DisplayList, fd: &FlightData, screen: Rect) {
     fuel_bar(dl, fd, bar, f.txt);
 }
 
-/// Mission: Ziele (Platzhalter bis v0.3), Route mit aktivem Punkt, Entfernung
-/// und Flugzeit zum aktiven Punkt, Heimweg und BINGO.
+/// Mission: Ziele, Route mit aktivem Punkt, Teilstrecken und Treibstoff bei
+/// Ankunft, Entfernung und Flugzeit zum aktiven Punkt, Heimweg und BINGO.
 pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: Option<&MapData>) {
     let f = frame(screen);
     title(dl, screen, &f, "MISSION");
@@ -289,19 +291,27 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
     let side = fd.territory.label();
     dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, &format!("ROE {}", fd.rules), Ink::Mfd);
     dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, side, ink);
-    y -= step;
-    y += step * 0.1;
-    dl.line([f.x0, y], [f.x1, y], Ink::MfdDim);
-    y -= step * 0.8;
+    y -= step * 1.1;
 
-    // Route: Punkt, Teilstrecke in km; aktiver Punkt hell mit Raute
-    let active = fd.steerpoint.as_ref().map(|s| s.index);
+    // Route: Punkt, Teilstrecke (km) und ab dem aktiven Punkt der Treibstoff
+    // bei Ankunft (kg, M-009) – beim jetzigen Verbrauch je Meter, unter 50 m/s
+    // nach der Planung; unter der Reserve in Warnfarbe. Aktiver Punkt hell mit
+    // Raute.
+    let active = fd.steerpoint.as_ref().map(|s| (s.index, s.range));
+    let per_m =
+        if fd.tas_mps > 50.0 { fd.fuel_flow_kgps / fd.tas_mps } else { CRUISE_FUEL_KG_PER_KM / 1_000.0 };
+    let km_x = f.x1 - text_width("00000 ", f.txt * 0.85);
+    dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, "ROUTE", Ink::MfdDim);
+    dl.text_mid([km_x, y], f.txt * 0.85, Align::Right, "KM", Ink::MfdDim);
+    dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, "FUEL", Ink::MfdDim);
+    y -= step;
     if let Some(map) = map {
         let mut prev: Option<[f64; 2]> = None;
+        let mut fuel = fd.fuel_kg;
         for (k, p) in map.route.iter().enumerate() {
             let leg = prev.map(|q| ((p.pos[0] - q[0]).powi(2) + (p.pos[1] - q[1]).powi(2)).sqrt());
             prev = Some(p.pos);
-            let is_active = Some(k) == active;
+            let is_active = active.is_some_and(|a| a.0 == k);
             let ink = if is_active { Ink::Mfd } else { Ink::MfdDim };
             if is_active {
                 let d = f.txt * 0.35;
@@ -314,8 +324,14 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
             }
             let name = format!("{} {}", k + 1, p.name);
             dl.text_mid([f.x0 + f.txt * 1.2, y], f.txt * 0.85, Align::Left, &name, ink);
-            let leg = leg.map_or("---".to_string(), |m| format!("{:.1} KM", units::m_to_km(m)));
-            dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &leg, ink);
+            if let Some((a, range)) = active.filter(|a| k >= a.0) {
+                fuel -= per_m * if k == a { range } else { leg.unwrap_or(0.0) };
+                let kg = ((fuel.max(0.0) / 10.0).round() as i64 * 10).to_string();
+                let ink = if fuel < FUEL_RESERVE_KG { Ink::Warning } else { ink };
+                dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &kg, ink);
+            }
+            let leg = leg.map_or("---".to_string(), |m| format!("{:.0}", units::m_to_km(m)));
+            dl.text_mid([km_x, y], f.txt * 0.85, Align::Right, &leg, ink);
             y -= step;
         }
     }
