@@ -1382,7 +1382,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     für weite Wege, nicht fürs Trödeln).
   - **Nachbesprechung** (Bildschirme wie die Menüs, M-036): MISSION DEBRIEF
     (Ausgang, Aufträge DONE / NOT DONE), MISSION EVENTS (Zeit, Text, Punkte; 14
-    je Bildschirm), MISSION RATING (Ereignissumme, Faktoren, Gesamt). Die Auswahl
+    je Bildschirm), MISSION RATING (Ereignissumme, Faktoren, Gesamt), mit einem
+    Piloten aus dem Dienstplan zuletzt die Ehrung (M-030). Die Auswahl
     „CONTINUE“ (Leertaste bzw. Auslöser) blättert, danach geht es mit einer neuen
     Mission zum Dienstplan; R fliegt neu, Escape beendet. `f29-headless replay`
     gibt die Wertung mit aus.
@@ -1477,11 +1478,18 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   steigt im Rang auf, erhält Orden und kann gefangen genommen werden oder
   fallen. Statistik, Beförderung und Orden folgen auf die Nachbesprechung
   (M-032); der Dienstplan führt die Piloten (M-036).
-  - **Beförderung:** sechs Ränge. Nach jedem Einsatz prüft die
-    Nachbesprechung von oben nach unten, ob Gesamtpunkte, Zahl der Einsätze
-    und Punkteschnitt je Einsatz die Schwelle eines höheren Rangs erreichen;
-    dann steigt der Pilot um einen Rang. Der höchste Rang verlangt zusätzlich
-    die Höchstzahl an Einsätzen, mit der er auch in den Ruhestand geht.
+  - **Beförderung:** sieben Ränge vom Second Lieutenant bis zum Brigadier
+    General. Nach jedem Einsatz prüft die Nachbesprechung die Schwellen von
+    oben bis zum eigenen Rang, jede aus Gesamtpunkten, Zahl der Einsätze und
+    Punkteschnitt je Einsatz; erfüllt der Pilot eine davon ganz, steigt er um
+    genau einen Rang. Der höchste Rang kommt nur mit dem letzten Einsatz vor
+    dem Ruhestand, der bei einer festen Höchstzahl an Einsätzen folgt; ein
+    tödlicher Ausgang geht dem Ruhestand vor.
+  - **Ablauf der Ehrung:** nach der Wertung ein Bild mit Rangabzeichen und
+    Ordensleiste, dazu je Ereignis ein Satz: Orden (mit Verwundung),
+    Einsatzspange, zurückgehaltener Orden, Beförderung, verzögerte
+    Beförderung – oder, wenn nichts davon geschah, dass der Pilot im Rang
+    bleibt. Nach einem tödlichen Ausgang heißt es „posthum“.
   - **Orden:** fünf Stufen, vergeben allein nach der Wertung des einzelnen
     Einsatzes (nicht nach der Summe der Laufbahn). Je Einsatz höchstens ein
     Orden: der höchste, dessen Schwelle erreicht ist. Dieselbe Stufe noch
@@ -1502,12 +1510,47 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
 - **Referenzstelle:** f19re `src_end/enbrief.c` (`checkPromotion`,
   `checkAwardCodes`, Todesbildschirm), `src_end/endevt.c` (Meldungen zu
   Orden, Gefangennahme, Ruhestand), `src_end/enmain.c` (Ablauf, Status).
-- **Unser Design:** Entwurf: eigene Ränge und Auszeichnungen mit eigenen Namen
-  in den eigenen Einsatzgebieten (M-031); Kampagnenwertung datengetrieben
-  (`data/career.ron`), Spielstand versioniert serialisiert. Grundlage ist die
-  Missionswertung (M-032); Dienstplan und Pilotenakten gehören zu M-036.
-- **Abweichungen:** keine.
-- **Status:** geplant.
+- **Unser Design:** Aufbau wie im Original, Rang- und Ordensnamen aus dem
+  Original (Spielerentscheidung), eigene Schwellen nach unserer Wertung
+  (M-032), Tabellen in `f29_core::roster`. Die Akte (`Pilot`) führt Rang,
+  Punkte, Einsätze, Status, Orden je Stufe und das Purple Heart; die Bänder
+  folgen aus der Zahl der Einsätze. `Pilot::fly` verbucht einen Einsatz
+  (`Mission`: Wertung, Ausgang, Treffer, Einstellungen) und meldet, was er
+  bewirkt hat (`Report`).
+  - **Maßstab** (gemessen an 300 erzeugten Missionen je Regelset, Route
+    400–480 km, rund 35 min Flug): ein voller Erfolg (beide Ziele, heil
+    gelandet, REGULAR, REALISTIC) bringt im OPEN WAR rund 820, LIMITED 1090,
+    COLD WAR 1640 Punkte; Gegnerqualität ×0,75–1,5 und Flugverhalten
+    ×0,75–1 kommen dazu. Tod und Gefangennahme bringen 0 Punkte.
+  - **Ränge:** 2ND LT, 1ST LT, CAPTAIN, MAJOR, LT COLONEL, COLONEL, BRIG
+    GENERAL. Beförderung in den nächsten Rang ab (Einsätze, Gesamtpunkte,
+    Schnitt): 3 / 1500 / 300, 8 / 5000 / 450, 15 / 12 000 / 600, 25 / 22 000 /
+    700, 40 / 36 000 / 800, 60 / 45 000 / 700. Ruhestand nach 60 Einsätzen,
+    tot nach Absturz oder misslungenem Ausstieg (geht vor).
+  - **Orden** (Punkte des Einsatzes; der n-te ab dem n-Fachen): AIRMAN'S
+    MEDAL 250 (höchstens neunmal), DISTINGUISHED FLYING CROSS 600, SILVER STAR
+    1000, AIR FORCE CROSS 1500, CONGRESSIONAL MEDAL OF HONOR über 2000
+    (einmal). PURPLE HEART einmal, sobald das eigene Flugzeug getroffen
+    wurde.
+  - **Bänder:** LONGEVITY SERVICE RIBBON ab 5 Einsätzen, ab 15 WITH OAK LEAF
+    CLUSTER; EXPEDITIONARY SERVICE RIBBON ab 30, ab 50 WITH OAK LEAF CLUSTER.
+  - **Ehrung** (`f29_hud::debrief::honors`, nach MISSION RATING): Titel Rang
+    und Name, darunter PROMOTED TO, PROMOTION DELAYED BY CAPTURE, AWARDED
+    (Orden, Purple Heart), das neue Band, RETIRED FROM ACTIVE DUTY oder NO
+    PROMOTION OR DECORATION – nach dem Tod „POSTHUMOUSLY“; darunter alle
+    Auszeichnungen, höchste zuerst, Orden mit Anzahl. Vorerst nur Text;
+    Rangabzeichen, Orden und Bänder als Grafik liefert der Spieler nach. Die
+    Seite zeigt den Einsatz an einer Kopie der Akte, eingetragen wird er erst
+    beim Übergang zum Dienstplan (M-036).
+- **Abweichungen:** Schwellen eigene. Namen der Einsatzbänder eigene (die des
+  Originals stehen nur in seinen Spieldaten). Purple Heart für einen Treffer
+  am eigenen Flugzeug (die Bedingung des Originals ist in der Rekonstruktion
+  nicht lesbar). Kein Übungsflug, also keine Übungsspange und keine
+  Hinweise, was es gegeben hätte. Ein zurückgehaltener Orden nach
+  Gefangennahme entfällt, weil sie bei uns ohnehin keine Punkte bringt.
+  Einsatzgebiete und Szenarien folgen (M-031).
+- **Status:** teilweise (Laufbahn umgesetzt; es fehlen weitere Einsatzgebiete
+  und die Grafiken der Ehrung).
 
 ### M-036 Menüführung vor dem Flug
 
@@ -1602,8 +1645,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     `~/Library/Application Support/f29-silent-sniper/`, Windows
     `%APPDATA%\f29-silent-sniper\` – oder `--roster DATEI`; gespeichert nach
     jeder Änderung. Eine unlesbare Datei bleibt unangetastet (dann speichert
-    das Spiel nicht). Ränge vorerst nur der niedrigste; Beförderung, Orden und
-    Ruhestand kommen mit der Laufbahn (M-030).
+    das Spiel nicht). Rang, Orden und Ruhestand: Laufbahn (M-030). Ältere
+    Dateien ohne Orden lassen sich weiter lesen.
   - **Gegnerqualität** (`Opponents`): verschiebt das Können der Jäger (M-022)
     um −1 / 0 / +1 / +2 Stufen (GREEN, REGULAR, VETERAN, ELITE = alle Asse);
     Wertung ×0,75 / ×1 / ×1,25 / ×1,5.
@@ -1690,5 +1733,4 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   statt blinkender Schreibmarke; gespeichert wird gleich nach jeder Änderung
   statt beim nächsten Öffnen – Alt+Q wirkt trotzdem wie im Original, weil der
   Einsatz erst beim Übergang zum Dienstplan eingetragen wird.
-- **Status:** teilweise (es fehlen das Erkennungsrätsel sowie Beförderung,
-  Orden und Ruhestand, M-030).
+- **Status:** teilweise (es fehlt das Erkennungsrätsel).

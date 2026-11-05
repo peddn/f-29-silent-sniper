@@ -28,7 +28,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::{FontSmoothing, LineHeight};
 use bevy::window::PrimaryWindow;
-use f29_core::roster::SLOTS;
+use f29_core::roster::{Mission, SLOTS};
 use f29_hud::arming::{Arming, ROWS, bay_rect};
 use f29_hud::intel::{self, Label, MapView};
 use f29_hud::map::map_half_extent;
@@ -335,7 +335,12 @@ fn content(
         }
         Some(Screen::Arming) => Some(Content::Arming(menu::arming(state))),
         Some(_) => Some(Content::Page(menu::page(state))),
-        None if state.fd.mission_over => Some(Content::Page(debrief::page(&state.fd, view.debrief))),
+        // nach den Bildschirmen der Nachbesprechung die Ehrung des Piloten
+        None if state.fd.mission_over => {
+            let screens = state.fd.debrief.as_ref().map_or(0, |s| debrief::screens(s).len());
+            let honors = (view.debrief >= screens).then(|| duty.honors(&Mission::of(&state.sim))).flatten();
+            Some(Content::Page(honors.unwrap_or_else(|| debrief::page(&state.fd, view.debrief))))
+        }
         None => None,
     }
 }

@@ -345,17 +345,22 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - ~~Radarwarnempfänger~~ (gestrichen, Spielerentscheidung v0.2.9)
 
 ### v0.5: Karriere
-- [ ] Pilot mit Laufbahn: Missionsfolge, Punkte, Ränge, Orden (eigene Namen)
+- [x] Pilot mit Laufbahn: Punkte, sieben Ränge, Orden und Bänder (Namen wie
+      im Original, eigene Schwellen), Ruhestand nach 60 Einsätzen; Ehrung
+      nach der Nachbesprechung (vorerst Text)
 - [ ] Mehrere eigene, fiktive Einsatzgebiete (Szenarien)
 - [ ] Konfliktstufen von „Spannung“ bis „offener Krieg“ mit unterschiedlichen
       Einsatzregeln
-- [ ] Verlauf: Abschuss, Gefangennahme, Rettung, Ruhestand; Spielstände
+- [x] Verlauf: Abschuss, Gefangennahme (verzögert die Beförderung), Rettung,
+      Ruhestand; Spielstände im Dienstplan
 
 ### v0.6: Präsentation
 - [x] Titelbild (Mockup), Menüs, Lagebesprechung mit Karte, Nachbesprechung –
       bevy_ui in der Pixelschrift Departure Mono
 - [x] Klang: Waffen, Radarwarnung; Musik (Wiedergabe)
 - [ ] Titelgrafik und Musikdatei (`assets/title.png`, `assets/music/theme.ogg`)
+- [ ] Grafiken der Ehrung: Rangabzeichen, Orden und Bänder (liefert der
+      Spieler nach; bis dahin nur Text)
 - [x] Dienstplan mit Pilotenakten (zehn Plätze, Punkte und Einsätze, Datei
       im Datenordner des Benutzers)
 - [ ] Flugzeugerkennung

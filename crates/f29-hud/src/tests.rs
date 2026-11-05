@@ -965,3 +965,22 @@ fn intel_map_zooms_and_drags_within_the_theater() {
     let far = v.drag(area, [-100.0, 0.0], bound);
     assert_eq!(far.center[1], bound - v.half, "am Gebietsrand");
 }
+
+/// Ehrung: die Ereignisse des Einsatzes, darunter alle Auszeichnungen,
+/// höchste zuerst; selbst eine volle Akte passt ins Textfeld (15 Zeilen,
+/// `f29-app/src/ui.rs`).
+#[test]
+fn honors_list_events_and_decorations() {
+    use f29_core::roster::{MEDALS, Pilot, RIBBONS, Report, Settings, Status};
+    let mut p = Pilot::new("MAVERICK", Settings::default());
+    (p.rank, p.missions, p.medals, p.purple_heart, p.status) =
+        (3, 50, [9, 2, 1, 3, 1], true, Status::Retired);
+    let r = Report { promoted: true, delayed: false, medal: Some(2), purple_heart: true, ribbon: Some(3) };
+    let page = crate::debrief::honors(&p, &r);
+    assert_eq!(page.title, "MAJOR MAVERICK");
+    let shows = |t: &str| page.rows.iter().any(|row| row.text == t || row.value == t);
+    assert!(shows("SILVER STAR, PURPLE HEART") && shows(RIBBONS[3].1) && shows("RETIRED FROM ACTIVE DUTY"));
+    assert!(page.rows.len() <= 15, "{} Zeilen", page.rows.len());
+    let first = page.rows.iter().position(|r| r.text == "DECORATIONS").unwrap() + 1;
+    assert_eq!(page.rows[first].text, MEDALS[4].0, "höchste zuerst");
+}

@@ -8,7 +8,7 @@
 
 use crate::ui::Hit;
 use bevy::prelude::*;
-use f29_core::roster::{NAME_LEN, Pilot, RANKS, Roster, SLOTS, Settings, Status};
+use f29_core::roster::{Mission, NAME_LEN, Pilot, RANKS, Roster, SLOTS, Settings, Status};
 use f29_core::sim::Spawn;
 use f29_hud::{Ink, Page, Row};
 use std::path::PathBuf;
@@ -93,29 +93,37 @@ impl Duty {
     }
 
     /// Schreibt den Einsatz des laufenden Piloten in seine Akte und speichert.
-    pub fn record(&mut self, points: i32, outcome: f29_core::Status, spawn: &Spawn) {
+    pub fn record(&mut self, m: &Mission) {
         if let Some(slot) = self.pilot.take() {
-            self.roster.record(slot, points, outcome, settings(spawn));
+            self.roster.record(slot, m);
             self.cursor = slot;
             self.save();
         }
     }
 
+    /// Ehrung des laufenden Piloten nach diesem Einsatz – an einer Kopie,
+    /// die Akte bleibt bis [`Duty::record`] unberührt.
+    pub fn honors(&self, m: &Mission) -> Option<Page> {
+        let mut p = self.roster.slots[self.pilot?].clone()?;
+        let r = p.fly(m);
+        Some(f29_hud::debrief::honors(&p, &r))
+    }
+
     /// Inhalt des Bildschirms.
     pub fn page(&self) -> Page {
         // Spalten: Platz, Rang, Name, Punkte, Einsätze; Status rechtsbündig.
-        let head = format!("    {:<24}{:>16}{:>16}", "PILOT", "POINTS", "MISSIONS");
+        let head = format!("    {:<30}{:>12}{:>12}", "PILOT", "POINTS", "MISSIONS");
         let mut rows = vec![Row::new(head, Ink::HudDim).value("STATUS ")];
         for (k, slot) in self.roster.slots.iter().enumerate() {
             let (text, value) = match (slot, &self.mode) {
                 (_, Mode::Name(name)) if k == self.cursor => {
-                    (format!("{:>2}  {:<6}{name}_", k + 1, RANKS[0]), "")
+                    (format!("{:>2}  {:<13}{name}_", k + 1, RANKS[0]), "")
                 }
                 (Some(p), _) => (
                     format!(
-                        "{:>2}  {:<6}{:<18}{:>16}{:>16}",
+                        "{:>2}  {:<13}{:<17}{:>12}{:>12}",
                         k + 1,
-                        RANKS[p.rank.min(RANKS.len() - 1)],
+                        p.rank_name(),
                         p.name,
                         p.points,
                         p.missions
@@ -161,7 +169,7 @@ impl Duty {
                 if k.escape {
                     self.mode = Mode::List;
                 } else if k.enter && !name.is_empty() {
-                    self.roster.slots[self.cursor] = Some(Pilot::new(&name, settings(spawn)));
+                    self.roster.slots[self.cursor] = Some(Pilot::new(&name, Settings::of(spawn)));
                     self.mode = Mode::List;
                     self.save();
                 }
@@ -219,9 +227,4 @@ impl Duty {
             }
         }
     }
-}
-
-/// Einstellungen des Auftrags aus dem Start.
-fn settings(spawn: &Spawn) -> Settings {
-    Settings { conflict: spawn.conflict, opponents: spawn.opponents, landings: spawn.landings }
 }

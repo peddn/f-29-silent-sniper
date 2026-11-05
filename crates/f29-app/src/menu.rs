@@ -20,6 +20,7 @@ use bevy::input::ButtonState;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use f29_core::roster::Mission;
 use f29_core::rules::{Conflict, Landings, Opponents};
 use f29_core::weapons::{Loadout, WeaponKind};
 use f29_hud::arming::Arming;
@@ -307,11 +308,11 @@ fn menu_input(
         if state.sim.mission_over() && (keys.just_pressed(KeyCode::Enter) || clicked) {
             view.debrief += 1;
         }
-        let done =
-            state.sim.mission_over() && view.debrief >= f29_hud::debrief::screens(&state.sim.score()).len();
-        if done {
+        // Fliegt ein Pilot aus dem Dienstplan, folgt noch die Ehrung.
+        let screens = f29_hud::debrief::screens(&state.sim.score()).len() + usize::from(duty.pilot.is_some());
+        if state.sim.mission_over() && view.debrief >= screens {
             view.debrief = 0;
-            duty.record(state.sim.score().total, state.sim.status(), &state.sim.config().spawn);
+            duty.record(&Mission::of(&state.sim));
             new_mission(&mut state);
             open(&mut state, Screen::Roster);
             *pilot = PilotInput::matching(&state.sim);
