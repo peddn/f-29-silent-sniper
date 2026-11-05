@@ -1477,7 +1477,24 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   steigt im Rang auf, erhält Orden und kann gefangen genommen werden oder
   fallen. Statistik, Beförderung und Orden folgen auf die Nachbesprechung
   (M-032); der Dienstplan führt die Piloten (M-036).
-- **Referenzstelle:** keine (noch offen).
+  - **Beförderung:** sechs Ränge. Nach jedem Einsatz prüft die
+    Nachbesprechung von oben nach unten, ob Gesamtpunkte, Zahl der Einsätze
+    und Punkteschnitt je Einsatz die Schwelle eines höheren Rangs erreichen;
+    dann steigt der Pilot um einen Rang. Der höchste Rang verlangt zusätzlich
+    die Höchstzahl an Einsätzen, mit der er auch in den Ruhestand geht.
+  - **Orden:** gestufte Auszeichnungen aus einem eigenen Punktekonto des
+    Piloten, die sich mehrfach verdienen lassen (je höher die Stufe, desto
+    größer der Abstand); Spangen für erreichte Einsatzzahlen, eine höhere
+    ersetzt die niedrigere; eine Sonderauszeichnung für eine bestimmte
+    Leistung (Bedingung in der Rekonstruktion nur als Merkmale sichtbar). Im
+    Übungsflug nennt die Nachbesprechung nur, was es gegeben hätte.
+  - **Gefangennahme:** Anstehende Orden bleiben aus (die Gefangennahme hat
+    die Tarnkappentechnik preisgegeben), die Beförderung verzögert sich; der
+    Pilot bleibt aktiv. Tod: Status gefallen, eigener Todesbildschirm mit der
+    Ursache.
+- **Referenzstelle:** f19re `src_end/enbrief.c` (`checkPromotion`,
+  `checkAwardCodes`, Todesbildschirm), `src_end/endevt.c` (Meldungen zu
+  Orden, Gefangennahme, Ruhestand), `src_end/enmain.c` (Ablauf, Status).
 - **Unser Design:** Entwurf: eigene Ränge und Auszeichnungen mit eigenen Namen
   in den eigenen Einsatzgebieten (M-031); Kampagnenwertung datengetrieben
   (`data/career.ron`), Spielstand versioniert serialisiert. Grundlage ist die
@@ -1492,8 +1509,20 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   1. **Flugzeugerkennung:** eine Silhouette einem Namen zuordnen; falsch heißt
      nur Übungsflüge (eigentlich der Kopierschutz, in der englischen Fassung
      fest auf „richtig“ gepatcht).
-  2. **Dienstplan:** Piloten mit Punkten, Einsätzen und Status; einen wählen,
-     mit Namen anlegen oder löschen; gespeichert beim Verlassen.
+  2. **Dienstplan:** zehn Plätze, je Zeile Rang und Name, Gesamtpunkte,
+     Zahl der Einsätze und Status (aktiv, im Ruhestand, gefallen). Eine Zeile
+     wählen übernimmt den Piloten samt seiner Einstellungen (Gebiet,
+     Konfliktlage, Missionsart, Schwierigkeit) in die folgenden Menüs; Piloten
+     im Ruhestand oder gefallene lassen sich nicht wählen, eine kurze Meldung
+     sagt warum. Mit der zweiten Auswahltaste gewählt (welche, zeigt die
+     Rekonstruktion nicht), legt eine Zeile einen neuen Piloten an und
+     überschreibt den bisherigen Eintrag – ein eigenes Löschen gibt es nicht.
+     Der Name kommt per Tastatur mit blinkender Schreibmarke (Rücktaste nimmt
+     ein Zeichen zurück, Escape leert, Enter übernimmt); der neue Pilot beginnt
+     im niedrigsten Rang ohne Punkte und Einsätze. Die Dienstplandatei hält
+     alle Plätze und den zuletzt gewählten Piloten; sie wird beim Öffnen des
+     Dienstplans geladen und gleich wieder gespeichert, nachdem der Eintrag des
+     zuletzt geflogenen Piloten zurückgeschrieben ist.
   3. **Auftrag:** die aktuelle Wahl annehmen oder der Reihe nach in je einer
      Liste ändern (kostenlos): Gebiet (vier), Konfliktstufe (drei), Missionsart
      (Luft-Luft, Angriff, Übung), Gegnerqualität (vier Stufen), Flugverhalten
@@ -1514,10 +1543,20 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
      eine ungünstige Mission (weite Strecke, Kamera belegt einen Schacht)
      tauschen.
   7. Nach dem Flug: Nachbesprechung, Beförderung und Orden (M-030), dann
-     zurück zum Dienstplan.
+     zurück zum Dienstplan. Die Nachbesprechung (ein eigenes Programm) ändert
+     nur den Eintrag des Piloten im Arbeitsspeicher: zu Beginn ein Einsatz
+     mehr, dann Punkte, Beförderung und Orden, am Ende der Status – im
+     Ruhestand mit Erreichen der Höchstzahl an Einsätzen, gefallen nach einem
+     tödlichen Absturz. In die Datei gelangt das erst beim nächsten Öffnen des
+     Dienstplans. Wer das Spiel vorher beendet (Alt+Q, etwa auf dem
+     Todesbildschirm), verwirft den Einsatz: Er zählt nicht, die Laufbahn
+     bleibt geschützt – ein bekannter Kniff der Spieler. Übungsflüge zählen
+     nicht.
 - **Referenzstelle:** f19re `src_start/stmain.c` (Zustandsautomat der
-  Bildschirme), `src_start/stmenu.c` (Erkennung, Dienstplan, Auftragswahl,
-  Auswahllisten, Lagekarte), `src_start/stutil.c` (`printMission`,
+  Bildschirme), `src_start/stmenu.c` (Erkennung, Dienstplan `sub_193EE`,
+  Auftragswahl, Auswahllisten, Lagekarte), `src_start/stpinp.c`
+  (Dienstplandatei, Namenseingabe), `src_start/stmap.c` (Auswahl mit zweiter
+  Taste), `src_end/enmain.c` (Ablauf der Nachbesprechung, Status), `src_start/stutil.c` (`printMission`,
   Briefingtext; `drawStoreIcons`, Bewaffnung). Bewaffnung und Schlussauswahl
   sind in der Rekonstruktion leer, die Menütexte liegen nur in den Spieldaten;
   diese Teile nach dem Handbuch (gamesdatabase.org, „F-19 Stealth Fighter“).
