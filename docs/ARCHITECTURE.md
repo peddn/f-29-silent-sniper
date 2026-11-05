@@ -25,7 +25,8 @@
 
 Abhängigkeiten zeigen nur nach unten. **Nur `f29-app` kennt Bevy.** Alles andere
 kompiliert und testet ohne Grafikkarte und ohne Fenster. Fremde Crates nur, wo
-nötig: `serde`/`ron` (Gebietsdaten in `f29-world`, Replay-Kopf in `f29-core`),
+nötig: `serde`/`ron` (Gebietsdaten in `f29-world`, Replay-Kopf und Dienstplan in
+`f29-core`),
 `png` (`f29-headless`), `resvg` (SVG-Grafiken der Ausrüstung in `f29-app`).
 Die Bildschirme außerhalb des Cockpits (Menüs, Nachbesprechung) zeichnet
 bevy_ui in der Pixelschrift Departure Mono (`f29-app/src/ui.rs`, Schrift samt

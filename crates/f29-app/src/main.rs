@@ -12,7 +12,7 @@
 //!                   [--volume 0..100] [--no-sound]
 //!                   [--loadout fall,chute,lgb,agm (ohne: Vorschlag des Auftrags)] [--night] [--no-awacs] [--no-stealth] [--no-damage]
 //!                   [--rules cold|limited|war]
-//!                   [--joystick DATEI] [--joystick-debug]
+//!                   [--joystick DATEI] [--joystick-debug] [--roster DATEI]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
 
@@ -29,6 +29,7 @@ mod menu;
 mod mfd;
 mod music;
 mod retro;
+mod roster;
 mod sim;
 mod sound;
 mod store_art;
@@ -120,7 +121,9 @@ fn main() {
         ..default()
     };
     let mut app = App::new();
-    app.insert_resource(ClearColor(view::sky_color())).insert_resource(view_settings);
+    // Dienstplan: aus `--roster DATEI` oder dem Datenordner des Benutzers.
+    let duty = roster::Duty::load(arg(&args, "--roster").map(Into::into));
+    app.insert_resource(ClearColor(view::sky_color())).insert_resource(view_settings).insert_resource(duty);
     if volume > 0.0 {
         app.add_plugins(DefaultPlugins.set(window))
             .add_plugins((sound::SoundPlugin { volume }, music::MusicPlugin { volume }));

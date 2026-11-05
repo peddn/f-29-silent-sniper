@@ -15,6 +15,7 @@
 use crate::HUD_LAYER;
 use crate::menu::{self, Screen};
 use crate::mfd::MapAssets;
+use crate::roster::Duty;
 use crate::sim::{SimState, SimSystems};
 use crate::view::ViewSettings;
 use bevy::asset::RenderAssetUsages;
@@ -27,6 +28,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::{FontSmoothing, LineHeight};
 use bevy::window::PrimaryWindow;
+use f29_core::roster::SLOTS;
 use f29_hud::arming::{Arming, ROWS, bay_rect};
 use f29_hud::intel::{self, Label, MapView};
 use f29_hud::map::map_half_extent;
@@ -147,11 +149,13 @@ pub fn cursor_px(window: &Window) -> Option<Vec2> {
     (p.x >= 0.0 && p.y >= 0.0 && p.x < W && p.y < H).then_some(p)
 }
 
-/// Was unter dem Mauszeiger liegt: eine Zeile der Auswahl oder ein Schacht.
+/// Was unter dem Mauszeiger liegt: eine Zeile der Auswahl, ein Schacht
+/// oder ein Platz des Dienstplans.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Hit {
     Option(usize),
     Bay(usize),
+    Row(usize),
 }
 
 /// Zeile `0..n` einer Auswahlspalte ab `x0` mit Breite `w` unter `p`.
@@ -163,8 +167,15 @@ fn slot(p: Vec2, x0: f32, w: f32, n: usize) -> Option<usize> {
 
 /// Treffer an `p` (Bildpixel) auf dem offenen Bildschirm – aus denselben
 /// Maßen, mit denen die Bildschirme aufgebaut sind.
-pub fn hit(state: &SimState, p: Vec2) -> Option<Hit> {
+pub fn hit(state: &SimState, duty: &Duty, p: Vec2) -> Option<Hit> {
     match state.menu {
+        // Plätze ab der zweiten Zeile des Textfelds (darüber die Kopfzeile)
+        Some(Screen::Roster) => {
+            let k = ((p.y - BODY_TOP - INSET) / LINE).floor() - 1.0;
+            let row = (PAD + INSET..W - PAD - INSET).contains(&p.x) && (0.0..SLOTS as f32).contains(&k);
+            let options = slot(p, (W - OPTIONS_W) * 0.5, OPTIONS_W, duty.page().options.len());
+            options.map(Hit::Option).or(row.then_some(Hit::Row(k as usize)))
+        }
         Some(Screen::Arming) => {
             let table = |k: usize| {
                 let top = BODY_TOP + INSET + (3 + k) as f32 * LINE;
@@ -307,9 +318,16 @@ fn intel_input(
 }
 
 /// Inhalt des offenen Bildschirms.
-fn content(state: &SimState, view: &ViewSettings, maps: &MapAssets, intel: &IntelView) -> Option<Content> {
+fn content(
+    state: &SimState,
+    duty: &Duty,
+    view: &ViewSettings,
+    maps: &MapAssets,
+    intel: &IntelView,
+) -> Option<Content> {
     match state.menu {
         Some(Screen::Title) => Some(Content::Title),
+        Some(Screen::Roster) => Some(Content::Page(duty.page())),
         Some(Screen::Intel) => {
             let labels = maps.map.as_deref().zip(intel.view);
             let labels = labels.map(|(m, v)| intel::labels(m, menu::topic(state), v, map_rect()));
@@ -328,6 +346,7 @@ fn show(
     mut commands: Commands,
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<SimState>,
+    duty: Res<Duty>,
     view: Res<ViewSettings>,
     maps: Res<MapAssets>,
     intel: Res<IntelView>,
@@ -335,7 +354,7 @@ fn show(
     mut cameras: Query<&mut Camera>,
     mut frame: Single<(&mut Sprite, &mut Visibility), With<Frame>>,
 ) {
-    let content = content(&state, &view, &maps, &intel);
+    let content = content(&state, &duty, &view, &maps, &intel);
     let on = content.is_some();
     *frame.1 = if on { Visibility::Visible } else { Visibility::Hidden };
     frame.0.custom_size = Some(Vec2::new(W, H) * scale(&window));
@@ -475,7 +494,8 @@ fn page_ui(p: &mut ChildSpawnerCommands, font: &Handle<Font>, page: &Page) {
     title(p, font, &page.title);
     p.spawn(body(FlexDirection::Column)).with_children(|b| {
         for r in &page.rows {
-            row(b, font, (&r.text, &r.value), if r.big { 2.0 } else { 1.0 }, r.ink, None);
+            let k = if r.big { 2.0 } else { 1.0 };
+            row(b, font, (&r.text, &r.value), k, r.ink, r.inverse.then_some(Ink::Hud));
         }
     });
     options(p, font, page);

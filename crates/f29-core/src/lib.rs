@@ -26,6 +26,7 @@ pub mod nav;
 pub mod radar;
 pub mod replay;
 pub mod rng;
+pub mod roster;
 pub mod rules;
 pub mod sensors;
 pub mod sim;

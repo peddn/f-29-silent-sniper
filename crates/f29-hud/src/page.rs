@@ -30,11 +30,13 @@ pub struct Row {
     pub ink: Ink,
     /// Doppelt groß und mittig (Ausgang, Gesamtwertung).
     pub big: bool,
+    /// Invers hinterlegt (gewählte Zeile einer Tabelle, z. B. im Dienstplan).
+    pub inverse: bool,
 }
 
 impl Row {
     pub fn new(text: impl Into<String>, ink: Ink) -> Self {
-        Self { text: text.into(), value: String::new(), ink, big: false }
+        Self { text: text.into(), value: String::new(), ink, big: false, inverse: false }
     }
 
     pub fn value(self, value: impl Into<String>) -> Self {
@@ -43,6 +45,10 @@ impl Row {
 
     pub fn big(self) -> Self {
         Self { big: true, ..self }
+    }
+
+    pub fn inverse(self, on: bool) -> Self {
+        Self { inverse: on, ..self }
     }
 }
 

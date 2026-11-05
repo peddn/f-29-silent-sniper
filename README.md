@@ -67,6 +67,9 @@ cargo run --release -p f29-app -- --loadout fall,fall,agm,arm
 # Gebiet; angreifen nur, was uns entdeckt hat), begrenzter Konflikt oder
 # offener Krieg (Standard)
 cargo run --release -p f29-app -- --rules cold
+# Dienstplan aus einer anderen Datei (Standard: roster.ron im Datenordner des
+# Benutzers, unter Linux ~/.local/share/f29-silent-sniper/)
+cargo run --release -p f29-app -- --roster piloten.ron
 
 # nach 10 s automatisch einen Screenshot speichern und beenden
 cargo run --release -p f29-app -- --screenshot bild.png --after 10
@@ -118,7 +121,7 @@ sudo apt install libudev-dev libwayland-dev libxkbcommon-dev libasound2-dev pkg-
 | Shift+T | | Zeitraffer 1× → 2× → 4× → 1×; endet bei Fahrwerk, Raketenstart, steigender Alarmstufe, Treffer |
 | F12 | | Screenshot nach `screenshots/` |
 | R | | Neustart (Flug wird als Replay gesichert) |
-| Esc | | Beenden (Flug wird als Replay gesichert) |
+| Esc, Alt+Q | | Beenden (Flug wird als Replay gesichert; vor dem Dienstplan beendet, zählt der Einsatz nicht) |
 
 ### Joystick
 
@@ -353,7 +356,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       bevy_ui in der Pixelschrift Departure Mono
 - [x] Klang: Waffen, Radarwarnung; Musik (Wiedergabe)
 - [ ] Titelgrafik und Musikdatei (`assets/title.png`, `assets/music/theme.ogg`)
-- [ ] Dienstplan mit Pilotenakten, Flugzeugerkennung
+- [x] Dienstplan mit Pilotenakten (zehn Plätze, Punkte und Einsätze, Datei
+      im Datenordner des Benutzers)
+- [ ] Flugzeugerkennung
 - [ ] Einstellungen, frei belegbare Tasten, Joystick/HOTAS
 - [ ] Joystick am echten Extreme 3D Pro testen (`--joystick-debug`): Achsen,
       Richtungen und Tastennummern prüfen

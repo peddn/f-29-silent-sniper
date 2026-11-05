@@ -1,5 +1,5 @@
 //! Menüführung vor dem Flug (M-036), Ablauf wie im Original: Titelbild →
-//! Erkennung (Platzhalter) → Dienstplan (Platzhalter) → Auftrag (annehmen
+//! Erkennung (Platzhalter) → Dienstplan (`roster.rs`) → Auftrag (annehmen
 //! oder der Reihe nach ändern: Gebiet, Konfliktlage, Missionsart,
 //! Gegnerqualität, Flugverhalten) → Lagebesprechung (Karte und Themen) →
 //! Schlussauswahl (neue Mission, Lagebesprechung, Bewaffnung, Start). Eine
@@ -12,9 +12,12 @@
 use crate::actions::Actions;
 use crate::input::PilotInput;
 use crate::joystick_config::Action;
+use crate::roster::{self, Duty};
 use crate::sim::{SimState, SimSystems};
 use crate::ui::{self, Hit};
 use crate::view::ViewSettings;
+use bevy::input::ButtonState;
+use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use f29_core::rules::{Conflict, Landings, Opponents};
@@ -64,16 +67,11 @@ pub fn page(state: &SimState) -> Page {
     let region = sim.config().theater.name.to_uppercase();
     let list = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     let (title, lines, options) = match state.menu.unwrap_or(Screen::Final) {
-        // eigene Bildschirme (`ui.rs`)
-        Screen::Title | Screen::Arming => ("", vec![], vec![]),
+        // eigene Bildschirme (`ui.rs`, `roster.rs`)
+        Screen::Title | Screen::Arming | Screen::Roster => ("", vec![], vec![]),
         Screen::Identification => (
             "AIRCRAFT IDENTIFICATION",
             list(&["PLACEHOLDER - THE IDENTIFICATION", "QUIZ FOLLOWS IN A LATER VERSION."]),
-            list(&["CONTINUE"]),
-        ),
-        Screen::Roster => (
-            "DUTY ROSTER",
-            list(&["PLACEHOLDER - PILOT SELECTION", "FOLLOWS IN A LATER VERSION."]),
             list(&["CONTINUE"]),
         ),
         Screen::Assignment => (
@@ -279,23 +277,29 @@ fn choose(state: &mut SimState, choice: usize) {
 /// Bedienung: Pfeile bzw. W/S oder Blick vorn/hinten am Joystick wählen,
 /// Leertaste, Enter bzw. Auslöser bestätigen. Mit der Maus folgt die Wahl
 /// dem Zeiger, sobald er sich bewegt, und ein Linksklick bestätigt. Alle
-/// anderen Aktionen ruhen im Menü (nur Escape beendet). Am Ende der
-/// Nachbesprechung öffnet sich der Dienstplan mit einer neuen Mission.
+/// anderen Aktionen ruhen im Menü (nur Escape und Alt+Q beenden, außer bei
+/// der Namenseingabe). Am Ende der Nachbesprechung kommt der Einsatz in die
+/// Akte des Piloten und der Dienstplan öffnet sich mit einer neuen Mission.
 #[allow(clippy::too_many_arguments)]
 fn menu_input(
     keys: Res<ButtonInput<KeyCode>>,
     buttons: Res<ButtonInput<MouseButton>>,
+    mut typed: MessageReader<KeyboardInput>,
     window: Single<&Window, With<PrimaryWindow>>,
     mut last: Local<Option<Vec2>>,
     mut actions: ResMut<Actions>,
     mut state: ResMut<SimState>,
+    mut duty: ResMut<Duty>,
     mut pilot: ResMut<PilotInput>,
     mut view: ResMut<ViewSettings>,
 ) {
+    let text: String =
+        typed.read().filter(|k| k.state == ButtonState::Pressed).filter_map(|k| k.text.as_deref()).collect();
     let pointer = ui::cursor_px(&window);
     let (moved, click) = (pointer != *last, buttons.just_pressed(MouseButton::Left));
+    let alternate = buttons.just_pressed(MouseButton::Right);
     *last = pointer;
-    let hit = pointer.filter(|_| moved || click).and_then(|p| ui::hit(&state, p));
+    let hit = pointer.filter(|_| moved || click || alternate).and_then(|p| ui::hit(&state, &duty, p));
     let clicked = click && hit.is_some();
     if state.menu.is_none() {
         // Enter oder ein Klick auf CONTINUE blättert die Nachbesprechung wie
@@ -307,6 +311,7 @@ fn menu_input(
             state.sim.mission_over() && view.debrief >= f29_hud::debrief::screens(&state.sim.score()).len();
         if done {
             view.debrief = 0;
+            duty.record(state.sim.score().total, state.sim.status(), &state.sim.config().spawn);
             new_mission(&mut state);
             open(&mut state, Screen::Roster);
             *pilot = PilotInput::matching(&state.sim);
@@ -330,6 +335,34 @@ fn menu_input(
     if state.menu == Some(Screen::Arming) {
         arm(&mut state, (up, down, left, right, ok), hit, click);
         *pilot = PilotInput::matching(&state.sim);
+        return;
+    }
+    if state.menu == Some(Screen::Roster) {
+        let k = roster::Keys {
+            up,
+            down,
+            ok,
+            enter: keys.just_pressed(KeyCode::Enter),
+            escape: keys.just_pressed(KeyCode::Escape),
+            backspace: keys.just_pressed(KeyCode::Backspace),
+            replace: keys.just_pressed(KeyCode::Delete) || (alternate && matches!(hit, Some(Hit::Row(_)))),
+            text,
+            hit,
+            click,
+        };
+        // Bei der Namenseingabe beendet Escape nur die Eingabe.
+        if matches!(duty.mode, roster::Mode::Name(_)) {
+            actions.0.clear();
+        }
+        // Der gewählte Pilot fliegt mit seinen Einstellungen weiter.
+        if let Some(s) = duty.input(&k, &state.sim.config().spawn) {
+            let mut config = state.sim.config().clone();
+            (config.spawn.conflict, config.spawn.opponents, config.spawn.landings) =
+                (s.conflict, s.opponents, s.landings);
+            state.reset(config);
+            choose(&mut state, 0);
+            *pilot = PilotInput::matching(&state.sim);
+        }
         return;
     }
     let n = page(&state).options.len();

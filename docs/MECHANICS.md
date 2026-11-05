@@ -1482,14 +1482,21 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     und Punkteschnitt je Einsatz die Schwelle eines höheren Rangs erreichen;
     dann steigt der Pilot um einen Rang. Der höchste Rang verlangt zusätzlich
     die Höchstzahl an Einsätzen, mit der er auch in den Ruhestand geht.
-  - **Orden:** gestufte Auszeichnungen aus einem eigenen Punktekonto des
-    Piloten, die sich mehrfach verdienen lassen (je höher die Stufe, desto
-    größer der Abstand); Spangen für erreichte Einsatzzahlen, eine höhere
-    ersetzt die niedrigere; eine Sonderauszeichnung für eine bestimmte
-    Leistung (Bedingung in der Rekonstruktion nur als Merkmale sichtbar). Im
-    Übungsflug nennt die Nachbesprechung nur, was es gegeben hätte.
-  - **Gefangennahme:** Anstehende Orden bleiben aus (die Gefangennahme hat
-    die Tarnkappentechnik preisgegeben), die Beförderung verzögert sich; der
+  - **Orden:** fünf Stufen, vergeben allein nach der Wertung des einzelnen
+    Einsatzes (nicht nach der Summe der Laufbahn). Je Einsatz höchstens ein
+    Orden: der höchste, dessen Schwelle erreicht ist. Dieselbe Stufe noch
+    einmal verlangt ein Vielfaches ihrer Schwelle (beim zweiten Mal das
+    Doppelte, beim dritten das Dreifache usw.); verfehlt ein Einsatz die
+    nächste Schwelle der hohen Stufen, kann er eine niedrigere bringen. Die
+    höchste Auszeichnung gibt es nur einmal (danach zählen die Stufen
+    darunter), die niedrigste nur begrenzt oft. Für eine Verwundung einmalig
+    eine eigene Auszeichnung, auch zusätzlich zu einem Orden; alles auch
+    posthum. Dazu Spangen für erreichte Einsatzzahlen (zwei Paare, die höhere
+    ersetzt die niedrigere) und eine für den ersten erfolgreichen Übungsflug.
+    Im Übungsflug nennt die Nachbesprechung nur, was es gegeben hätte.
+  - **Gefangennahme:** Ein anstehender Orden bleibt aus und zählt auch nicht
+    für die nächste Schwelle (die Gefangennahme hat die Tarnkappentechnik
+    preisgegeben), die Beförderung verzögert sich; der
     Pilot bleibt aktiv. Tod: Status gefallen, eigener Todesbildschirm mit der
     Ursache.
 - **Referenzstelle:** f19re `src_end/enbrief.c` (`checkPromotion`,
@@ -1564,14 +1571,39 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   `--start` oder `--screenshot` überspringen die Menüs. Mit Menü ist die erste
   Mission zufällig, sonst fest (`--seed` gilt immer); im Menü steht die
   Simulation still, trägt aber schon die Mission.
-  - **Ablauf:** Titelbild (nur beim Start) → Erkennung, Dienstplan (Platzhalter)
-    → Auftrag (ACCEPT MISSION oder CHANGE CHOICES durch die Listen) →
+  - **Ablauf:** Titelbild (nur beim Start) → Erkennung (Platzhalter) →
+    Dienstplan → Auftrag (ACCEPT MISSION oder CHANGE CHOICES durch die Listen) →
     INTELLIGENCE BRIEFING → FINAL CHOICES (SELECT NEW MISSION, INTELLIGENCE
     BRIEFING, ARM YOUR PLANE, BEGIN MISSION; im Textfeld die Übersicht des
     Briefings). Neue Mission
     = nächster Seed mit denselben Einstellungen und vorgeschlagener Beladung,
     zurück zum Dienstplan; ebenso nach der Nachbesprechung. Gebiet und
     Missionsart haben vorerst je einen Eintrag; Konfliktlage = Regelset (M-033).
+  - **Dienstplan** (`f29_core::roster`, `f29-app/src/roster.rs`): Die Tabelle
+    der zehn Plätze ist die Auswahl (Kopfzeile PILOT, POINTS, MISSIONS,
+    STATUS; gewählte Zeile invers, aktive Piloten hell, andere gedämpft; die
+    Auswahl unten bleibt leer). Bestätigen auf einem aktiven Piloten übernimmt
+    Konfliktlage, Gegnerqualität und Flugverhalten aus seiner Akte und führt
+    zum Auftrag; auf einem leeren Platz beginnt die Namenseingabe; bei einem
+    Piloten im Ruhestand oder einem gefallenen sagt die Statuszeile warum. Entf
+    oder rechte Maustaste auf einem belegten Platz fragt nach (REPLACE PILOT
+    oder CANCEL, vorgewählt CANCEL), dann folgt die Namenseingabe: A–Z, 0–9,
+    Leerzeichen, Bindestrich und Punkt, groß, höchstens 16 Zeichen, feste
+    Schreibmarke; Rücktaste nimmt zurück, Enter übernimmt, Escape bricht ab
+    (der alte Eintrag bleibt). Der neue Pilot beginnt im niedrigsten Rang ohne
+    Punkte und Einsätze mit den eingestellten Werten; der Dienstplan bleibt
+    offen. In die Akte kommt ein Einsatz erst beim Übergang von der
+    Nachbesprechung zum Dienstplan: ein Einsatz mehr, die Punkte der Wertung
+    (M-032), die geflogenen Einstellungen; gefallen nach Absturz oder
+    misslungenem Ausstieg, nach einer Gefangennahme bleibt der Pilot aktiv.
+    Wer vorher mit Escape oder Alt+Q beendet, verwirft den Einsatz wie im
+    Original. Datei `roster.ron` (RON) im Datenordner des Benutzers – Linux
+    `$XDG_DATA_HOME` bzw. `~/.local/share/f29-silent-sniper/`, macOS
+    `~/Library/Application Support/f29-silent-sniper/`, Windows
+    `%APPDATA%\f29-silent-sniper\` – oder `--roster DATEI`; gespeichert nach
+    jeder Änderung. Eine unlesbare Datei bleibt unangetastet (dann speichert
+    das Spiel nicht). Ränge vorerst nur der niedrigste; Beförderung, Orden und
+    Ruhestand kommen mit der Laufbahn (M-030).
   - **Gegnerqualität** (`Opponents`): verschiebt das Können der Jäger (M-022)
     um −1 / 0 / +1 / +2 Stufen (GREEN, REGULAR, VETERAN, ELITE = alle Asse);
     Wertung ×0,75 / ×1 / ×1,25 / ×1,5.
@@ -1631,7 +1663,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Zeiger den Schacht (Tabelle oder Bild), Klick legt sie ab; ein Klick auf
     eine andere Waffe tauscht sie. Lagebesprechung: Themen wechseln mit der
     Maus nur per Klick, damit die Ansicht auf dem Weg zur Karte nicht
-    wechselt; LEAVE BRIEFING folgt dem Zeiger wie überall. Getroffen wird
+    wechselt; LEAVE BRIEFING folgt dem Zeiger wie überall. Escape und Alt+Q
+    beenden das Spiel (außer bei der Namenseingabe). Getroffen wird
     aus denselben Maßen, mit denen die Bildschirme aufgebaut sind
     (`ui::hit`).
   - **Darstellung** (`ui.rs`, Inhalt aus `f29-hud` als `Page`): Alle
@@ -1649,8 +1682,13 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   im Text statt als eigene Kreise; Richtung und Entfernung statt
   Gitterkoordinaten (Planquadrate fehlen noch, M-031), keine Fristen und
   besonderen Ereignisse; Mausbedienung der Menüs und der Karte (zoom- und
-  verschiebbar) ist unsere Ergänzung; Erkennung und Dienstplan sind Platzhalter; „leicht“ lockert die Landegrenzen
-  weniger als das Original, weil unsere schon großzügig sind (mehr wäre ein
-  Aufprall).
-- **Status:** teilweise (es fehlen der Dienstplan mit Pilotenakten und das
-  Erkennungsrätsel).
+  verschiebbar) ist unsere Ergänzung; die Erkennung ist ein Platzhalter;
+  „leicht“ lockert die Landegrenzen weniger als das Original, weil unsere
+  schon großzügig sind (mehr wäre ein Aufprall). Dienstplan: Rückfrage vor
+  dem Überschreiben, Entf bzw. rechte Maustaste statt der zweiten
+  Auswahltaste, Escape bricht die Namenseingabe ab statt sie zu leeren, feste
+  statt blinkender Schreibmarke; gespeichert wird gleich nach jeder Änderung
+  statt beim nächsten Öffnen – Alt+Q wirkt trotzdem wie im Original, weil der
+  Einsatz erst beim Übergang zum Dienstplan eingetragen wird.
+- **Status:** teilweise (es fehlen das Erkennungsrätsel sowie Beförderung,
+  Orden und Ruhestand, M-030).

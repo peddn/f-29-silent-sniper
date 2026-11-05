@@ -43,15 +43,16 @@ impl Actions {
 /// Umschalttaste einer Tastenkombination.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mod {
-    /// Ohne Shift und Strg.
+    /// Ohne Shift, Strg und Alt.
     None,
     Shift,
     Ctrl,
+    Alt,
 }
 
 /// Tastaturbelegung (physische Tasten; Y/X für den Kartenzoom folgen der
 /// Beschriftung, siehe [`keyboard_actions`]).
-const KEYS: [(KeyCode, Mod, Action); 34] = [
+const KEYS: [(KeyCode, Mod, Action); 35] = [
     (KeyCode::Space, Mod::None, Action::Fire),
     (KeyCode::Backspace, Mod::None, Action::Gun),
     (KeyCode::KeyO, Mod::None, Action::BayDoors),
@@ -75,6 +76,7 @@ const KEYS: [(KeyCode, Mod, Action); 34] = [
     (KeyCode::KeyP, Mod::None, Action::Pause),
     (KeyCode::KeyR, Mod::None, Action::Restart),
     (KeyCode::Escape, Mod::None, Action::Quit),
+    (KeyCode::KeyQ, Mod::Alt, Action::Quit),
     (KeyCode::KeyT, Mod::Shift, Action::TimeWarp),
     (KeyCode::F1, Mod::Shift, Action::ViewCockpit),
     (KeyCode::F2, Mod::Shift, Action::ViewChase),
@@ -96,15 +98,17 @@ pub fn keyboard_actions(
 ) {
     let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
-    let active = match (shift, ctrl) {
-        (false, false) => Mod::None,
-        (true, false) => Mod::Shift,
-        (false, true) => Mod::Ctrl,
-        (true, true) => return,
+    let alt = keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]);
+    let active = match (shift, ctrl, alt) {
+        (false, false, false) => Mod::None,
+        (true, false, false) => Mod::Shift,
+        (false, true, false) => Mod::Ctrl,
+        (false, false, true) => Mod::Alt,
+        _ => return,
     };
     for &(key, m, action) in &KEYS {
         // Escape beendet immer, auch mit Umschalttaste.
-        if m == active || action == Action::Quit {
+        if m == active || key == KeyCode::Escape {
             actions.push(action, keys.just_pressed(key), keys.pressed(key));
         }
     }
