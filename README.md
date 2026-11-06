@@ -179,6 +179,7 @@ crates/
 docs/
   ARCHITECTURE.md  Aufbau, Koordinatensysteme, Determinismus, Teststrategie
   MECHANICS.md     Clean-Room-Protokoll und Mechanik-Einträge
+  handbuch/        Handbuch: wie das Spiel funktioniert, mit Stellschrauben
 ```
 
 Nur `f29-app` hängt von Bevy ab. Simulation, Gelände, HUD und Geometrie sind ohne
@@ -313,7 +314,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Schleudersitz (Strg+E), Gebiet entscheidet über Rettung,
       Zwischenfall oder Gefangenschaft; Ergebnistafel (v0.3)
 - [x] Planquadrate in Lagebesprechung (Text und Karte) und auf der MSN-Seite
-- [ ] Geländeart als Radarfaktor
+- [x] Geländeart als Radarfaktor: Hügel und Gebirge verkürzen im Tiefflug die
+      Reichweite feindlicher Radare
 - [x] Missionsdaten in der Lagebesprechung: Karte mit Zielen, Route, Radarkreisen
       und Fliegerhorsten, Texte je Thema
 - [x] Bewaffnung und Betankung vor dem Start (Zusatztanks), Missionsauswertung
@@ -368,6 +370,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       im Datenordner des Benutzers)
 - [ ] Flugzeugerkennung
 - [ ] Einstellungen, frei belegbare Tasten, Joystick/HOTAS
+- [ ] Handbuch (`docs/handbuch/`): je ein Kapitel für das Flugmodell und jede
+      weitere Mechanik, jeweils mit den Stellschrauben im Code – Grundlage für
+      das Balancing (v1.0); fertig: Radar und Entdeckung
 - [ ] Joystick am echten Extreme 3D Pro testen (`--joystick-debug`): Achsen,
       Richtungen und Tastennummern prüfen
 

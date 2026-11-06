@@ -586,6 +586,7 @@ mod tests {
             height_agl_m: 3_000.0,
             door: 0.0,
             radar_on: false,
+            ground: 1.0,
             ecm: false,
             visible: true,
         }

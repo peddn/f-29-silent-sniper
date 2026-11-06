@@ -15,7 +15,10 @@
 //! ob die Stellung ihre Rakete auf große Entfernung lenkt (halbaktiv).
 //!
 //! Ohne Treffer sinkt die Stufe nach [`DECAY_S`] um eins. Radare sehen durch
-//! das Gelände (keine Sichtlinie, Spielerentscheidung v0.2.8).
+//! das Gelände (keine Sichtlinie, Spielerentscheidung v0.2.8); wie im
+//! Original verkürzt aber die Geländeart unter dem Flugzeug ihre Reichweite,
+//! grob nach dem Grobraster, so weich gemischt wie die Landschaft
+//! ([`ground_factor`]).
 //!
 //! Das Stealth-Level ist wie im Original ein Wert für alle Radare: tief und
 //! waagerecht ist am unauffälligsten; Höhe über Grund, Querlage, offener
@@ -32,6 +35,7 @@ use crate::detmath;
 use crate::events::EventLog;
 use crate::math::DVec3;
 use crate::targets::Target;
+use f29_world::Ground;
 
 /// Ohne Treffer sinkt die Alarmstufe nach so vielen Sekunden um eins.
 pub const DECAY_S: f64 = 30.0;
@@ -76,6 +80,21 @@ pub const SHORAD: RadarSpec = RadarSpec { kind: RadarKind::Doppler, range_m: 12_
 /// Dopplerradar im reinen Querflug.
 const BEAM_FLOOR: f64 = 0.25;
 
+/// Geländeart unter dem Flugzeug (wie im Original grob nach dem Raster des
+/// Gebiets, aber so weich gemischt und verzerrt wie die Landschaft): Über
+/// Hügeln und Gebirge reicht jedes Radar nur so weit (Anteil; eigene Werte,
+/// Spielerentscheidung v0.3), entdeckt also erst näher – ganz verdecken kann
+/// das Gelände nicht. Voll wirkt das im Tiefflug bis [`LOW_LEVEL_M`], bis
+/// [`GROUND_TOP_M`] über Grund läuft es aus.
+pub fn ground_factor(ground: Ground) -> f64 {
+    match ground {
+        Ground::Hills => 0.7,
+        Ground::Mountains => 0.45,
+        Ground::Water | Ground::Plain => 1.0,
+    }
+}
+pub const GROUND_TOP_M: f64 = 1_000.0;
+
 /// Sichtbarkeit, die immer bleibt (tief, waagerecht, alles zu).
 pub const SIG_BASE: f64 = 0.10;
 /// Höhe über Grund: bis hier am unauffälligsten (m), darüber steigt die
@@ -108,6 +127,8 @@ pub struct Exposure {
     pub door: f64,
     /// Eigenes Radar eingeschaltet.
     pub radar_on: bool,
+    /// Faktor der Geländeart darunter ([`ground_factor`]).
+    pub ground: f64,
     /// Störsender (ECM) eingeschaltet.
     pub ecm: bool,
     /// Testoption: voll sichtbar (Stealth-Level 0).
@@ -140,11 +161,13 @@ impl Exposure {
     }
 
     /// Stärke des Impulses eines Radars `spec` bei `site` am Flugzeug, 0..1:
-    /// linear mit der Entfernung fallend; das Dopplerradar sieht nur die
+    /// linear mit der Entfernung fallend bis zur Reichweite, die im Tiefflug
+    /// das Gelände darunter verkürzt; das Dopplerradar sieht nur die
     /// Bewegung auf sich zu oder von sich weg.
     pub fn signal(&self, spec: &RadarSpec, site: DVec3) -> f64 {
         let to = self.position - site;
-        let r = to.length() / spec.range_m;
+        let low = 1.0 - ((self.height_agl_m - LOW_LEVEL_M) / (GROUND_TOP_M - LOW_LEVEL_M)).clamp(0.0, 1.0);
+        let r = to.length() / (spec.range_m * (1.0 - (1.0 - self.ground) * low));
         if r >= 1.0 {
             return 0.0;
         }
@@ -341,12 +364,40 @@ mod tests {
             height_agl_m: 1_000.0,
             door: 0.0,
             radar_on: false,
+            ground: 1.0,
             ecm: false,
             visible: false,
         }
     }
 
     const SITE: DVec3 = DVec3 { x: 0.0, y: 0.0, z: 0.0 };
+
+    /// Hügel und Gebirge verkürzen im Tiefflug die Reichweite; mit der Höhe
+    /// über Grund läuft das aus, ganz verdeckt das Gelände nie: Tief und
+    /// waagerecht entdeckt das Frühwarnradar auf 1 km auch über Gebirge, auf
+    /// 3 km nur über Flachland.
+    #[test]
+    fn rough_ground_weakens_the_pulse_low_down() {
+        let at = |agl: f64, ground| Exposure {
+            height_agl_m: agl,
+            ground: ground_factor(ground),
+            ..level(-10_000.0, 0.0)
+        };
+        let flat = at(50.0, Ground::Plain).signal(&EARLY_WARNING, SITE);
+        let hills = at(50.0, Ground::Hills).signal(&EARLY_WARNING, SITE);
+        let peaks = at(50.0, Ground::Mountains).signal(&EARLY_WARNING, SITE);
+        assert!(flat > hills && hills > peaks && peaks > 0.0, "{flat} {hills} {peaks}");
+        let mid = at(550.0, Ground::Mountains).signal(&EARLY_WARNING, SITE);
+        let high = at(GROUND_TOP_M, Ground::Mountains).signal(&EARLY_WARNING, SITE);
+        assert!(peaks < mid && mid < high, "{peaks} {mid} {high}");
+        assert_eq!(high, at(GROUND_TOP_M, Ground::Plain).signal(&EARLY_WARNING, SITE));
+        let seen = |km: f64, ground| {
+            let x = Exposure { position: DVec3::new(-km * 1e3, 0.0, -50.0), ..at(50.0, ground) };
+            x.signal(&EARLY_WARNING, SITE) > x.stealth()
+        };
+        assert!(seen(1.0, Ground::Mountains) && !seen(3.0, Ground::Mountains));
+        assert!(seen(3.0, Ground::Plain));
+    }
 
     #[test]
     fn signal_falls_with_range_and_ends_at_the_limit() {

@@ -871,7 +871,10 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   sichtbarer), Querlage, offenem Waffenschacht und eingeschaltetem Störsender
   wächst. Jede Radarstellung bewertet das Flugzeug mit einem Wert, der mit der
   Entfernung linear fällt, von der Geländeart unter dem Flugzeug abhängt (grobe
-  Maskierung über Kartenzellen, keine echte Sichtlinie) und bei Doppler-Radaren
+  Maskierung über Kartenzellen, keine echte Sichtlinie: Die Zelle trägt eine von
+  vier Stufen, mit der der Entfernungsteil der Bewertung malgenommen wird,
+  unabhängig von der Flughöhe; die unterste blendet das Radar ganz aus) und bei
+  Doppler-Radaren
   vom Aspekt. Übersteigen Bewertung und Sichtbarkeit zusammen eine Schwelle,
   steigt die Alarmstufe der Stellung; ab einer zweiten meldet sie das Flugzeug,
   später schießt sie. Der Störsender erhöht die Sichtbarkeit, halbiert aber das
@@ -891,6 +894,19 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     linear mit der Entfernung bis zur Reichweitengrenze. Doppler zählt nur die
     Bewegung auf die Stellung zu oder von ihr weg (reiner Querflug 25 %),
     Impuls ist richtungsunabhängig. Auch am Boden kommen Pings an.
+  - **Gelände** (`radar::ground_factor`, Spielerentscheidung v0.3): Die
+    Geländeart unter dem Flugzeug aus dem Grobraster (M-031), so weich
+    gemischt und verzerrt wie die Landschaft (`Terrain::ground_mix`, kein
+    Sprung an Zellgrenzen), verkürzt die Reichweite jedes Radars, auch des
+    Bordradars feindlicher Jäger: Hügel auf 70 %, Gebirge auf 45 %, Wasser und
+    Flachland gar nicht; die schmalen Ketten erreichen den vollen Wert nur über
+    dem Kamm. Voll gilt das bis
+    100 m über Grund, bis 1000 m läuft es aus. Weil die Impulsstärke linear
+    mit der Entfernung fällt, entdeckt jedes Radar dort im gleichen Verhältnis
+    erst näher – nie gar nicht. Die Anzeigen (SIG-Säule, Pings) zeigen die
+    verkürzte Stärke; die Reichweitenkreise bleiben beim Nennwert.
+  - **Handbuch:** `docs/handbuch/radar.md` beschreibt die Mechanik für
+    Spieler und nennt alle Stellschrauben.
   - **Stealth-Level** = 1 − Sichtbarkeit, ein Wert für alle Radare wie im
     Original. Sichtbarkeit = Grundwert 0,10 + Höhe über Grund bis 0,40
     (Arkustangens über (Höhe − 100 m) / 1500 m: 1000 m ≈ 0,14, 3000 m ≈ 0,28)
@@ -903,8 +919,10 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     (Reichweitenkreis auf der Karte), 2 „TRACKED“ (Ping-Ort gemerkt, Ziel von
     Patrouillen), 3 „RADAR ID“ (Raketenstart, M-021). Ohne Treffer sinkt die
     Stufe nach 30 s um eins; bei 0 „LOST CONTACT“.
-  - **Beispiele:** Tief, waagerecht und clean (Stealth 90 %) entdeckt eine
-    SAM-Stellung das Flugzeug erst unter 3 km, ein Frühwarnradar unter 6 km;
+  - **Beispiele:** Tief, waagerecht und clean (Stealth 90 %) über Flachland
+    entdeckt eine SAM-Stellung das Flugzeug erst unter 3 km, ein
+    Frühwarnradar unter 6 km (über Gebirge unter 1,4 bzw. 2,7 km); mit offenem
+    Schacht (75 %) unter 7,5 bzw. 15 km (über Gebirge 3,4 bzw. 6,8 km);
     in 3000 m (≈ 62 %) unter etwa 11 bzw. 23 km, dort mit 90° Querlage
     (≈ 32 %) unter etwa 20 bzw. 41 km.
   - **Anzeigen:** SIG-Säule zwischen den MFDs mit einem Balken für das
@@ -917,8 +935,10 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Reichweite trifft) und `--no-damage` (Treffer werden gemeldet, richten
     aber keinen Schaden an; ein Absturz bleibt tödlich); beide stehen im
     Replay.
-- **Abweichungen:** Radare sehen durch das Gelände (keine Maskierung, wie
-  unsere eigenen Sensoren); eine feste Stufenleiter statt fein dosierter
+- **Abweichungen:** Radare sehen durch das Gelände – die Geländeart verkürzt
+  nur ihre Reichweite, und nur im Tiefflug (das Original rechnet sie in jeder
+  Höhe), ohne Stufe, die ganz ausblendet; anders als unser optisches System
+  braucht kein Radar eine Sichtlinie; eine feste Stufenleiter statt fein dosierter
   Alarmzuwächse; der Störsender bremst die Alarmstufe nicht, er wirkt nur auf
   Sichtbarkeit und Raketen (M-021); eine Säule statt zwei Balken.
 - **Status:** umgesetzt.
@@ -1300,12 +1320,12 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
 - **Abweichungen:** ein Gebiet statt vier; feste Startbasis, kein Träger; Ziele
   nur aus der Objektliste; das Band gilt für den Abstand zur Basis, nicht für
   die Gesamtstrecke; keine festen Missionen; keine Zellen für spontane tragbare
-  Flugabwehr; Radare sehen durch das Gelände (M-020). Planquadrate mit eigener
+  Flugabwehr; Radare sehen durch das Gelände, die Geländeart verkürzt nur
+  im Tiefflug ihre Reichweite (M-020). Planquadrate mit eigener
   Größe, Buchstaben ab „A“ statt gebietstypischer Kennungen, zusätzlich auf
   der Karte der Lagebesprechung und der MSN-Seite; Richtung und Entfernung von
   der Basis bleiben im Briefing.
-- **Status:** teilweise (es fehlen die Geländeart als Radarfaktor und ein
-  grafischer Gebietseditor).
+- **Status:** teilweise (es fehlt ein grafischer Gebietseditor).
 
 ### M-032 Missionsauftrag, Bewaffnung und Auswertung
 
