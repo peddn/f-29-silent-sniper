@@ -9,11 +9,6 @@ use f29_core::nav::Steerpoint;
 use f29_core::targets::{Target, TargetClass, TargetRole};
 use f29_core::terrain::{AirfieldKind, Terrain};
 
-/// Halbe Kantenlänge des Kartengebiets (m): das ganze Einsatzgebiet.
-pub fn map_half_extent(terrain: &Terrain) -> f64 {
-    f29_core::nav::half_extent_m(terrain)
-}
-
 /// Ein Flugplatz auf der Karte.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapRunway {
@@ -79,7 +74,7 @@ impl MapData {
                 pos: [t.north, t.east],
             })
             .collect();
-        Self { runways, route, targets, half_m: map_half_extent(terrain) }
+        Self { runways, route, targets, half_m: f29_core::nav::HALF_EXTENT_M }
     }
 }
 

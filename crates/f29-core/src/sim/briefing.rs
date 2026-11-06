@@ -85,7 +85,7 @@ impl Sim {
     /// Tageszeit.
     /// Planquadrat eines Punkts im Gebiet (M-031).
     pub fn grid_square(&self, north: f64, east: f64) -> String {
-        crate::nav::grid_square(north, east, crate::nav::half_extent_m(&self.terrain))
+        crate::nav::grid_square(north, east, crate::nav::HALF_EXTENT_M)
     }
 
     /// Je Wegpunkt Planquadrat, Strecke und Verbrauch des Abschnitts nach der

@@ -70,9 +70,9 @@ cargo run --release -p f29-app -- --rules cold
 # Dienstplan aus einer anderen Datei (Standard: roster.ron im Datenordner des
 # Benutzers, unter Linux ~/.local/share/f29-silent-sniper/)
 cargo run --release -p f29-app -- --roster piloten.ron
-# Einsatzgebiete aus einem anderen Ordner (Standard: data/theaters) bzw.
-# direkt in einem bestimmten Gebiet starten
-cargo run --release -p f29-app -- --theaters meine-karten --region "NORTH COAST"
+# Einsatzgebiete aus einem anderen Ordner (Standard: data/theaters; ohne
+# Gebiet dort das eingebaute Testgebiet) bzw. direkt in einem Gebiet starten
+cargo run --release -p f29-app -- --theaters meine-karten --region "TEST RANGE"
 
 # nach 10 s automatisch einen Screenshot speichern und beenden
 cargo run --release -p f29-app -- --screenshot bild.png --after 10
@@ -302,8 +302,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Regelsets Kalter Krieg / Begrenzter Konflikt / Offener Krieg
       (`--rules`): wo und wie viel der Gegner feuert, Entdeckungskosten für
       die Wertung; MSN-Seite mit Regelset und Gebiet (v0.3)
-- [x] Einsatzgebiete als Daten (M-031, Crate `f29-world`): Gebiet
-      „NORTH COAST“, 500 km, Grobraster 64 × 64 (Gelände, Seite) formt das
+- [x] Einsatzgebiete als Daten (M-031, Crate `f29-world`): ein Gebiet
+      (anfangs „NORTH COAST“), 500 km, Grobraster (Gelände, Seite) formt das
       Gelände; Flugplätze und alle Ziele aus der Datei; Vorschau mit
       `f29-headless theater-png`; Kartenbild über das ganze Gebiet (v0.3)
 - [x] Missionsgenerator: zwei Ziele aus dem Gebiet, das nähere ist das
@@ -362,10 +362,13 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Format beschrieben (`docs/GEBIETSFORMAT.md`), kein Generator im Spiel
 - [x] Geländearten Wüste, Wald, Stadt und Dorf (Höhe, Farbe, Radar;
       Häuser als Kulisse folgen später)
-- [x] Raster 128 × 128 für die echten Gebiete geprüft (Landschaft folgt der
-      Zeichnung, Höhenformen bleiben); Empfehlung im Gebietsformat
+- [x] Alle Gebiete 500 km groß mit Raster 128 × 128 (Format 3, wie im
+      Original gleich groß); Testgebiet TEST RANGE mit allen Geländearten,
+      Seiten und Objektklassen ersetzt NORTH COAST als Grundlage der Tests
 - [ ] Die vier Gebiete des Originals nach echter Geografie mit echten Namen:
       Libyen, Persischer Golf, Nordkap, Mitteleuropa (im Karteneditor)
+- [ ] Fertige Gebiete ins Programm einbetten (kein Datenordner nötig;
+      `data/theaters/` bleibt für eigene Gebiete)
 - [x] Konfliktstufen von „Spannung“ bis „offener Krieg“ mit unterschiedlichen
       Einsatzregeln (COLD WAR, LIMITED, OPEN WAR, M-033)
 - [x] Verlauf: Abschuss, Gefangennahme (verzögert die Beförderung), Rettung,

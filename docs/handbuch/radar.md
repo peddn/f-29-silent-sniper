@@ -86,8 +86,7 @@ ein tief fliegendes Flugzeug etwas, aber weniger als Berge.
 - **Höhe:** Voll gilt das bis 100 m über Grund. Bis 1000 m läuft es
   gleichmäßig aus, darüber zählt das Gelände nicht mehr.
 - **Übergänge:** Die Geländeart kommt aus dem Grobraster des Gebiets (128 ×
-  128 Zellen zu je knapp 4 km, im Testgebiet NORTH COAST 64 × 64 zu knapp
-  8 km). Sie geht so weich und unregelmäßig über wie die
+  128 Zellen zu je knapp 4 km). Sie geht so weich und unregelmäßig über wie die
   Landschaft selbst, ohne Sprung an den Zellgrenzen. Die Gebirgsketten sind
   schmal; den vollen Faktor gibt es nur über ihrem Kamm.
 - **Nie ganz verdeckt:** Weil der Impuls gleichmäßig mit der Entfernung

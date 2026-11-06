@@ -1255,8 +1255,10 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
 
 - **Original:** Vier feste Einsatzgebiete (Libyen, Persischer Golf, Nordkap,
   Mitteleuropa) mit Weltdatei, Geländekacheln und Kartenbild; jede Mission
-  entsteht aus den festen Objekten eines Gebiets. Die quadratische Karte mit
-  festem Maßstab ist für Briefings in Planquadrate geteilt: zwei Buchstaben für
+  entsteht aus den festen Objekten eines Gebiets. Alle vier Gebiete sind
+  gleich groß: ein Quadrat von gut 500 km Kantenlänge, abzulesen an der
+  Entfernungsanzeige im Cockpit und an der Rasterabfrage. Die quadratische
+  Karte mit festem Maßstab ist für Briefings in Planquadrate geteilt: zwei Buchstaben für
   ein großes Quadrat, zwei Ziffern für das Feld darin (Ost, dann Nord), je
   Gebiet mit eigenen Anfangsbuchstaben und Versatz, sodass die Kennungen wie
   echte Kartenangaben der Gegend wirken. Das Briefing nennt so die Lage der
@@ -1268,7 +1270,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   Anlagen, Startbasen (eigene Plätze und Träger, Start in Deckshöhe), Stellungen
   mit Radar und SAM-Typ und Flugzeugeinheiten (Patrouillen mit Basis, Typ,
   Treibstoff); Geländekacheln sind fertige Ausschnitte (Orte, Anlagen, Hügel) in
-  mehreren Detailstufen. Der Generator nimmt Primär- und Sekundärziel aus der
+  mehreren Detailstufen. Das Grobraster ist in allen Gebieten gleich fein,
+  16 × 16 Zellen von gut 30 km. Der Generator nimmt Primär- und Sekundärziel aus der
   Liste oder als Zufallspunkt auf Land, der zum nächsten Geländemerkmal rutscht,
   nicht zu weit auseinander, und eine eigene Basis nahe den Zielen (etwas
   Zufall, Vorrang für Träger); liegt die Gesamtstrecke außerhalb eines Bands,
@@ -1284,7 +1287,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
 - **Referenzstelle:** f19re `src_start/stgen.c` (`missionGenerate`,
   `parseWorld`, `runGenerator`, `findOrPlaceItem`, `formatGridRef`),
   `src_start/stparse.c` (Geländekacheln), `src_en/egcombat.c` (Rasterzellen in
-  der Radarbewertung, `spawnSamThreat`). Die Gebietsdateien (`*.wld`, `*.3dT`,
+  der Radarbewertung, `spawnSamThreat`), Maßstab aus `src_en/egtarget.c`
+  (`buildRangeString`). Die Gebietsdateien (`*.wld`, `*.3dT`,
   `*.xxx`) liegen der Rekonstruktion nicht bei; ausgewertet wurden nur Aufbau,
   Maßstab und Regeln, keine Positionen. Namen: `src/egframe.c`
   (`buildStoreName`), `src_en/egcombat.c` (Meldungen), `src_start/stutil.c`
@@ -1295,10 +1299,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   echten Geografie mit echten Namen von Hand bzw. im Karteneditor angelegt
   (Spielerentscheidung v0.3). Das Spiel erzeugt keine Gebiete; das Format
   beschreibt `docs/GEBIETSFORMAT.md`.
-  - **Gebietsdatei** (`data/theaters/*.ron`, Formatversion, eingebaut das
-    Testgebiet „NORTH COAST“): Name,
-    Seed, Kantenlänge 500 km, Grobraster n × n (NORTH COAST 64 × 64, die
-    echten Gebiete 128 × 128, Spielerentscheidung v0.3) mit Gelände (`~ . h M
+  - **Gebietsdatei** (`data/theaters/*.ron`, Formatversion 3, eingebaut das
+    Testgebiet „TEST RANGE“): Name, Seed, Grobraster 128 × 128 mit Gelände (`~ . h M
     d f C v`: Wasser, Flachland, Hügel, Gebirge, Wüste, Wald, Stadt, Dorf; je
     Art Höhenprofil und Farbe, Spielerentscheidung v0.3) und Seite (`F N H`: eigen, neutral,
     feindlich), Flugplätze (eigene Basis, Horste mit ihren MiG-21 und MiG-29)
@@ -1306,10 +1308,11 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     (angezeigt „NAME AT ORT“, z. B. „RADAR AT BENGHAZI“). Das Raster
     formt die Landschaft (`Terrain::from_theater`: je Geländeart ein Höhenprofil,
     weich überblendet, verzerrte Zellgrenzen, darüber das Detailrauschen;
-    Überblenden und Verzerrung in Zellen, Höhenformen in Metern, sodass ein
-    feineres Raster der Zeichnung enger folgt, ohne schroffer zu werden); die
+    Überblenden und Verzerrung in Zellen, Höhenformen in Metern); die
     Seiten (außerhalb neutral) gelten für Landung, Ausstieg (M-032) und Feuer
-    (M-033).
+    (M-033). Größe und Raster sind fest (`f29_world::theater::SIZE_M`,
+    `GRID_N`): jedes Gebiet 500 km im Quadrat, Zellen von knapp 4 km
+    (Spielerentscheidung v0.3, wie im Original für alle Gebiete gleich).
   - **Missionsgenerator** (`f29_core::mission`): zwei Ziele aus den nichtzivilen
     Gebäuden, Bunkern, Brücken, abgestellten Flugzeugen, Panzern und
     ungeschützten Zielen (keine Radarstellungen, keine Schiffe), 80–220 km von
@@ -1323,9 +1326,16 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     im REGION-Menü an (höchstens vier); `--region NAME` startet direkt in
     einem. Ohne lesbare Datei bleibt das eingebaute Testgebiet. Die
     Pilotenakte merkt sich das Gebiet. `f29-headless theater-png` zeigt eine
-    Vorschau einer Datei. NORTH COAST entstand einmalig mit einem inzwischen
-    entfernten Generator; es dient als feste Testkarte, sobald die echten
-    Gebiete vorliegen.
+    Vorschau einer Datei.
+  - **Testgebiet** „TEST RANGE“ (`data/test/test_range.ron`, eingebaut):
+    jede Geländeart, jede Seite, Heimatbasis, drei feindliche Horste, jede
+    Objektklasse, etwa 90 Objekte; Grundlage aller Tests
+    (`docs/GEBIETSFORMAT.md`, Abschnitt Testgebiet). Es löste das einmalig
+    erzeugte NORTH COAST ab.
+  - **Laden statt Backen:** Das Spiel liest die Gebietsdatei und rechnet die
+    Landschaft daraus beim Laden, der Editor mit demselben Code für die
+    Vorschau. Ein vorab gerechnetes Höhenbild gibt es nicht. Fertige Gebiete
+    sollen später ins Programm eingebettet werden (Roadmap).
   - **Karte:** MFD-Kartenbild 4096² über das ganze Gebiet, parallel berechnet;
     Kartenstufen 0,625–640 km, außerhalb schwarz. Replays speichern Name und
     Prüfsumme des Gebiets.

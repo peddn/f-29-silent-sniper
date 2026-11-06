@@ -40,7 +40,6 @@ Befehle:
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N] [--rules R]                     Flugplätze, Route und Auftrag auflisten
-                                                       Einsatzgebiet aus einem Seed anlegen
   theater-png [--theater DATEI.ron] [--size PX] [--out DATEI.png]
                                                        Vorschau eines Gebiets (Seiten, Plätze, Ziele)
   sound    [--out VERZEICHNIS]                         Klänge als WAV-Hörproben rendern
@@ -447,7 +446,8 @@ fn theater_png(args: &Args) -> Result<(), String> {
     let size = args.get("size", 1_024_usize)?;
     let out = args.opt("out").unwrap_or("theater.png");
     let terrain = f29_world::Terrain::from_theater(&t);
-    let map = MapRaster::build(&terrain, [0.0, 0.0], t.size_m * 0.5, size, MapStyle::Satellite);
+    let map =
+        MapRaster::build(&terrain, [0.0, 0.0], f29_world::theater::SIZE_M * 0.5, size, MapStyle::Satellite);
     let mut rgb = vec![0_u8; size * size * 3];
     let px = |n: f64, e: f64| {
         let col = ((e - map.origin[1]) / map.spacing).round() as i64;
@@ -500,7 +500,7 @@ fn theater_png(args: &Args) -> Result<(), String> {
     let mut enc = png::Encoder::new(std::io::BufWriter::new(file), size as u32, size as u32);
     enc.set_color(png::ColorType::Rgb);
     enc.write_header().and_then(|mut w| w.write_image_data(&rgb)).map_err(|e| format!("{out}: {e}"))?;
-    println!("{}: {size}×{size} px, {:.0} km → {out}", t.name, t.size_m / 1_000.0);
+    println!("{}: {size}×{size} px → {out}", t.name);
     Ok(())
 }
 

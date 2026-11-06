@@ -22,6 +22,7 @@ pub use class::{ShapeBox, TargetClass};
 pub use theater::{Ground, Side, Theater};
 
 use std::sync::Arc;
+use theater::{CELL_M, GRID_N, SIZE_M};
 
 use noise::{fbm, mix64, ridged, smoothstep};
 
@@ -129,8 +130,6 @@ pub struct Terrain {
 /// Gebirgs- und Hügelanteil.
 #[derive(Debug, Clone, PartialEq)]
 struct GridField {
-    n: usize,
-    size_m: f64,
     ground: Vec<Ground>,
     cells: Vec<[f64; 3]>,
 }
@@ -159,14 +158,12 @@ impl GridField {
     /// Werte je Zelle (`value(Index)`) weich zwischen den Zellmitten gemischt
     /// (außen: Randzellen).
     fn mix<const N: usize>(&self, x: f64, y: f64, value: impl Fn(usize) -> [f64; N]) -> [f64; N] {
-        let cell = self.size_m / self.n as f64;
-        let half = self.size_m * 0.5;
-        let last = (self.n - 1) as f64;
-        let v = ((half - x) / cell - 0.5).clamp(0.0, last);
-        let u = ((y + half) / cell - 0.5).clamp(0.0, last);
+        let last = (GRID_N - 1) as f64;
+        let v = ((SIZE_M * 0.5 - x) / CELL_M - 0.5).clamp(0.0, last);
+        let u = ((y + SIZE_M * 0.5) / CELL_M - 0.5).clamp(0.0, last);
         let (r0, c0) = (v.floor().min(last - 1.0), u.floor().min(last - 1.0));
         let (fv, fu) = (smoothstep(0.0, 1.0, v - r0), smoothstep(0.0, 1.0, u - c0));
-        let idx = |r: f64, c: f64| value(r as usize * self.n + c as usize);
+        let idx = |r: f64, c: f64| value(r as usize * GRID_N + c as usize);
         let (a, b, c, d) = (idx(r0, c0), idx(r0, c0 + 1.0), idx(r0 + 1.0, c0), idx(r0 + 1.0, c0 + 1.0));
         std::array::from_fn(|k| {
             let top = a[k] + (b[k] - a[k]) * fu;
@@ -203,11 +200,11 @@ impl Terrain {
     /// Gelände eines Einsatzgebiets: Großform aus dem Grobraster,
     /// Flugplätze aus der Datei.
     pub fn from_theater(theater: &Theater) -> Self {
-        let n = theater.grid_n();
-        let ground: Vec<Ground> = (0..n * n).map(|k| theater.ground(k / n, k % n)).collect();
+        let ground: Vec<Ground> =
+            (0..GRID_N * GRID_N).map(|k| theater.ground(k / GRID_N, k % GRID_N)).collect();
         let cells = ground.iter().map(|&g| profile(g)).collect();
         let mut t = Self::new(theater.seed);
-        t.grid = Some(Arc::new(GridField { n, size_m: theater.size_m, ground, cells }));
+        t.grid = Some(Arc::new(GridField { ground, cells }));
         t.runways = theater
             .airfields
             .iter()
@@ -220,11 +217,6 @@ impl Terrain {
             })
             .collect();
         t
-    }
-
-    /// Kantenlänge des Gebiets (m); ohne Gebiet `None`.
-    pub fn size_m(&self) -> Option<f64> {
-        self.grid.as_ref().map(|g| g.size_m)
     }
 
     /// Alle Start- und Landebahnen; die erste ist die Heimatbasis.
@@ -274,11 +266,10 @@ impl Terrain {
     }
 
     /// Abfragepunkt im Grobraster, verzerrt für natürliche Grenzen.
-    fn warped(&self, g: &GridField, x: f64, y: f64) -> (f64, f64) {
-        let cell = g.size_m / g.n as f64;
-        let ws = cell * 1.5;
-        let wx = fbm(self.s_warp, x / ws, y / ws, 3) * cell * GRID_WARP;
-        let wy = fbm(self.s_warp ^ 0x5741_5250, x / ws, y / ws, 3) * cell * GRID_WARP;
+    fn warped(&self, x: f64, y: f64) -> (f64, f64) {
+        let ws = CELL_M * 1.5;
+        let wx = fbm(self.s_warp, x / ws, y / ws, 3) * CELL_M * GRID_WARP;
+        let wy = fbm(self.s_warp ^ 0x5741_5250, x / ws, y / ws, 3) * CELL_M * GRID_WARP;
         (x + wx, y + wy)
     }
 
@@ -286,17 +277,16 @@ impl Terrain {
     /// die Oberfläche; ohne Gebiet `None`.
     pub fn ground_at(&self, x: f64, y: f64) -> Option<Ground> {
         let g = self.grid.as_ref()?;
-        let (x, y) = self.warped(g, x, y);
-        let (n, cell) = (g.n as f64, g.size_m / g.n as f64);
-        let at = |v: f64| (v / cell).floor().clamp(0.0, n - 1.0) as usize;
-        Some(g.ground[at(g.size_m * 0.5 - x) * g.n + at(y + g.size_m * 0.5)])
+        let (x, y) = self.warped(x, y);
+        let at = |v: f64| (v / CELL_M).floor().clamp(0.0, (GRID_N - 1) as f64) as usize;
+        Some(g.ground[at(SIZE_M * 0.5 - x) * GRID_N + at(y + SIZE_M * 0.5)])
     }
 
     /// Eine Eigenschaft `f` der Geländeart, so weich gemischt und verzerrt
     /// wie die Landschaft selbst; ohne Gebiet `None`.
     pub fn ground_mix(&self, x: f64, y: f64, f: impl Fn(Ground) -> f64) -> Option<f64> {
         let g = self.grid.as_ref()?;
-        let (x, y) = self.warped(g, x, y);
+        let (x, y) = self.warped(x, y);
         Some(g.mix(x, y, |k| [f(g.ground[k])])[0])
     }
 
@@ -304,7 +294,7 @@ impl Terrain {
     /// Feinrauschen, Gebirgsgrate und Hügel nach ihrem Anteil.
     fn grid_height(&self, g: &GridField, x: f64, y: f64) -> f64 {
         let p = &self.params;
-        let (wx, wy) = self.warped(g, x, y);
+        let (wx, wy) = self.warped(x, y);
         let [base, mountain, hill] = g.mix(wx, wy, |k| g.cells[k]);
         let detail = fbm(self.s_continent, x / GRID_DETAIL_SCALE, y / GRID_DETAIL_SCALE, 4) * GRID_DETAIL_M;
         let rs = p.ridge_scale;
@@ -557,7 +547,7 @@ mod tests {
         assert!(Terrain::new(1).runways().is_empty(), "ohne Gebiet keine Plätze");
     }
 
-    /// Neue Geländearten (Format 2): Eine Fläche ganz aus einer Art hat
+    /// Neue Geländearten (seit Format 2): Eine Fläche ganz aus einer Art hat
     /// deren Oberfläche.
     #[test]
     fn new_ground_types_have_their_surface() {
@@ -578,8 +568,10 @@ mod tests {
                 format: FORMAT,
                 name: format!("UNI {c}"),
                 seed: 7,
-                size_m: 80_000.0,
-                grid: Grid { ground: vec![c.to_string().repeat(8); 8], side: vec!["N".repeat(8); 8] },
+                grid: Grid {
+                    ground: vec![c.to_string().repeat(GRID_N); GRID_N],
+                    side: vec!["N".repeat(GRID_N); GRID_N],
+                },
                 airfields: vec![home],
                 objects: vec![],
             };
@@ -597,46 +589,30 @@ mod tests {
     }
 
     /// Das Grobraster gibt die Großform vor: In der Mitte von Wasserzellen
-    /// ist Meer, in Gebirgszellen ist es hoch; die Schranke hält – auch im
-    /// feineren Raster der echten Gebiete (128 × 128, jede Zelle 2 × 2 geteilt).
+    /// ist Meer, in Gebirgszellen ist es hoch; die Schranke hält.
     #[test]
     fn grid_shapes_the_land() {
-        let split = |rows: &[String]| -> Vec<String> {
-            let wide = |r: &String| r.chars().flat_map(|c| [c, c]).collect::<String>();
-            rows.iter().flat_map(|r| [wide(r), wide(r)]).collect()
-        };
-        let mut fine = Theater::builtin().clone();
-        fine.grid.ground = split(&fine.grid.ground);
-        fine.grid.side = split(&fine.grid.side);
-        let fine = Theater::parse(&fine.to_text()).expect("lesbar");
-        assert_eq!(fine.grid_n(), 128);
-        for th in [Theater::builtin(), &fine] {
-            let t = Terrain::from_theater(th);
-            let n = th.grid_n();
-            let cell = th.size_m / n as f64;
-            let (mut wet, mut water, mut high, mut mountains) = (0, 0, 0, 0);
-            for r in 0..n {
-                for c in 0..n {
-                    let x = th.size_m * 0.5 - (r as f64 + 0.5) * cell;
-                    let y = -th.size_m * 0.5 + (c as f64 + 0.5) * cell;
-                    let h = t.ground_height(x, y);
-                    assert!(h < t.max_elevation());
-                    match th.ground(r, c) {
-                        Ground::Water => {
-                            water += 1;
-                            wet += usize::from(h < SEA_LEVEL_M);
-                        }
-                        Ground::Mountains => {
-                            mountains += 1;
-                            high += usize::from(h > 500.0);
-                        }
-                        _ => {}
-                    }
+        let (th, t) = (Theater::builtin(), theater());
+        let (mut wet, mut water, mut high, mut mountains) = (0, 0, 0, 0);
+        for k in 0..GRID_N * GRID_N {
+            let (r, c) = (k / GRID_N, k % GRID_N);
+            let (x, y) = theater::cell_center(r, c);
+            let h = t.ground_height(x, y);
+            assert!(h < t.max_elevation());
+            match th.ground(r, c) {
+                Ground::Water => {
+                    water += 1;
+                    wet += usize::from(h < SEA_LEVEL_M);
                 }
+                Ground::Mountains => {
+                    mountains += 1;
+                    high += usize::from(h > 500.0);
+                }
+                _ => {}
             }
-            assert!(wet * 10 >= water * 8, "{n}: nur {wet} von {water} Wasserzellen nass");
-            assert!(high * 10 >= mountains * 7, "{n}: nur {high} von {mountains} Gebirgszellen hoch");
         }
+        assert!(wet * 10 >= water * 8, "nur {wet} von {water} Wasserzellen nass");
+        assert!(high * 10 >= mountains * 7, "nur {high} von {mountains} Gebirgszellen hoch");
     }
 
     #[test]

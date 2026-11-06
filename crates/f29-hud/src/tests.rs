@@ -930,7 +930,7 @@ fn intel_map_shows_threats_and_plan() {
     use crate::intel::{MapView, Topic, draw, labels};
     let sim = Sim::new(SimConfig::runway(7));
     let map = crate::MapData::for_terrain(sim.terrain(), sim.route(), sim.targets());
-    let view = MapView::fit(&map, crate::map::map_half_extent(sim.terrain()));
+    let view = MapView::fit(&map, f29_core::nav::HALF_EXTENT_M);
     let fd = sim.flight_data();
     let area = Rect { min: [0.2, -0.25], max: [0.75, 0.3] };
     let lines = |t| draw(&map, &fd.threat.sites, t, view, area).lines;
