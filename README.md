@@ -387,7 +387,7 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [ ] Einstellungen, frei belegbare Tasten, Joystick/HOTAS
 - [ ] Handbuch (`docs/handbuch/`): je ein Kapitel für das Flugmodell und jede
       weitere Mechanik, jeweils mit den Stellschrauben im Code – Grundlage für
-      das Balancing (v1.0); fertig: Radar und Entdeckung
+      das Balancing (v1.0); fertig: Flugmodell, Radar und Entdeckung
 - [ ] Joystick am echten Extreme 3D Pro testen (`--joystick-debug`): Achsen,
       Richtungen und Tastennummern prüfen
 
