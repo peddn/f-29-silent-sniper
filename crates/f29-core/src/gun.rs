@@ -315,6 +315,7 @@ mod tests {
     fn target(class: TargetClass, north: f64, elevation: f64) -> Target {
         Target {
             name: "TGT",
+            place: "",
             class,
             civilian: false,
             role: TargetRole::None,

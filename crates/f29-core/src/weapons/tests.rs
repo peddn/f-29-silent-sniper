@@ -31,6 +31,7 @@ fn damage_per_hit_matrix() {
 fn bridge() -> Target {
     Target {
         name: "BRIDGE",
+        place: "",
         class: TargetClass::Bridge,
         civilian: false,
         role: crate::targets::TargetRole::None,

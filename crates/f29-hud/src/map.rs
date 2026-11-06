@@ -30,6 +30,9 @@ pub struct MapPoint {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapTarget {
     pub name: &'static str,
+    /// Name ohne Ort und Ort allein (M-031), für die MSN-Seite.
+    pub short: &'static str,
+    pub place: &'static str,
     pub class: TargetClass,
     pub role: TargetRole,
     pub civilian: bool,
@@ -68,6 +71,8 @@ impl MapData {
             .iter()
             .map(|t| MapTarget {
                 name: t.name,
+                short: t.short_name(),
+                place: t.place,
                 class: t.class,
                 role: t.role,
                 civilian: t.civilian,
