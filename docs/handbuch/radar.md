@@ -73,9 +73,15 @@ Reichweite jedes feindlichen Radars, auch des Bordradars der Jäger:
 
 | Gelände | Reichweite |
 |---|---|
-| Wasser, Flachland | 100 % |
+| Wasser, Flachland, Wüste | 100 % |
+| Dorf | 90 % |
+| Wald | 85 % |
+| Stadt | 80 % |
 | Hügel | 70 % |
 | Gebirge | 45 % |
+
+Wald, Stadt und Dorf stehen für Bodenechos: Bebauung und Bäume verdecken
+ein tief fliegendes Flugzeug etwas, aber weniger als Berge.
 
 - **Höhe:** Voll gilt das bis 100 m über Grund. Bis 1000 m läuft es
   gleichmäßig aus, darüber zählt das Gelände nicht mehr.
@@ -157,7 +163,7 @@ Reichweite trifft. Die Option steht im Replay.
 | `f29-core/src/radar.rs` | `ALTITUDE_SCALE_M`, `SIG_ALTITUDE` | 1500 m, 0,40 | wie schnell und wie weit die Sichtbarkeit mit der Höhe steigt |
 | `f29-core/src/radar.rs` | `SIG_BANK` | 0,30 | Zuschlag bei 90° Querlage |
 | `f29-core/src/radar.rs` | `SIG_BAY`, `SIG_RADAR`, `SIG_ECM` | je 0,15 | Zuschlag für offenen Schacht, eigenes Radar, Störsender |
-| `f29-core/src/radar.rs` | `ground_factor` | Hügel 0,7, Gebirge 0,45, sonst 1 | Reichweitenanteil über rauem Gelände |
+| `f29-core/src/radar.rs` | `ground_factor` | Hügel 0,7, Gebirge 0,45, Stadt 0,8, Wald 0,85, Dorf 0,9, sonst 1 | Reichweitenanteil über rauem Gelände |
 | `f29-core/src/radar.rs` | `GROUND_TOP_M` | 1000 m | bis hier läuft die Wirkung des Geländes aus |
 | `f29-core/src/radar.rs` | `MAX_ALERT`, `DECAY_S` | 3, 30 s | Zahl der Alarmstufen (die letzte startet Raketen), Abklingzeit je Stufe ohne Treffer |
 | `f29-core/src/targets.rs` | `air_defense` | EW → SA-5, SAM → SA-6, SHORAD → SA-13 | welches Radar und welche Rakete zu welcher Stellung gehört |
@@ -165,5 +171,5 @@ Reichweite trifft. Die Option steht im Replay.
 | `f29-core/src/rules.rs` | `fire_only_over_hostile`, `max_hostile_missiles`, `detection_penalty`, `attack_needs_detection` | siehe Tabelle Regelsets | Folgen einer Entdeckung je Regelset |
 | `data/theaters/*.ron` | `objects` der Radarklassen | Lage und Zahl je Gebiet | wie viele Stellungen wo stehen – die größte Stellschraube; empfohlen mindestens 35 km Abstand zur eigenen Basis (`docs/GEBIETSFORMAT.md`) |
 | `f29-world/src/lib.rs` | `GRID_WARP` | 0,4 Zellen | wie unregelmäßig die Geländegrenzen verlaufen – für Landschaft und Radar zugleich |
-| `data/theaters/*.ron` | `grid.ground` | `~ . h M` je Zelle | wo Wasser, Flachland, Hügel und Gebirge liegen |
+| `data/theaters/*.ron` | `grid.ground` | `~ . h M d f C v` je Zelle | wo Wasser, Flachland, Hügel, Gebirge, Wüste, Wald, Stadt und Dorf liegen |
 | `f29-hud/src/mfd.rs` | `PING_SHOW_S` | 1 s | wie lange ein Ping in der SIG-Säule steht |

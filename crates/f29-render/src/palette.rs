@@ -41,6 +41,23 @@ pub fn mix(a: usize, b: usize, t: f32) -> [f32; 3] {
 pub const SKY: usize = 3;
 pub const HAZE: usize = 5;
 
+/// Farbe (sRGB) einer Oberfläche – für Gelände, Kartenbild und Vorschau.
+/// `v` 0..1 streut die Töne, `depth` 0..1 dunkelt Wasser ab.
+pub fn surface(s: f29_world::Surface, v: f32, depth: f32) -> [f32; 3] {
+    use f29_world::Surface;
+    match s {
+        Surface::Water => mix(2, 1, depth * 0.7),
+        Surface::Beach => srgb(10),
+        Surface::Grass => mix(8, 9, v * 0.8),
+        Surface::Forest => mix(7, 8, v * 0.3),
+        Surface::Rock => mix(13, 12, v * 0.5),
+        Surface::Snow => srgb(6),
+        Surface::Sand => mix(10, 11, v * 0.35),
+        Surface::City => mix(14, 13, v * 0.7),
+        Surface::Village => mix(9, 11, v * 0.6),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

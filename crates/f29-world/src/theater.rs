@@ -6,7 +6,8 @@
 //! Eine Gebietsdatei (RON, lesbar und von Hand bearbeitbar) beschreibt ein
 //! quadratisches Gebiet um den Ursprung:
 //! - **Grobraster** `n × n`: je Zelle Gelände (`~` Wasser, `.` Flachland,
-//!   `h` Hügel, `M` Gebirge) und Seite (`F` eigen, `N` neutral, `H`
+//!   `h` Hügel, `M` Gebirge, `d` Wüste, `f` Wald, `C` Stadt, `v` Dorf) und
+//!   Seite (`F` eigen, `N` neutral, `H`
 //!   feindlich). Erste Zeile = Nordrand, erste Spalte = Westrand. Aus dem
 //!   Gelände folgt die Großform der Landschaft, das Rauschen liefert die
 //!   Feinheiten ([`crate::Terrain::from_theater`]).
@@ -23,8 +24,9 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-/// Version des Dateiformats, die dieses Spiel liest.
-pub const FORMAT: u32 = 1;
+/// Version des Dateiformats, die dieses Spiel liest (2: Wüste, Wald,
+/// Stadt, Dorf).
+pub const FORMAT: u32 = 2;
 /// Ordner der Gebietsdateien, vom Arbeitsverzeichnis aus.
 pub const THEATER_DIR: &str = "data/theaters";
 
@@ -70,6 +72,10 @@ pub enum Ground {
     Plain,
     Hills,
     Mountains,
+    Desert,
+    Forest,
+    City,
+    Village,
 }
 
 impl Ground {
@@ -79,6 +85,10 @@ impl Ground {
             '.' => Some(Ground::Plain),
             'h' => Some(Ground::Hills),
             'M' => Some(Ground::Mountains),
+            'd' => Some(Ground::Desert),
+            'f' => Some(Ground::Forest),
+            'C' => Some(Ground::City),
+            'v' => Some(Ground::Village),
             _ => None,
         }
     }
@@ -89,6 +99,10 @@ impl Ground {
             Ground::Plain => '.',
             Ground::Hills => 'h',
             Ground::Mountains => 'M',
+            Ground::Desert => 'd',
+            Ground::Forest => 'f',
+            Ground::City => 'C',
+            Ground::Village => 'v',
         }
     }
 }
@@ -187,7 +201,9 @@ impl Theater {
             || !rows_ok(&t.grid.ground, |c| Ground::from_char(c).is_some())
             || !rows_ok(&t.grid.side, |c| Side::from_char(c).is_some())
         {
-            return Err(TheaterError("Raster muss n × n Zeichen je Ebene haben (~ . h M bzw. F N H)".into()));
+            return Err(TheaterError(
+                "Raster muss n × n Zeichen je Ebene haben (~ . h M d f C v bzw. F N H)".into(),
+            ));
         }
         if t.airfields.first().is_none_or(|a| a.kind != AirfieldKind::Home) {
             return Err(TheaterError("der erste Flugplatz muss die eigene Basis sein".into()));
@@ -327,7 +343,10 @@ mod tests {
         assert_eq!(t.side_at(-10_000.0, 10_000.0), Side::Hostile);
         assert_eq!(t.side_at(90_000.0, 0.0), Side::Neutral, "außerhalb");
         assert!(Theater::parse(&t.to_text().replace("\"hM\"", "\"hX\"")).is_err());
-        assert!(Theater::parse(&t.to_text().replace("format: 1", "format: 99")).is_err(), "neueres Format");
+        assert!(
+            Theater::parse(&t.to_text().replace(&format!("format: {FORMAT}"), "format: 99")).is_err(),
+            "neueres Format"
+        );
         assert_eq!(t.objects[0].label(), "BUNKER AT TOBRUK");
         let enemy_first = Theater {
             airfields: vec![AirfieldDef { kind: AirfieldKind::Enemy, ..t.airfields[0].clone() }],

@@ -1,0 +1,48 @@
+(
+    format: 2,
+    name: "SHOWCASE",
+    seed: 11,
+    size_m: 160000.0,
+    grid: (
+        ground: [
+            "~~~~~~~~~~~~~~~~",
+            "~~~~~~~~~~~~~~~~",
+            "ddddddddffffffff",
+            "ddddddddffffffff",
+            "ddddddddffffffff",
+            "ddddddddffffffff",
+            "ddddddddffffffff",
+            "ddddddddffffffff",
+            "ddddddddffffffff",
+            "......v.hhhhMMMM",
+            ".....CC.hhhhMMMM",
+            "....vCCvhhhhMMMM",
+            ".....CC.hhhhMMMM",
+            ".....CC.hhhhMMMM",
+            "....v..vhhhhMMMM",
+            "......v.hhhhMMMM"
+        ],
+        side: [
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN",
+            "NNNNNNNNNNNNNNNN"
+        ],
+    ),
+    airfields: [
+        (name: "HOME", kind: Home, north: -60000.0, east: -70000.0, heading_deg: 0.0),
+    ],
+    objects: [],
+)

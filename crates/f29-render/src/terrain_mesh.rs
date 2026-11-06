@@ -96,17 +96,8 @@ fn jitter(n: i64, e: i64) -> f32 {
 fn cell_color(terrain: &Terrain, north: f64, east: f64, gn: i64, ge: i64) -> [f32; 3] {
     let surface = terrain.surface(north, east);
     let v = (fbm(terrain.seed() ^ 0xC010, north / 900.0, east / 900.0, 2) * 0.5 + 0.5) as f32;
-    let base = match surface {
-        Surface::Water => {
-            let depth = (-terrain.ground_height(north, east)).clamp(0.0, 300.0) as f32 / 300.0;
-            palette::mix(2, 1, depth * 0.7)
-        }
-        Surface::Beach => palette::srgb(10),
-        Surface::Grass => palette::mix(8, 9, v * 0.8),
-        Surface::Forest => palette::mix(7, 8, v * 0.3),
-        Surface::Rock => palette::mix(13, 12, v * 0.5),
-        Surface::Snow => palette::srgb(6),
-    };
+    let depth = (-terrain.ground_height(north, east)).clamp(0.0, 300.0) as f32 / 300.0;
+    let base = palette::surface(surface, v, depth);
     let j = if surface == Surface::Water { 0.0 } else { jitter(gn, ge) };
     [base[0] * (1.0 + j), base[1] * (1.0 + j), base[2] * (1.0 + j)]
 }
