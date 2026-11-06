@@ -207,6 +207,11 @@ impl Theater {
         self.cell(north, east).map_or(Side::Neutral, |(r, c)| self.side(r, c))
     }
 
+    /// Gelände der Zelle an einem Punkt; außerhalb `None`.
+    pub fn ground_at(&self, north: f64, east: f64) -> Option<Ground> {
+        self.cell(north, east).map(|(r, c)| self.ground(r, c))
+    }
+
     /// Das eingebaute Standardgebiet.
     pub fn builtin() -> &'static Theater {
         static T: OnceLock<Theater> = OnceLock::new();

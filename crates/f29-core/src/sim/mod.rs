@@ -969,6 +969,7 @@ impl Sim {
             height_agl_m: a.height_agl_m,
             door: self.stores.door,
             radar_on: self.sensors.radar_on,
+            ground: crate::radar::ground_factor(self.config.theater.ground_at(a.position.x, a.position.y)),
             ecm: self.stores.countermeasures.ecm,
             visible: self.config.spawn.visible,
         }
@@ -1578,6 +1579,7 @@ fn runway_point(r: &f29_world::Runway) -> DVec3 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use f29_world::Ground;
 
     /// Flugverhalten (M-036): Leicht verträgt das Anderthalbfache, „kein
     /// Absturz“ auf der Bahn alles – auch ohne Fahrwerk.
@@ -1595,5 +1597,29 @@ mod tests {
         assert_eq!(touch(Landings::Easy, max * 1.6, true), Err(CrashCause::GearCollapse));
         assert_eq!(touch(Landings::Realistic, 1.0, false), Err(CrashCause::GearUp));
         assert!(touch(Landings::NoCrash, max * 3.0, false).is_ok());
+    }
+
+    /// Radar (M-020): Über einer Gebirgszelle des Gebiets schwächt das Gelände
+    /// den Impuls, über Flachland nicht.
+    #[test]
+    fn exposure_carries_the_ground_under_the_aircraft() {
+        let mut sim = Sim::new(SimConfig::new(1));
+        let th = sim.config.theater.clone();
+        let n = th.grid_n();
+        let cell = th.size_m / n as f64;
+        let center = |k: usize| {
+            [
+                th.size_m * 0.5 - (k / n) as f64 * cell - cell * 0.5,
+                (k % n) as f64 * cell + cell * 0.5 - th.size_m * 0.5,
+            ]
+        };
+        let find = |g| (0..n * n).find(|&k| th.ground(k / n, k % n) == g).map(center).unwrap();
+        for (ground, factor) in
+            [(Ground::Mountains, crate::radar::ground_factor(Some(Ground::Mountains))), (Ground::Plain, 1.0)]
+        {
+            let [north, east] = find(ground);
+            (sim.aircraft.position.x, sim.aircraft.position.y) = (north, east);
+            assert_eq!(sim.exposure().ground, factor, "{ground:?}");
+        }
     }
 }
