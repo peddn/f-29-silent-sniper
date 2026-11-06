@@ -898,8 +898,9 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Geländeart unter dem Flugzeug aus dem Grobraster (M-031), so weich
     gemischt und verzerrt wie die Landschaft (`Terrain::ground_mix`, kein
     Sprung an Zellgrenzen), verkürzt die Reichweite jedes Radars, auch des
-    Bordradars feindlicher Jäger: Hügel auf 70 %, Gebirge auf 45 %, Wasser und
-    Flachland gar nicht; die schmalen Ketten erreichen den vollen Wert nur über
+    Bordradars feindlicher Jäger: Hügel auf 70 %, Gebirge auf 45 %, Stadt auf
+    80 %, Wald auf 85 %, Dorf auf 90 % (Bodenechos), Wasser, Flachland und
+    Wüste gar nicht; die schmalen Ketten erreichen den vollen Wert nur über
     dem Kamm. Voll gilt das bis
     100 m über Grund, bis 1000 m läuft es aus. Weil die Impulsstärke linear
     mit der Entfernung fällt, entdeckt jedes Radar dort im gleichen Verhältnis
@@ -1296,8 +1297,9 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   beschreibt `docs/GEBIETSFORMAT.md`.
   - **Gebietsdatei** (`data/theaters/*.ron`, Formatversion, eingebaut das
     Testgebiet „NORTH COAST“): Name,
-    Seed, Kantenlänge 500 km, Grobraster n × n (64 × 64) mit Gelände (`~ . h M`:
-    Wasser, Flachland, Hügel, Gebirge) und Seite (`F N H`: eigen, neutral,
+    Seed, Kantenlänge 500 km, Grobraster n × n (64 × 64) mit Gelände (`~ . h M
+    d f C v`: Wasser, Flachland, Hügel, Gebirge, Wüste, Wald, Stadt, Dorf; je
+    Art Höhenprofil und Farbe, Spielerentscheidung v0.3) und Seite (`F N H`: eigen, neutral,
     feindlich), Flugplätze (eigene Basis, Horste mit ihren MiG-21 und MiG-29)
     und alle Objekte mit Name, Klasse, Lage, Ausrichtung, „zivil“ und Ort
     (angezeigt „NAME AT ORT“, z. B. „RADAR AT BENGHAZI“). Das Raster

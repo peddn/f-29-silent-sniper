@@ -37,6 +37,9 @@ pub enum Surface {
     Forest,
     Rock,
     Snow,
+    Sand,
+    City,
+    Village,
 }
 
 /// Parameter der Höhenfunktion. Alle Längen in Metern.
@@ -139,6 +142,10 @@ fn profile(g: Ground) -> [f64; 3] {
         Ground::Plain => [60.0, 0.0, 0.5],
         Ground::Hills => [300.0, 0.12, 1.8],
         Ground::Mountains => [700.0, 1.0, 1.3],
+        Ground::Desert => [120.0, 0.0, 0.6],
+        Ground::Forest => [90.0, 0.0, 0.9],
+        Ground::City => [60.0, 0.0, 0.1],
+        Ground::Village => [70.0, 0.0, 0.35],
     }
 }
 
@@ -275,6 +282,16 @@ impl Terrain {
         (x + wx, y + wy)
     }
 
+    /// Geländeart der (verzerrt abgefragten) Rasterzelle, ohne Mischen – für
+    /// die Oberfläche; ohne Gebiet `None`.
+    pub fn ground_at(&self, x: f64, y: f64) -> Option<Ground> {
+        let g = self.grid.as_ref()?;
+        let (x, y) = self.warped(g, x, y);
+        let (n, cell) = (g.n as f64, g.size_m / g.n as f64);
+        let at = |v: f64| (v / cell).floor().clamp(0.0, n - 1.0) as usize;
+        Some(g.ground[at(g.size_m * 0.5 - x) * g.n + at(y + g.size_m * 0.5)])
+    }
+
     /// Eine Eigenschaft `f` der Geländeart, so weich gemischt und verzerrt
     /// wie die Landschaft selbst; ohne Gebiet `None`.
     pub fn ground_mix(&self, x: f64, y: f64, f: impl Fn(Ground) -> f64) -> Option<f64> {
@@ -356,8 +373,20 @@ impl Terrain {
         if h > 1_350.0 {
             return Surface::Rock;
         }
-        let forest = fbm(self.s_forest, x / 7_000.0, y / 7_000.0, 4);
-        if forest > 0.18 && h < 1_100.0 { Surface::Forest } else { Surface::Grass }
+        match self.ground_at(x, y) {
+            Some(Ground::Desert) => Surface::Sand,
+            Some(Ground::Forest) => Surface::Forest,
+            Some(Ground::City) => Surface::City,
+            // verstreute Siedlungen zwischen Wiesen
+            Some(Ground::Village) => {
+                let houses = fbm(self.s_forest ^ 0x5649_4C4C, x / 900.0, y / 900.0, 2);
+                if houses > -0.1 { Surface::Village } else { Surface::Grass }
+            }
+            _ => {
+                let forest = fbm(self.s_forest, x / 7_000.0, y / 7_000.0, 4);
+                if forest > 0.18 && h < 1_100.0 { Surface::Forest } else { Surface::Grass }
+            }
+        }
     }
 
     /// Bodenhöhen (inkl. Meeresgrund) auf einem quadratischen Raster mit
@@ -526,6 +555,45 @@ mod tests {
         assert!(r.iter().any(|x| x.kind == AirfieldKind::Enemy && x.fighters != [0, 0]));
         assert_eq!(theater().runways(), r);
         assert!(Terrain::new(1).runways().is_empty(), "ohne Gebiet keine Plätze");
+    }
+
+    /// Neue Geländearten (Format 2): Eine Fläche ganz aus einer Art hat
+    /// deren Oberfläche.
+    #[test]
+    fn new_ground_types_have_their_surface() {
+        use crate::theater::{AirfieldDef, FORMAT, Grid};
+        for (c, surface) in
+            [('d', Surface::Sand), ('f', Surface::Forest), ('C', Surface::City), ('v', Surface::Village)]
+        {
+            let home = AirfieldDef {
+                name: "HOME".into(),
+                kind: AirfieldKind::Home,
+                north: -30_000.0,
+                east: -30_000.0,
+                heading_deg: 0.0,
+                mig21: 0,
+                mig29: 0,
+            };
+            let th = Theater {
+                format: FORMAT,
+                name: format!("UNI {c}"),
+                seed: 7,
+                size_m: 80_000.0,
+                grid: Grid { ground: vec![c.to_string().repeat(8); 8], side: vec!["N".repeat(8); 8] },
+                airfields: vec![home],
+                objects: vec![],
+            };
+            let t = Terrain::from_theater(&Theater::parse(&th.to_text()).expect("lesbar"));
+            let at = [(15_000.0, 15_000.0), (5_000.0, 20_000.0), (20_000.0, -5_000.0)];
+            assert!(at.iter().all(|&(n, e)| t.ground_at(n, e).map(Ground::to_char) == Some(c)));
+            // Dörfer: Siedlungen zwischen Wiesen
+            let ok = |s: Surface| s == surface || (c == 'v' && s == Surface::Grass);
+            assert!(at.iter().all(|&(n, e)| ok(t.surface(n, e))), "{c}");
+            let k = (0..400)
+                .filter(|k| t.surface(f64::from(k % 20) * 1e3, f64::from(k / 20) * 1e3) == surface)
+                .count();
+            assert!(k > 100, "{c}: nur {k} von 400 Punkten");
+        }
     }
 
     /// Das Grobraster gibt die Großform vor: In der Mitte von Wasserzellen

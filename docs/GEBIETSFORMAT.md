@@ -18,6 +18,8 @@ Code: `crates/f29-world/src/theater.rs` (`Theater::parse`, `Theater::to_text`).
   `--region NAME` startet direkt in einem Gebiet (Groß-/Kleinschreibung egal).
 - Findet das Spiel keine Datei, nimmt es das eingebaute Testgebiet
   NORTH COAST.
+- Beispiel mit allen Geländearten, ohne Ziele: `data/examples/showcase.ron`
+  (`cargo run -p f29-app -- --theaters data/examples --region showcase --start air`).
 - Replays speichern Name und Prüfsumme des Gebiets. Ein Replay lässt sich
   nur mit genau demselben Gebiet abspielen – wer ein Gebiet ändert, macht
   seine alten Replays unbrauchbar.
@@ -33,12 +35,12 @@ Code: `crates/f29-world/src/theater.rs` (`Theater::parse`, `Theater::to_text`).
 
 ```ron
 (
-    format: 1,
+    format: 2,
     name: "LIBYA",
     seed: 1986,
     size_m: 500000.0,
     grid: (
-        ground: [ "~~~~", "~..h", ".hhM", "..hM" ],
+        ground: [ "~~~~", "~Cdd", ".vdh", "ffhM" ],
         side:   [ "NNNN", "NFNH", "FNHH", "FNHH" ],
     ),
     airfields: [
@@ -54,7 +56,7 @@ Code: `crates/f29-world/src/theater.rs` (`Theater::parse`, `Theater::to_text`).
 
 | Feld | Bedeutung |
 |---|---|
-| `format` | Version dieses Formats, derzeit `1`. Das Spiel lehnt höhere Versionen ab. |
+| `format` | Version dieses Formats, derzeit `2`. Das Spiel lehnt höhere Versionen ab; ältere liest es weiter. |
 | `name` | Name des Gebiets, eindeutig; erscheint im Menü und im Replay. |
 | `seed` | Startwert des Feinrauschens der Landschaft (Hügelformen, Grate). Ein anderer Wert ergibt bei gleichem Raster eine andere Feinform. |
 | `size_m` | Kantenlänge in Metern. |
@@ -75,15 +77,24 @@ Westrand. Die Mitte der Zelle (Zeile `r`, Spalte `c`) liegt bei
 
 | Zeichen | Art |
 |---|---|
-| `~` | Wasser |
-| `.` | Flachland |
-| `h` | Hügel |
-| `M` | Gebirge |
+| Zeichen | Art | Landschaft | Farbe | Radar (Tiefflug) |
+|---|---|---|---|---|
+| `~` | Wasser | Meer, Seen | blau | 100 % |
+| `.` | Flachland | eben, Wiesen mit Waldflecken | grün | 100 % |
+| `h` | Hügel | hügelig | grün | 70 % |
+| `M` | Gebirge | Grate, oben Fels und Schnee | grau/weiß | 45 % |
+| `d` | Wüste | eben mit flachen Dünen | Sand | 100 % |
+| `f` | Wald | eben bis wellig, ganz Wald | dunkelgrün | 85 % |
+| `C` | Stadt | sehr eben, bebaut | grau | 80 % |
+| `v` | Dorf | eben, verstreute Siedlungen zwischen Wiesen | oliv/grün | 90 % |
 
 Aus den Geländearten formt das Spiel die Landschaft: Grundhöhe und Anteile
 von Hügeln und Graten je Art, weich zwischen den Zellmitten übergeblendet,
 die Grenzen leicht verzerrt (etwa 0,4 Zellen), darüber das Feinrauschen.
-Die Geländeart wirkt außerdem auf das Radar (siehe Handbuch, Kapitel Radar).
+Die Farbe folgt der Art der verzerrten Zelle; steile Hänge sind immer Fels,
+Ufer Strand. Die Radarspalte nennt, wie weit feindliche Radare im Tiefflug
+noch reichen (Handbuch, Kapitel Radar). Häuser als Kulisse in Stadt und
+Dorf gibt es noch nicht.
 
 **Seite** (`side`):
 
@@ -165,3 +176,4 @@ Das Spiel prüft das nicht, der Editor sollte es aber anzeigen:
 | Version | Änderung |
 |---|---|
 | 1 | erste beschriebene Fassung: Formatversion, Ort je Objekt, eigene Basis zuerst |
+| 2 | Geländearten Wüste `d`, Wald `f`, Stadt `C`, Dorf `v` |

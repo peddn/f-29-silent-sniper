@@ -73,14 +73,7 @@ impl MapRaster {
                     let steep = grid.steepness(i, j);
                     let surface = terrain.classify(p[0], p[1], h, steep);
                     let v = (fbm(terrain.seed() ^ 0xC010, p[0] / 900.0, p[1] / 900.0, 2) * 0.5 + 0.5) as f32;
-                    let base = match surface {
-                        Surface::Water => palette::mix(2, 1, ((-h).clamp(0.0, 300.0) / 300.0) as f32 * 0.7),
-                        Surface::Beach => palette::srgb(10),
-                        Surface::Grass => palette::mix(8, 9, v * 0.8),
-                        Surface::Forest => palette::mix(7, 8, v * 0.3),
-                        Surface::Rock => palette::mix(13, 12, v * 0.5),
-                        Surface::Snow => palette::srgb(6),
-                    };
+                    let base = palette::surface(surface, v, ((-h).clamp(0.0, 300.0) / 300.0) as f32);
                     // Hangschattierung aus dem Raster
                     let lit = if surface == Surface::Water {
                         1.0

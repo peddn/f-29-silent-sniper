@@ -16,7 +16,6 @@ use f29_core::controls::flags;
 use f29_core::replay::Replay;
 use f29_core::{DT, Sim, SimConfig, Status, TICK_HZ, detmath, units};
 use f29_hud::{HudOptions, ScreenLayout};
-use f29_world::Surface;
 use std::process::ExitCode;
 
 mod sound;
@@ -352,14 +351,9 @@ fn terrain(args: &Args) -> Result<(), String> {
                 let nrm = t.normal(n, e);
                 (0.55 + 0.45 * (-nrm[0] * 0.6 + nrm[1] * -0.4 + nrm[2] * 0.7)).clamp(0.3, 1.2)
             };
-            let base: [f64; 3] = match t.surface(n, e) {
-                Surface::Water => [40.0, 70.0 + (h / 30.0).max(-40.0), 150.0],
-                Surface::Beach => [200.0, 190.0, 130.0],
-                Surface::Grass => [90.0, 150.0, 70.0],
-                Surface::Forest => [40.0, 105.0, 50.0],
-                Surface::Rock => [130.0, 120.0, 110.0],
-                Surface::Snow => [235.0, 235.0, 245.0],
-            };
+            let depth = ((-h).clamp(0.0, 300.0) / 300.0) as f32;
+            let base =
+                f29_render::palette::surface(t.surface(n, e), 0.5, depth).map(|c| f64::from(c) * 255.0);
             let water = h < 0.0;
             for ch in base {
                 let v = if water { ch } else { ch * shade };

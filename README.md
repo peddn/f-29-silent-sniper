@@ -360,6 +360,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Mehrere Einsatzgebiete laden und im Menü wählen (`data/theaters/`,
       `--theaters`, `--region`), Gebiet in der Pilotenakte, Ort je Objekt;
       Format beschrieben (`docs/GEBIETSFORMAT.md`), kein Generator im Spiel
+- [x] Geländearten Wüste, Wald, Stadt und Dorf (Höhe, Farbe, Radar;
+      Häuser als Kulisse folgen später)
 - [ ] Die vier Gebiete des Originals nach echter Geografie mit echten Namen:
       Libyen, Persischer Golf, Nordkap, Mitteleuropa (im Karteneditor)
 - [x] Konfliktstufen von „Spannung“ bis „offener Krieg“ mit unterschiedlichen

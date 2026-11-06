@@ -90,7 +90,10 @@ pub fn ground_factor(ground: Ground) -> f64 {
     match ground {
         Ground::Hills => 0.7,
         Ground::Mountains => 0.45,
-        Ground::Water | Ground::Plain => 1.0,
+        Ground::Forest => 0.85,
+        Ground::City => 0.8,
+        Ground::Village => 0.9,
+        Ground::Water | Ground::Plain | Ground::Desert => 1.0,
     }
 }
 pub const GROUND_TOP_M: f64 = 1_000.0;
