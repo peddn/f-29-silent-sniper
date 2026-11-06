@@ -351,8 +351,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       im Original, eigene Schwellen), Ruhestand nach 60 Einsätzen; Ehrung
       nach der Nachbesprechung (vorerst Text)
 - [ ] Mehrere eigene, fiktive Einsatzgebiete (Szenarien)
-- [ ] Konfliktstufen von „Spannung“ bis „offener Krieg“ mit unterschiedlichen
-      Einsatzregeln
+- [x] Konfliktstufen von „Spannung“ bis „offener Krieg“ mit unterschiedlichen
+      Einsatzregeln (COLD WAR, LIMITED, OPEN WAR, M-033)
 - [x] Verlauf: Abschuss, Gefangennahme (verzögert die Beförderung), Rettung,
       Ruhestand; Spielstände im Dienstplan
 

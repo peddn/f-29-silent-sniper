@@ -1415,8 +1415,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   eines), die Schwierigkeit über Gegnerqualität und Flugverhalten; keine eigenen
   Einheiten; Abschüsse nur von MiG-21 und MiG-29; keine Karte mit dem Flugweg
   in der Nachbesprechung (Wunsch des Spielers).
-- **Status:** teilweise (es fehlen Bilder zum Ausgang; Statistik, Beförderung
-  und Orden kommen mit der Kampagne, M-030).
+- **Status:** teilweise (es fehlen Bilder zum Ausgang; Beförderung und Orden:
+  M-030).
 
 ### M-033 Regelsets (Konfliktlage)
 
