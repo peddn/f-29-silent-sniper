@@ -3,7 +3,9 @@
 //! Mitte 0,0, y nach oben). Immer zu sehen: Basis, Route und die beiden
 //! Ziele; je nach Thema hervorgehoben die Ziele, die Bedrohungen
 //! (Radarkreise, gepunktet Impuls, durchgezogen Doppler; feindliche
-//! Flugplätze) oder der Flugplan. Den Ausschnitt ([`MapView`]) verschiebt
+//! Flugplätze) oder der Flugplan. Darunter die Planquadrate (M-031): das
+//! 100-km-Gitter mit den Buchstaben, eingezoomt auch die 10-km-Felder. Den
+//! Ausschnitt ([`MapView`]) verschiebt
 //! und zoomt das Frontend mit der Maus; das Gelände legt es als Rasterbild
 //! darunter, die Beschriftung setzt es in seiner Schrift ([`labels`]).
 
@@ -11,6 +13,7 @@ use crate::canvas::{Align, DisplayList, Ink, Rect};
 use crate::map::{MapData, MapProjection};
 use crate::mfd::target_symbol;
 use f29_core::RadarSiteInfo;
+use f29_core::nav::grid_square;
 use f29_core::radar::RadarKind;
 use f29_core::targets::TargetRole;
 use f29_core::terrain::AirfieldKind;
@@ -51,6 +54,9 @@ pub struct Label {
 /// Engster Ausschnitt (halbe Kantenlänge, m): darunter würde das Höhenbild
 /// (rund 120 m je Bildpunkt) nur noch gröber.
 pub const MIN_HALF_M: f64 = 12_500.0;
+/// Ab diesem Ausschnitt (halbe Kantenlänge, m) zeigt die Karte auch die
+/// 10-km-Felder der Planquadrate.
+const FINE_GRID_HALF_M: f64 = 60_000.0;
 
 /// Kartenausschnitt: Mitte (Nord, Ost) und halbe Kantenlänge (m), immer im
 /// Gebiet mit der halben Kantenlänge `bound` um den Ursprung.
@@ -135,6 +141,17 @@ pub fn draw(map: &MapData, sites: &[RadarSiteInfo], topic: Topic, view: MapView,
     let proj = view.projection(area);
     let s = symbol(area);
     dl.set_clip(Some(area));
+    let h = map.half_m;
+    let fine = view.half < FINE_GRID_HALF_M;
+    for (step, ink) in
+        [(10_000.0, Ink::MfdGrid), (100_000.0, Ink::MfdDim)].into_iter().filter(|g| fine || g.0 > 10_000.0)
+    {
+        for k in (-h / step).ceil() as i64..=(h / step).floor() as i64 {
+            let x = k as f64 * step;
+            dl.line(proj.to_screen([x, -h]), proj.to_screen([x, h]), ink);
+            dl.line(proj.to_screen([-h, x]), proj.to_screen([h, x]), ink);
+        }
+    }
     for rw in &map.runways {
         let threat = rw.kind == AirfieldKind::Enemy;
         if !threat || topic == Topic::Threats {
@@ -190,6 +207,20 @@ pub fn labels(map: &MapData, topic: Topic, view: MapView, area: Rect) -> Vec<Lab
     let proj = view.projection(area);
     let off = symbol(area) * 2.0;
     let mut out = Vec::new();
+    // Buchstaben der 100-km-Quadrate an ihrer Südwestecke (im Gebiet)
+    let h = map.half_m;
+    let corners =
+        || ((-h / 100_000.0).floor() as i64..(h / 100_000.0).ceil() as i64).map(|k| (k as f64 * 1e5).max(-h));
+    for n in corners() {
+        for e in corners() {
+            let [x, y] = proj.to_screen([n, e]);
+            let pos = [x + off * 0.3, y + off * 0.3];
+            if area.contains(pos) {
+                let text = grid_square(n + 1.0, e + 1.0, h)[..2].to_string();
+                out.push(Label { pos, align: Align::Left, text, ink: Ink::MfdDim });
+            }
+        }
+    }
     let mut add = |p: [f64; 2], text: String, ink: Ink| {
         let [x, y] = proj.to_screen(p);
         let right = x > area.center()[0];

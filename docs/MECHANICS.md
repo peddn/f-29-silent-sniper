@@ -1235,8 +1235,12 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
 - **Original:** Vier feste Einsatzgebiete (Libyen, Persischer Golf, Nordkap,
   Mitteleuropa) mit Weltdatei, Geländekacheln und Kartenbild; jede Mission
   entsteht aus den festen Objekten eines Gebiets. Die quadratische Karte mit
-  festem Maßstab ist für Briefings in Planquadrate mit Buchstaben-Ziffern-Kennung
-  geteilt (je Gebiet eigener Versatz). Ein Grobraster trägt je Zelle Land oder
+  festem Maßstab ist für Briefings in Planquadrate geteilt: zwei Buchstaben für
+  ein großes Quadrat, zwei Ziffern für das Feld darin (Ost, dann Nord), je
+  Gebiet mit eigenen Anfangsbuchstaben und Versatz, sodass die Kennungen wie
+  echte Kartenangaben der Gegend wirken. Das Briefing nennt so die Lage der
+  Ziele, der Startbasis und des Landeplatzes; die Karten im Flug zeigen keine
+  Kennungen. Ein Grobraster trägt je Zelle Land oder
   Wasser (Ziele nur auf Land), eine Geländeart, die die Radarbewertung direkt
   verstärkt oder schwächt (grobe „Maskierung“ ohne Sichtlinie), und ein Merkmal
   für tagsüber spontan startende tragbare Flugabwehr. Die Objektliste nennt
@@ -1284,12 +1288,24 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   - **Karte:** MFD-Kartenbild 4096² über das ganze Gebiet, parallel berechnet;
     Kartenstufen 0,625–640 km, außerhalb schwarz. Replays speichern Name und
     Prüfsumme des Gebiets.
+  - **Planquadrate** (`f29_core::nav::grid_square`): 100-km-Quadrate mit zwei
+    Buchstaben (Spalte von West, Zeile von Süd, „A“ am Gebietsrand), darin
+    10-km-Felder mit zwei Ziffern (Ost, Nord), z. B. „CC84“. Das Gitter liegt
+    auf vollen 10 bzw. 100 km um den Ursprung, also auf den Linien des
+    MFD-Kartengitters; die Kanten des 500-km-Gebiets schneiden die äußeren
+    Quadrate (A–F). Angegeben in der Lagebesprechung bei den Zielen und je
+    Wegpunkt im Flugplan, auf ihrer Karte das 100-km-Gitter mit den
+    Buchstaben (eingezoomt unter 60 km halber Breite auch die 10-km-Felder),
+    auf der MSN-Seite das eigene Planquadrat neben dem Gebiet.
 - **Abweichungen:** ein Gebiet statt vier; feste Startbasis, kein Träger; Ziele
   nur aus der Objektliste; das Band gilt für den Abstand zur Basis, nicht für
   die Gesamtstrecke; keine festen Missionen; keine Zellen für spontane tragbare
-  Flugabwehr; Radare sehen durch das Gelände (M-020).
-- **Status:** teilweise (es fehlen Planquadrate auf Karte und Missionsseite,
-  die Geländeart als Radarfaktor und ein grafischer Gebietseditor).
+  Flugabwehr; Radare sehen durch das Gelände (M-020). Planquadrate mit eigener
+  Größe, Buchstaben ab „A“ statt gebietstypischer Kennungen, zusätzlich auf
+  der Karte der Lagebesprechung und der MSN-Seite; Richtung und Entfernung von
+  der Basis bleiben im Briefing.
+- **Status:** teilweise (es fehlen die Geländeart als Radarfaktor und ein
+  grafischer Gebietseditor).
 
 ### M-032 Missionsauftrag, Bewaffnung und Auswertung
 
@@ -1742,8 +1758,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Pixelart), bildfüllend ohne Glättung; die mitgelieferte ist ein Mockup.
 - **Abweichungen:** Die Lagebesprechung fasst die Menüpunkte zu vier Themen
   zusammen (die Auswahl hat höchstens vier Zeilen), Raketenreichweiten stehen
-  im Text statt als eigene Kreise; Richtung und Entfernung statt
-  Gitterkoordinaten (Planquadrate fehlen noch, M-031), keine Fristen und
+  im Text statt als eigene Kreise; Richtung und Entfernung zusätzlich zu den
+  Planquadraten (M-031), keine Fristen und
   besonderen Ereignisse; Mausbedienung der Menüs und der Karte (zoom- und
   verschiebbar) ist unsere Ergänzung; die Erkennung ist ein Platzhalter;
   „leicht“ lockert die Landegrenzen weniger als das Original, weil unsere
