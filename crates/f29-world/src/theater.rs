@@ -46,6 +46,9 @@ pub enum Side {
 }
 
 impl Side {
+    /// Alle Seiten in der Reihenfolge der Zeichen `F N H`.
+    pub const ALL: [Side; 3] = [Side::Friendly, Side::Neutral, Side::Hostile];
+
     pub fn label(self) -> &'static str {
         match self {
             Side::Friendly => "FRIENDLY",
@@ -54,7 +57,7 @@ impl Side {
         }
     }
 
-    fn from_char(c: char) -> Option<Self> {
+    pub fn from_char(c: char) -> Option<Self> {
         match c {
             'F' => Some(Side::Friendly),
             'N' => Some(Side::Neutral),
@@ -86,7 +89,19 @@ pub enum Ground {
 }
 
 impl Ground {
-    fn from_char(c: char) -> Option<Self> {
+    /// Alle Geländearten in der Reihenfolge der Zeichen `~ . h M d f C v`.
+    pub const ALL: [Ground; 8] = [
+        Ground::Water,
+        Ground::Plain,
+        Ground::Hills,
+        Ground::Mountains,
+        Ground::Desert,
+        Ground::Forest,
+        Ground::City,
+        Ground::Village,
+    ];
+
+    pub fn from_char(c: char) -> Option<Self> {
         match c {
             '~' => Some(Ground::Water),
             '.' => Some(Ground::Plain),
@@ -187,6 +202,30 @@ impl std::fmt::Display for TheaterError {
 impl std::error::Error for TheaterError {}
 
 impl Theater {
+    /// Ein neues, gültiges Gebiet: ganz Flachland und neutral, die eigene
+    /// Basis HOME in der Mitte, keine Objekte. Der Seed wird hier einmal
+    /// gesetzt und danach nur bewusst geändert (er formt die Feinheiten der
+    /// Landschaft unter allen Objekten).
+    pub fn empty(name: &str, seed: u64) -> Self {
+        let layer = |c: char| vec![c.to_string().repeat(GRID_N); GRID_N];
+        Theater {
+            format: FORMAT,
+            name: name.into(),
+            seed,
+            grid: Grid { ground: layer(Ground::Plain.to_char()), side: layer(Side::Neutral.to_char()) },
+            airfields: vec![AirfieldDef {
+                name: "HOME".into(),
+                kind: AirfieldKind::Home,
+                north: 0.0,
+                east: 0.0,
+                heading_deg: 0.0,
+                mig21: 0,
+                mig29: 0,
+            }],
+            objects: Vec::new(),
+        }
+    }
+
     /// Liest ein Gebiet aus RON und prüft das Raster.
     pub fn parse(text: &str) -> Result<Self, TheaterError> {
         let t: Theater = ron::from_str(text).map_err(|e| TheaterError(e.to_string()))?;
@@ -255,6 +294,16 @@ impl Theater {
         Side::from_char(self.grid.side[row].as_bytes()[col] as char).expect("geprüft")
     }
 
+    /// Setzt das Gelände der Zelle `(Zeile, Spalte)`.
+    pub fn set_ground(&mut self, row: usize, col: usize, g: Ground) {
+        set_char(&mut self.grid.ground[row], col, g.to_char());
+    }
+
+    /// Setzt die Seite der Zelle `(Zeile, Spalte)`.
+    pub fn set_side(&mut self, row: usize, col: usize, s: Side) {
+        set_char(&mut self.grid.side[row], col, s.to_char());
+    }
+
     /// Seite an einem Ort; außerhalb des Gebiets neutral.
     pub fn side_at(&self, north: f64, east: f64) -> Side {
         cell(north, east).map_or(Side::Neutral, |(r, c)| self.side(r, c))
@@ -270,6 +319,11 @@ impl Theater {
                 .expect("eingebautes Gebiet lesbar")
         })
     }
+}
+
+/// Ersetzt das Zeichen an Stelle `col` (Rasterzeilen sind reines ASCII).
+fn set_char(row: &mut String, col: usize, c: char) {
+    row.replace_range(col..=col, c.encode_utf8(&mut [0; 4]));
 }
 
 /// Rasterzelle (Zeile von Nord, Spalte von West) an einem Ort; außerhalb `None`.
@@ -367,6 +421,27 @@ mod tests {
         };
         assert!(Theater::parse(&enemy_first.to_text()).is_err(), "erst die eigene Basis");
         assert_eq!(intern("AB"), intern(&String::from("AB")));
+    }
+
+    /// Ein neues Gebiet ist gültig; Zellen lassen sich einzeln setzen, die
+    /// Listen aller Arten und Seiten passen zu den Zeichen.
+    #[test]
+    fn empty_theater_and_cell_edits() {
+        let mut t = Theater::empty("NEU", 42);
+        assert_eq!(Theater::parse(&t.to_text()).expect("lesbar"), t);
+        assert_eq!(t.seed, 42);
+        for (k, g) in Ground::ALL.into_iter().enumerate() {
+            t.set_ground(3, k, g);
+            assert_eq!(Ground::from_char(g.to_char()), Some(g));
+        }
+        t.set_side(GRID_N - 1, GRID_N - 1, Side::Hostile);
+        let back = Theater::parse(&t.to_text()).expect("lesbar");
+        assert_eq!(Ground::ALL.map(Ground::to_char).iter().collect::<String>(), "~.hMdfCv");
+        assert_eq!(Side::ALL.map(Side::to_char).iter().collect::<String>(), "FNH");
+        assert!((0..8).all(|k| back.ground(3, k) == Ground::ALL[k]));
+        assert_eq!(back.ground(3, 8), Ground::Plain);
+        assert_eq!(back.side(GRID_N - 1, GRID_N - 1), Side::Hostile);
+        assert_eq!(back.side(GRID_N - 1, GRID_N - 2), Side::Neutral);
     }
 
     /// Ein Ordner liefert seine lesbaren Gebiete nach Name und meldet die

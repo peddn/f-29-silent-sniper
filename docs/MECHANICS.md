@@ -1339,6 +1339,13 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   - **Karte:** MFD-Kartenbild 4096² über das ganze Gebiet, parallel berechnet;
     Kartenstufen 0,625–640 km, außerhalb schwarz. Replays speichern Name und
     Prüfsumme des Gebiets.
+  - **Karteneditor** (`crates/f29-editor`, egui ohne Bevy,
+    `docs/KARTENEDITOR.md`): liest und schreibt nur über `Theater::parse`
+    und `Theater::to_text`, malt Gelände und Seite (Pinsel, Füllen,
+    Rückgängig), legt eine Kartenunterlage darunter, übernimmt Wasser aus
+    einer Maske und zeigt die Landschaft mit dem Code des Spiels. Die
+    Unterlagen (Natural Earth, azimutal abstandstreu um den Gebietsmittelpunkt)
+    liegen nicht im Repository.
   - **Planquadrate** (`f29_core::nav::grid_square`): 100-km-Quadrate mit zwei
     Buchstaben (Spalte von West, Zeile von Süd, „A“ am Gebietsrand), darin
     10-km-Felder mit zwei Ziffern (Ost, Nord), z. B. „CC84“. Das Gitter liegt
@@ -1358,7 +1365,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   Größe, Buchstaben ab „A“ statt gebietstypischer Kennungen, zusätzlich auf
   der Karte der Lagebesprechung und der MSN-Seite; Richtung und Entfernung von
   der Basis bleiben im Briefing.
-- **Status:** teilweise (es fehlt ein grafischer Gebietseditor).
+- **Status:** teilweise (im Karteneditor fehlen noch Flugplätze, Objekte und
+  Prüfungen; die vier Gebiete fehlen).
 
 ### M-032 Missionsauftrag, Bewaffnung und Auswertung
 

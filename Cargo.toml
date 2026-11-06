@@ -9,9 +9,11 @@ members = [
     "crates/f29-headless",
     "crates/f29-audio",
     "crates/f29-app",
+    "crates/f29-editor",
 ]
 # `cargo test` / `cargo run` ohne `-p` arbeiten nur mit den engine-freien Crates.
-# Das Bevy-Frontend wird explizit gebaut: `cargo run -p f29-app`.
+# Das Bevy-Frontend und der Karteneditor werden explizit gebaut:
+# `cargo run -p f29-app`, `cargo run -p f29-editor`.
 default-members = [
     "crates/f29-core",
     "crates/f29-world",

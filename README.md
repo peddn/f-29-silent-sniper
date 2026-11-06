@@ -74,6 +74,9 @@ cargo run --release -p f29-app -- --roster piloten.ron
 # Gebiet dort das eingebaute Testgebiet) bzw. direkt in einem Gebiet starten
 cargo run --release -p f29-app -- --theaters meine-karten --region "TEST RANGE"
 
+# Karteneditor für die Einsatzgebiete (docs/KARTENEDITOR.md)
+cargo run --release -p f29-editor -- data/theaters/libyen.ron
+
 # nach 10 s automatisch einen Screenshot speichern und beenden
 cargo run --release -p f29-app -- --screenshot bild.png --after 10
 
@@ -179,11 +182,13 @@ crates/
   f29-audio/     prozedurale Klangsynthese und Sprachansagen – keine Engine
   f29-headless/  Kommandozeile: Demo, Replays, HUD-SVG, Höhenkarte, WAV-Hörproben
   f29-app/       Spiel (Bevy): Fenster, Eingabe, Kameras, Streaming, Retro-Shader
+  f29-editor/    Karteneditor für die Einsatzgebiete (egui, ohne Bevy)
 docs/
   ARCHITECTURE.md  Aufbau, Koordinatensysteme, Determinismus, Teststrategie
   MECHANICS.md     Clean-Room-Protokoll und Mechanik-Einträge
   handbuch/        Handbuch: wie das Spiel funktioniert, mit Stellschrauben
   GEBIETSFORMAT.md Format der Einsatzgebiete (Vertrag mit dem Karteneditor)
+  KARTENEDITOR.md  Bedienung des Karteneditors
 ```
 
 Nur `f29-app` hängt von Bevy ab. Simulation, Gelände, HUD und Geometrie sind ohne
@@ -365,6 +370,10 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Alle Gebiete 500 km groß mit Raster 128 × 128 (Format 3, wie im
       Original gleich groß); Testgebiet TEST RANGE mit allen Geländearten,
       Seiten und Objektklassen ersetzt NORTH COAST als Grundlage der Tests
+- [x] Karteneditor, Teil 1: Gelände und Seiten malen, Kartenunterlage,
+      Wasser aus Maske, Landschaftsvorschau mit dem Code des Spiels
+- [ ] Karteneditor, Teil 2 und 3: Flugplätze und Objekte bearbeiten; Prüfungen
+      (Missionspaare, Radarabstand, Schiffe auf Wasser)
 - [ ] Die vier Gebiete des Originals nach echter Geografie mit echten Namen:
       Libyen, Persischer Golf, Nordkap, Mitteleuropa (im Karteneditor)
 - [ ] Fertige Gebiete ins Programm einbetten (kein Datenordner nötig;
