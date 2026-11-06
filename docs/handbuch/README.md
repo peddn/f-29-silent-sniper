@@ -11,7 +11,8 @@ ist. Ändert sich eine Mechanik, wird ihr Kapitel mitgeändert.
 
 ## Kapitel
 
-1. [Radar und Entdeckung](radar.md)
+1. [Flugmodell](flugmodell.md)
+2. [Radar und Entdeckung](radar.md)
 
-Weitere Kapitel – je eines für das Flugmodell und jede andere Mechanik –
-folgen nach der Roadmap im README.
+Weitere Kapitel – je eines für jede andere Mechanik – folgen nach der
+Roadmap im README.
