@@ -1,6 +1,6 @@
 //! Navigationspunkte (Steerpoints) einer Route und Planquadrate.
 
-use f29_world::{Runway, Terrain};
+use f29_world::Runway;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Steerpoint {
@@ -31,10 +31,8 @@ pub fn route_length_m(route: &[Steerpoint]) -> f64 {
     route.windows(2).map(|w| (w[1].north - w[0].north).hypot(w[1].east - w[0].east)).sum()
 }
 
-/// Halbe Kantenlänge des Gebiets (m); ohne Gebiet 100 km.
-pub fn half_extent_m(terrain: &Terrain) -> f64 {
-    terrain.size_m().unwrap_or(200_000.0) * 0.5
-}
+/// Halbe Kantenlänge eines Gebiets (m).
+pub const HALF_EXTENT_M: f64 = f29_world::theater::SIZE_M * 0.5;
 
 /// Planquadrat (M-031): zwei Buchstaben für das 100-km-Quadrat (Spalte von
 /// West, Zeile von Süd), zwei Ziffern für das 10-km-Feld darin (Ost, Nord),

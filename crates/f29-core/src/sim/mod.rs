@@ -1612,12 +1612,9 @@ mod tests {
         use crate::radar::ground_factor;
         let mut sim = Sim::new(SimConfig::new(1));
         let th = sim.config.theater.clone();
-        let (n, size) = (th.grid_n(), th.size_m);
+        let n = f29_world::theater::GRID_N;
         let cells = || (1..n - 1).flat_map(|r| (1..n - 1).map(move |c| (r, c)));
-        let center = |(r, c): (usize, usize)| {
-            let cell = size / n as f64;
-            (size * 0.5 - (r as f64 + 0.5) * cell, (c as f64 + 0.5) * cell - size * 0.5)
-        };
+        let center = |(r, c)| f29_world::theater::cell_center(r, c);
         let mut at = |(north, east): (f64, f64)| {
             (sim.aircraft.position.x, sim.aircraft.position.y) = (north, east);
             sim.exposure().ground
@@ -1631,7 +1628,7 @@ mod tests {
             cells().filter(|&(r, c)| th.ground(r, c) == Ground::Mountains).map(|rc| at(center(rc))).collect();
         let mean = peaks.iter().sum::<f64>() / peaks.len() as f64;
         assert!(mean < ground_factor(Ground::Hills), "über Gebirge im Schnitt {mean}");
-        let along: Vec<f64> = (0..5_000).map(|k| at((0.0, k as f64 * 100.0 - size * 0.5))).collect();
+        let along: Vec<f64> = (0..5_000).map(|k| at((0.0, k as f64 * 100.0 - 250_000.0))).collect();
         let jump = along.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f64::max);
         assert!(jump < 0.02, "Sprung {jump} auf 100 m");
     }

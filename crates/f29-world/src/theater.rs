@@ -4,8 +4,9 @@
 //! [`THEATER_DIR`] ([`Theater::load_dir`]).
 //!
 //! Eine Gebietsdatei (RON, lesbar und von Hand bearbeitbar) beschreibt ein
-//! quadratisches Gebiet um den Ursprung:
-//! - **Grobraster** `n × n`: je Zelle Gelände (`~` Wasser, `.` Flachland,
+//! Quadrat von [`SIZE_M`] um den Ursprung – wie im Original alle Gebiete
+//! gleich groß:
+//! - **Grobraster** [`GRID_N`] × [`GRID_N`]: je Zelle Gelände (`~` Wasser, `.` Flachland,
 //!   `h` Hügel, `M` Gebirge, `d` Wüste, `f` Wald, `C` Stadt, `v` Dorf) und
 //!   Seite (`F` eigen, `N` neutral, `H`
 //!   feindlich). Erste Zeile = Nordrand, erste Spalte = Westrand. Aus dem
@@ -24,9 +25,15 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-/// Version des Dateiformats, die dieses Spiel liest (2: Wüste, Wald,
-/// Stadt, Dorf).
-pub const FORMAT: u32 = 2;
+/// Version des Dateiformats, die dieses Spiel liest (3: feste Größe und
+/// festes Raster).
+pub const FORMAT: u32 = 3;
+/// Kantenlänge jedes Gebiets (m).
+pub const SIZE_M: f64 = 500_000.0;
+/// Zellen je Zeile und Spalte des Rasters.
+pub const GRID_N: usize = 128;
+/// Kantenlänge einer Rasterzelle (m), knapp 4 km.
+pub const CELL_M: f64 = SIZE_M / GRID_N as f64;
 /// Ordner der Gebietsdateien, vom Arbeitsverzeichnis aus.
 pub const THEATER_DIR: &str = "data/theaters";
 
@@ -158,20 +165,13 @@ impl ObjectDef {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Theater {
     /// Version des Dateiformats ([`FORMAT`]).
-    #[serde(default = "first_format")]
     pub format: u32,
     pub name: String,
     /// Seed des Detailrauschens.
     pub seed: u64,
-    /// Kantenlänge (m).
-    pub size_m: f64,
     pub grid: Grid,
     pub airfields: Vec<AirfieldDef>,
     pub objects: Vec<ObjectDef>,
-}
-
-fn first_format() -> u32 {
-    1
 }
 
 /// Fehler beim Lesen eines Gebiets.
@@ -190,20 +190,18 @@ impl Theater {
     /// Liest ein Gebiet aus RON und prüft das Raster.
     pub fn parse(text: &str) -> Result<Self, TheaterError> {
         let t: Theater = ron::from_str(text).map_err(|e| TheaterError(e.to_string()))?;
-        if t.format > FORMAT {
-            return Err(TheaterError(format!("Formatversion {} ist neuer als {FORMAT}", t.format)));
+        if t.format != FORMAT {
+            return Err(TheaterError(format!("Formatversion {} statt {FORMAT}", t.format)));
         }
-        let n = t.grid.ground.len();
         let rows_ok = |rows: &[String], ok: fn(char) -> bool| {
-            rows.len() == n && rows.iter().all(|r| r.chars().count() == n && r.chars().all(ok))
+            rows.len() == GRID_N && rows.iter().all(|r| r.chars().count() == GRID_N && r.chars().all(ok))
         };
-        if n < 2
-            || !rows_ok(&t.grid.ground, |c| Ground::from_char(c).is_some())
+        if !rows_ok(&t.grid.ground, |c| Ground::from_char(c).is_some())
             || !rows_ok(&t.grid.side, |c| Side::from_char(c).is_some())
         {
-            return Err(TheaterError(
-                "Raster muss n × n Zeichen je Ebene haben (~ . h M d f C v bzw. F N H)".into(),
-            ));
+            return Err(TheaterError(format!(
+                "Raster muss {GRID_N} × {GRID_N} Zeichen je Ebene haben (~ . h M d f C v bzw. F N H)"
+            )));
         }
         if t.airfields.first().is_none_or(|a| a.kind != AirfieldKind::Home) {
             return Err(TheaterError("der erste Flugplatz muss die eigene Basis sein".into()));
@@ -247,20 +245,6 @@ impl Theater {
             .fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3))
     }
 
-    /// Kantenlänge des Rasters in Zellen.
-    pub fn grid_n(&self) -> usize {
-        self.grid.ground.len()
-    }
-
-    /// Zelle (Zeile von Nord, Spalte von West) mit Anteilen 0..1 darin; außerhalb `None`.
-    pub fn cell(&self, north: f64, east: f64) -> Option<(usize, usize)> {
-        let n = self.grid_n() as f64;
-        let half = self.size_m * 0.5;
-        let row = ((half - north) / self.size_m * n).floor();
-        let col = ((east + half) / self.size_m * n).floor();
-        ((0.0..n).contains(&row) && (0.0..n).contains(&col)).then_some((row as usize, col as usize))
-    }
-
     /// Gelände der Zelle `(Zeile, Spalte)`.
     pub fn ground(&self, row: usize, col: usize) -> Ground {
         Ground::from_char(self.grid.ground[row].as_bytes()[col] as char).expect("geprüft")
@@ -273,17 +257,32 @@ impl Theater {
 
     /// Seite an einem Ort; außerhalb des Gebiets neutral.
     pub fn side_at(&self, north: f64, east: f64) -> Side {
-        self.cell(north, east).map_or(Side::Neutral, |(r, c)| self.side(r, c))
+        cell(north, east).map_or(Side::Neutral, |(r, c)| self.side(r, c))
     }
 
-    /// Das eingebaute Standardgebiet.
+    /// Das eingebaute Testgebiet TEST RANGE (alle Geländearten, Seiten und
+    /// Objektklassen): Grundlage der Tests und Ersatz, wenn kein Gebiet
+    /// geladen ist.
     pub fn builtin() -> &'static Theater {
         static T: OnceLock<Theater> = OnceLock::new();
         T.get_or_init(|| {
-            Theater::parse(include_str!("../../../data/theaters/north_coast.ron"))
+            Theater::parse(include_str!("../../../data/test/test_range.ron"))
                 .expect("eingebautes Gebiet lesbar")
         })
     }
+}
+
+/// Rasterzelle (Zeile von Nord, Spalte von West) an einem Ort; außerhalb `None`.
+pub fn cell(north: f64, east: f64) -> Option<(usize, usize)> {
+    let row = ((SIZE_M * 0.5 - north) / CELL_M).floor();
+    let col = ((east + SIZE_M * 0.5) / CELL_M).floor();
+    let n = GRID_N as f64;
+    ((0.0..n).contains(&row) && (0.0..n).contains(&col)).then_some((row as usize, col as usize))
+}
+
+/// Mitte der Rasterzelle `(Zeile, Spalte)` als (Nord, Ost).
+pub fn cell_center(row: usize, col: usize) -> (f64, f64) {
+    (SIZE_M * 0.5 - (row as f64 + 0.5) * CELL_M, (col as f64 + 0.5) * CELL_M - SIZE_M * 0.5)
 }
 
 /// Text mit statischer Lebensdauer (Namen aus Gebietsdateien), je Inhalt
@@ -303,13 +302,21 @@ pub fn intern(s: &str) -> &'static str {
 mod tests {
     use super::*;
 
+    /// Ein Raster ganz aus `c`.
+    fn layer(c: char) -> Vec<String> {
+        vec![c.to_string().repeat(GRID_N); GRID_N]
+    }
+
+    /// Flachland, die Nordwestzelle Wasser, die Südreihe feindlich.
     fn tiny() -> Theater {
+        let mut grid = Grid { ground: layer('.'), side: layer('N') };
+        grid.ground[0].replace_range(..1, "~");
+        grid.side[GRID_N - 1] = "H".repeat(GRID_N);
         Theater {
             format: FORMAT,
             name: "TINY".into(),
             seed: 1,
-            size_m: 40_000.0,
-            grid: Grid { ground: vec!["~.".into(), "hM".into()], side: vec!["FN".into(), "NH".into()] },
+            grid,
             airfields: vec![AirfieldDef {
                 name: "HOME".into(),
                 kind: AirfieldKind::Home,
@@ -334,19 +341,25 @@ mod tests {
     #[test]
     fn text_roundtrip_and_cells() {
         let t = tiny();
-        let back = Theater::parse(&t.to_text()).expect("lesbar");
+        let text = t.to_text();
+        let back = Theater::parse(&text).expect("lesbar");
         assert_eq!(back, t);
         assert_eq!(back.checksum(), t.checksum());
-        // Nordwesten Wasser/eigen, Südosten Gebirge/feindlich
-        assert_eq!(t.cell(10_000.0, -10_000.0), Some((0, 0)));
+        let half = SIZE_M * 0.5;
+        assert_eq!(cell(half - 1.0, 1.0 - half), Some((0, 0)));
+        assert_eq!(cell_center(0, 0), (half - CELL_M * 0.5, CELL_M * 0.5 - half));
         assert_eq!(t.ground(0, 0), Ground::Water);
-        assert_eq!(t.side_at(-10_000.0, 10_000.0), Side::Hostile);
-        assert_eq!(t.side_at(90_000.0, 0.0), Side::Neutral, "außerhalb");
-        assert!(Theater::parse(&t.to_text().replace("\"hM\"", "\"hX\"")).is_err());
-        assert!(
-            Theater::parse(&t.to_text().replace(&format!("format: {FORMAT}"), "format: 99")).is_err(),
-            "neueres Format"
-        );
+        assert_eq!(t.side_at(1.0 - half, 0.0), Side::Hostile);
+        assert_eq!(t.side_at(half + 1.0, 0.0), Side::Neutral, "außerhalb");
+        assert!(Theater::parse(&text.replacen("\"~", "\"X", 1)).is_err(), "unbekanntes Zeichen");
+        let small = Theater {
+            grid: Grid { ground: vec![".".repeat(64); 64], side: vec!["N".repeat(64); 64] },
+            ..t.clone()
+        };
+        assert!(Theater::parse(&small.to_text()).is_err(), "falsches Raster");
+        for other in ["format: 2", "format: 99"] {
+            assert!(Theater::parse(&text.replace(&format!("format: {FORMAT}"), other)).is_err(), "{other}");
+        }
         assert_eq!(t.objects[0].label(), "BUNKER AT TOBRUK");
         let enemy_first = Theater {
             airfields: vec![AirfieldDef { kind: AirfieldKind::Enemy, ..t.airfields[0].clone() }],
@@ -375,10 +388,25 @@ mod tests {
         assert!(Theater::load_dir(Path::new("gibt/es/nicht")).0.is_empty());
     }
 
+    /// Das Testgebiet enthält alles, was die Tests brauchen: jede
+    /// Geländeart, jede Seite, Horste mit Jägern, jede Objektklasse, Ziviles
+    /// und Orte.
     #[test]
-    fn builtin_theater_is_valid() {
+    fn test_range_has_everything() {
         let t = Theater::builtin();
-        assert!(t.grid_n() >= 16);
-        assert!(!t.objects.is_empty());
+        let cells = || (0..GRID_N * GRID_N).map(|k| (k / GRID_N, k % GRID_N));
+        for c in "~.hMdfCv".chars() {
+            assert!(cells().any(|(r, col)| t.ground(r, col).to_char() == c), "Gelände {c}");
+        }
+        for c in "FNH".chars() {
+            assert!(cells().any(|(r, col)| t.side(r, col).to_char() == c), "Seite {c}");
+        }
+        assert!(t.airfields.iter().any(|a| a.kind == AirfieldKind::Enemy && a.mig21 > 0 && a.mig29 > 0));
+        for class in TargetClass::ALL {
+            assert!(t.objects.iter().any(|o| o.class == class && !o.civilian), "{class:?}");
+        }
+        assert!(t.objects.iter().any(|o| o.civilian));
+        let ship = |c| matches!(c, TargetClass::ShipSmall | TargetClass::ShipLarge);
+        assert!(t.objects.iter().all(|o| o.place.is_empty() == ship(o.class)), "Orte an Land");
     }
 }

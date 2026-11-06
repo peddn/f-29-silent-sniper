@@ -191,8 +191,9 @@ fn long_range_sam_climbs_and_lofts() {
     );
 }
 
-/// Wartet auf den Start, dann fliegt geradeaus und wirft `decoy`, sobald die
-/// Rakete näher als `at_m` ist. Liefert die Ereignisse danach.
+/// Wartet auf den Start, dann fliegt geradeaus und wirft ein Paar `decoy`,
+/// sobald die Rakete näher als `at_m` ist (ein einzelner kann an ihrem
+/// Widerstand scheitern, M-021). Liefert die Ereignisse danach.
 fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) -> Vec<WeaponEvent> {
     let (mut sim, site) = toward_site_with(class, dist, height, true);
     // Nur diese Stellung schießt.
@@ -203,7 +204,7 @@ fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) 
     }
     assert!(fly_until(&mut sim, 40.0, |s| launched(s).is_some()), "kein Start");
     let t0 = sim.flight_data().tick;
-    let mut thrown = false;
+    let mut throws = 0;
     for _ in 0..(20 * TICK_HZ) {
         let near = sim
             .munitions()
@@ -211,8 +212,9 @@ fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) 
             .iter()
             .filter(|w| w.owner.is_some())
             .any(|w| (w.position - sim.aircraft().position).length() < at_m);
-        let w = if near && !thrown { decoy } else { 0 };
-        thrown |= w != 0;
+        let w = if near && throws < 2 { decoy } else { 0 };
+        throws += usize::from(w != 0);
+        let thrown = throws > 0;
         // Werfen, dann hart abdrehen (75° Querlage, ziehen): Die geblendete
         // Rakete findet das Flugzeug danach nicht wieder.
         let fd = sim.flight_data();
@@ -223,11 +225,11 @@ fn decoy_run(class: TargetClass, dist: f64, height: f64, decoy: u16, at_m: f64) 
             break;
         }
     }
-    assert!(thrown, "Rakete kam nicht nah genug");
+    assert!(throws == 2, "Rakete kam nicht nah genug");
     events_since(&sim, t0)
 }
 
-/// Ein Düppel kurz vor dem Einschlag blendet die Radarrakete (SA-6); wer
+/// Düppel kurz vor dem Einschlag blenden die Radarrakete (SA-6); wer
 /// dann abdreht, ist sie los.
 #[test]
 fn chaff_decoys_the_radar_missile() {

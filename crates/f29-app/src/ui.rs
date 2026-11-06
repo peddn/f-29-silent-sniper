@@ -31,7 +31,6 @@ use bevy::window::PrimaryWindow;
 use f29_core::roster::{Mission, SLOTS};
 use f29_hud::arming::{Arming, ROWS, bay_rect};
 use f29_hud::intel::{self, Label, MapView};
-use f29_hud::map::map_half_extent;
 use f29_hud::{Align, Ink, MAX_OPTIONS, Page, Rect, debrief};
 use f29_render::palette;
 
@@ -289,7 +288,7 @@ fn intel_input(
     mut intel: ResMut<IntelView>,
 ) {
     let Some(map) = maps.map.as_deref() else { return };
-    let bound = map_half_extent(state.sim.terrain());
+    let bound = f29_core::nav::HALF_EXTENT_M;
     if intel.mission != maps.mission() {
         intel.mission = maps.mission();
         intel.view = Some(MapView::fit(map, bound));
