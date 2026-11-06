@@ -316,8 +316,9 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Missionsdaten in der Lagebesprechung: Karte mit Zielen, Route, Radarkreisen
       und Fliegerhorsten, Texte je Thema
 - [x] Bewaffnung und Betankung vor dem Start (Zusatztanks), Missionsauswertung
-- [x] Verbrauchsvorschau: Treibstoff bei Ankunft je Wegpunkt auf der
-      MSN-Seite (jetziger Verbrauch) und in der Lagebesprechung (Planung)
+- [x] Verbrauchsvorschau: Strecke und Verbrauch je Abschnitt und Rest auf
+      der MSN-Seite (jetziger Verbrauch samt Leck) und in der Lagebesprechung
+      (Planung)
 - [ ] Flugzeugträger
 
 ### v0.4: Luftkampf

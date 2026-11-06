@@ -178,7 +178,7 @@ pub struct FlightData {
     pub fuel_kg: f64,
     /// Tankinhalt 0..1.
     pub fuel_fraction: f64,
-    /// Aktueller Verbrauch, kg/s.
+    /// Aktueller Verbrauch samt Leck, kg/s.
     pub fuel_flow_kgps: f64,
     /// Restflugzeit beim aktuellen Verbrauch, s.
     pub endurance_s: f64,
@@ -729,15 +729,18 @@ impl Sim {
         let n_demand = flight::demanded_load_factor(&self.spec, a, &self.last_controls, aero.tas, aero.qbar);
         let v_stall = flight::stall_speed(&self.spec, mass, aero.density, n_demand, a.flaps);
 
-        // Treibstoff: Restzeit beim aktuellen Verbrauch und Bedarf bis nach Hause.
-        let flow = if a.flamed_out() { 0.0 } else { flight::fuel_flow(&self.spec, a.engine, aero.density) };
+        // Treibstoff: Verbrauch des Triebwerks plus Leck (Schadensmodell);
+        // Restzeit dabei und Bedarf bis nach Hause.
+        let leak = a.health.fuel_leak_kgps;
+        let flow =
+            leak + if a.flamed_out() { 0.0 } else { flight::fuel_flow(&self.spec, a.engine, aero.density) };
         let endurance_s = if flow > 0.0 { a.fuel_kg / flow } else { 0.0 };
         let home_range_m = self.terrain.runways().first().map_or(0.0, |h| {
             let (dn, de) = (h.center[0] - a.position.x, h.center[1] - a.position.y);
             (dn * dn + de * de).sqrt()
         });
         // Rückweg mit mindestens Reisefahrt und mindestens halbem Schub gerechnet.
-        let cruise_flow = flight::fuel_flow(&self.spec, a.engine.max(0.5), aero.density);
+        let cruise_flow = flight::fuel_flow(&self.spec, a.engine.max(0.5), aero.density) + leak;
         let fuel_needed = home_range_m / aero.tas.max(150.0) * cruise_flow + FUEL_RESERVE_KG;
         let runway_here = self.terrain.runway_at(a.position.x, a.position.y);
         let stopped_on_runway = a.on_ground && runway_here.is_some() && a.velocity.length() < STOPPED_SPEED;

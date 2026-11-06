@@ -82,20 +82,23 @@ impl Sim {
 
     /// Flugplan: Wegpunkte mit Teilstrecken, Gesamtstrecke, Treibstoff,
     /// Tageszeit.
-    /// Je Wegpunkt die Teilstrecke und der Treibstoff bei Ankunft nach der
-    /// Planung (mitgeführt abzüglich Reiseverbrauch, M-009).
+    /// Je Wegpunkt Strecke und Verbrauch des Abschnitts nach der Planung
+    /// (Reiseverbrauch, M-009), darunter der Rest nach der Route.
     pub fn briefing_route(&self) -> Vec<String> {
+        let kg = |x: f64| (x / 10.0).round() as i64 * 10;
         let mut lines = Vec::new();
-        let mut fuel = self.fuel_carried_kg();
+        let mut left = self.fuel_carried_kg();
         for (k, sp) in self.route.iter().enumerate() {
             let leg = k.checked_sub(1).map(|j| {
                 let p = &self.route[j];
                 let m = (sp.north - p.north).hypot(sp.east - p.east);
-                fuel -= m / 1_000.0 * super::CRUISE_FUEL_KG_PER_KM;
-                format!("{:>4} KM{:>8} KG", km(m), (fuel / 10.0).round() as i64 * 10)
+                let burn = m / 1_000.0 * super::CRUISE_FUEL_KG_PER_KM;
+                left -= burn;
+                format!("{:>4} KM{:>8} KG", km(m), kg(burn))
             });
             lines.push(format!("{} {:<20}{}", k + 1, sp.name, leg.unwrap_or_default()).trim_end().into());
         }
+        lines.push(format!("  {:<20}{:>15} KG", "LEFT", kg(left)));
         lines.push(String::new());
         lines.extend(self.route_lines());
         lines
@@ -178,10 +181,14 @@ mod tests {
         }
         let route = sim.briefing_route();
         assert!(route[0].starts_with("1 HOME") && route[1].ends_with(" KG"), "{route:?}");
-        let fuel = |line: &str| line.split_whitespace().rev().nth(1).unwrap().parse::<f64>().unwrap();
-        let used = sim.fuel_carried_kg() - fuel(&route[sim.route.len() - 1]);
+        // Verbrauch je Abschnitt, zusammen der Reiseverbrauch; darunter der Rest.
+        let kg = |line: &String| line.split_whitespace().rev().nth(1).unwrap().parse::<f64>().unwrap();
+        let n = sim.route.len();
+        let burn: f64 = route[1..n].iter().map(kg).sum();
         let planned = sim.fuel_required_kg() - crate::sim::FUEL_RESERVE_KG;
-        assert!((used - planned).abs() < 20.0, "Verbrauch {used} statt {planned}");
+        assert!((burn - planned).abs() < 30.0, "Verbrauch {burn} statt {planned}");
+        let left = sim.fuel_carried_kg() - planned;
+        assert!(route[n].starts_with("  LEFT") && (kg(&route[n]) - left).abs() < 10.0, "{route:?}");
     }
 }
 

@@ -182,11 +182,15 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   sich in die Haupttanks umpumpen. Volle Tanks machen das Flugzeug etwas langsamer,
   leere etwas schneller. Bei leerem Tank fällt der Schub weg, man segelt; die
   Nachbesprechung nennt leere Tanks als Absturzursache. Eine Kontrollanzeige warnt,
-  sobald der Rest nicht mehr bis zur Heimatbasis reicht, und die Karte zeigt eine
-  Vorschau des Verbrauchs je Wegabschnitt.
+  sobald der Rest nicht mehr bis zur Heimatbasis reicht. Die Wegpunkttafel zeigt
+  je noch offenem Wegpunkt die Strecke (zum aktiven ab der eigenen Position, dann
+  von Punkt zu Punkt), die Flugzeit bei der jetzigen Fahrt und die Uhrzeit bei
+  Ankunft; der Treibstoff steht dort als Balken mit einem Stück je Abschnitt
+  (Verbrauch beim jetzigen Schub, nach Schaden mit Aufschlag) und einem Stück für
+  den Rest, daneben der Vorrat als Zahl.
 - **Referenzstelle:** f19re `src/egflight.c` (`stepFlightModel`: Verbrauch, Schub
   bei leerem Tank, Fahrteinfluss), `src/egtacmap.c` (Warnanzeige,
-  Verbrauchsvorschau), `src/egcombat.c` (Umpumpen des Zusatztanks),
+  `drawWaypointPanel`: Wegpunkttafel mit Verbrauchsvorschau), `src/egcombat.c` (Umpumpen des Zusatztanks),
   `src_end/enbrief.c` (Absturzursache).
 - **Unser Design:** `flight::fuel_flow`, Warnungen in
   `crates/f29-core/src/sim/info.rs`. Treibstoff ist echte Masse (M-001) statt eines
@@ -198,17 +202,22 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   zur Heimatbasis plus 450 kg Reserve nicht mehr reicht (echte Entfernung,
   mindestens 150 m/s und halber Schub). Zusatztank (1000 kg) und Bedarfsschätzung
   aus der Routenlänge: M-036.
-  - **Verbrauchsvorschau:** Die MSN-Seite (M-050) nennt je Wegpunkt ab dem
-    aktiven den Treibstoff bei Ankunft – Weg entlang der Route (zum aktiven
-    Punkt die echte Entfernung) mal dem jetzigen Verbrauch je Meter
+  - **Leck:** Ein beschädigtes Tanksystem verliert zusätzlich Treibstoff
+    (Schadensmodell, M-015); der angezeigte Verbrauch (FUEL FLOW), die
+    Restflugzeit, BINGO und die Vorschau rechnen es mit.
+  - **Verbrauchsvorschau:** Die MSN-Seite (M-050) nennt je Wegpunkt Strecke
+    und Verbrauch des Abschnitts – zum aktiven Punkt ab der eigenen Position,
+    dann von Wegpunkt zu Wegpunkt – beim jetzigen Verbrauch je Meter
     (Verbrauch durch wahre Fahrt), unter 50 m/s nach der Planung mit
-    11 kg/km; unter der Reserve in Warnfarbe. Die Lagebesprechung (FLIGHT
-    PLAN, M-036) nennt ihn nach der Planung: mitgeführt abzüglich 11 kg/km.
+    11 kg/km; darunter LEFT, der Rest nach der Route, unter der Reserve in
+    Warnfarbe. Die Lagebesprechung (FLIGHT PLAN, M-036) zeigt dasselbe nach
+    der Planung: 11 kg/km je Abschnitt und der Rest vom mitgeführten
+    Treibstoff.
 - **Abweichungen:** Auch der Leerlauf verbraucht; die Nachbesprechung nennt keinen
-  leeren Tank. Die Vorschau steht als Zahl je Wegpunkt statt als Balken mit
-  einem Abschnitt je Teilstrecke, ohne Flug- und Ankunftszeit je Abschnitt
-  (die Zeit zum aktiven Punkt steht schon da); im Flug zählen nur die
-  Haupttanks, ein Zusatztank erst nach dem Umpumpen.
+  leeren Tank. Die Vorschau steht als Zahl je Abschnitt und Rest statt als
+  Balken, ohne Flug- und Ankunftszeit je Abschnitt (die Flugzeit zum aktiven
+  Punkt steht darunter); erledigte Punkte bleiben gedämpft sichtbar; im Flug
+  zählen nur die Haupttanks, ein Zusatztank erst nach dem Umpumpen.
 - **Status:** umgesetzt.
 
 ### M-040 Flugplätze
@@ -390,8 +399,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Flugzeuge) oder Raute (Schiffe) nach Erfassung (M-013), Radarstellungen (M-020),
     Jäger, Waffen, Täuschkörper, Nordpfeil, Kurs und Bereich.
   - **Seiten (rechts),** F4 blättert, eine Leiste unten zeigt die aktive: MSN
-    (Ziele, Route mit Teilstrecken und Treibstoff bei Ankunft, M-009, Weg zum
-    aktiven Punkt, Heimweg, BINGO), TGT
+    (Ziele, Route mit Strecke und Verbrauch je Abschnitt und Rest, M-009,
+    Richtung und Flugzeit zum aktiven Punkt, Heimweg, BINGO), TGT
     (gewähltes Ziel mit Bild, M-017), CAM (Fernsehsuchkopf), WPN (Schächte 2 × 2,
     gewählte Waffe, Hauptschalter; M-014), ENG (Drehzahl mit Leerlauf 62 %, Schub,
     Verbrauch, Treibstoffbalken mit BINGO-Marke), ADI (Reserve-Horizont mit Fahrt,
@@ -1674,8 +1683,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     entlang der Route je Typ mit Radar- und Raketenreichweite, feindliche
     Fliegerhorste; auf der Karte alle Radarkreise, gepunktet Impuls,
     durchgezogen Doppler, und die Horste), FLIGHT PLAN (Wegpunkte mit
-    Teilstrecken und geplantem Treibstoff bei Ankunft, M-009, Gesamtstrecke,
-    Treibstoff, Tageszeit; Route hervorgehoben),
+    Strecke und geplantem Verbrauch je Abschnitt und Rest, M-009,
+    Gesamtstrecke, Treibstoff, Tageszeit; Route hervorgehoben),
     LEAVE BRIEFING (weiter zur Schlussauswahl; die Ansicht bleibt beim
     letzten Thema, das dann gedämpft invers markiert ist). Die Karte zeichnen
     Linien in Fensterauflösung, die Beschriftung setzt die UI. Maus über der

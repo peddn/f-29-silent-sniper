@@ -58,9 +58,14 @@ fn fuel_leak_drains_the_tanks() {
     let mut leak = with(System::Fuel, Condition::Failed);
     fly_with(&mut ok, 10.0, level(0.6, 0));
     fly_with(&mut leak, 10.0, level(0.6, 0));
-    let extra = ok.flight_data().fuel_kg - leak.flight_data().fuel_kg;
-    let expected = f29_core::systems::FUEL_LEAK_MAX_KGPS * 10.0;
+    let (a, b) = (ok.flight_data(), leak.flight_data());
+    let max = f29_core::systems::FUEL_LEAK_MAX_KGPS;
+    let (extra, expected) = (a.fuel_kg - b.fuel_kg, max * 10.0);
     assert!((extra - expected).abs() < expected * 0.05, "Leck {extra:.1} kg statt {expected:.1}");
+    // Die Anzeigen rechnen das Leck mit: Verbrauch, Restzeit, BINGO.
+    let more = b.fuel_flow_kgps - a.fuel_flow_kgps;
+    assert!((more - max).abs() < 0.05, "Verbrauch {more:.2} kg/s mehr statt {max}");
+    assert!(b.endurance_s < a.endurance_s && b.bingo_fuel_kg > a.bingo_fuel_kg);
 }
 
 #[test]
