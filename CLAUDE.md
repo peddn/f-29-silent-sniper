@@ -9,3 +9,13 @@
   sich lohnt** – und das dem Spieler mitteilen, bevor gebaut wird.
 - Neue Mechaniken zuerst diskutieren, wenn der Spieler darum bittet.
 - Echte Waffennamen sind erlaubt.
+
+## Git
+
+- **Größere Unterpunkte** (ein Roadmap-Punkt, eine neue Mechanik, ein Umbau)
+  auf einem eigenen Branch von `main` (`feature/<kurzname>`), pushen und als
+  Pull Request gegen `main` öffnen. Der Spieler testet lokal und merged selbst;
+  nicht selbst nach `main` mergen.
+- Kleine Korrekturen (Tippfehler, Doku) dürfen direkt auf `main`.
+- Zu jedem Branch die Befehle nennen, mit denen der Spieler hineinwechselt,
+  testet und zurück nach `main` geht.
