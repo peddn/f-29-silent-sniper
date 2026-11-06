@@ -597,35 +597,46 @@ mod tests {
     }
 
     /// Das Grobraster gibt die Großform vor: In der Mitte von Wasserzellen
-    /// ist Meer, in Gebirgszellen ist es hoch; die Schranke hält.
+    /// ist Meer, in Gebirgszellen ist es hoch; die Schranke hält – auch im
+    /// feineren Raster der echten Gebiete (128 × 128, jede Zelle 2 × 2 geteilt).
     #[test]
     fn grid_shapes_the_land() {
-        let th = Theater::builtin();
-        let t = theater();
-        let n = th.grid_n();
-        let cell = th.size_m / n as f64;
-        let (mut wet, mut water, mut high, mut mountains) = (0, 0, 0, 0);
-        for r in 0..n {
-            for c in 0..n {
-                let x = th.size_m * 0.5 - (r as f64 + 0.5) * cell;
-                let y = -th.size_m * 0.5 + (c as f64 + 0.5) * cell;
-                let h = t.ground_height(x, y);
-                assert!(h < t.max_elevation());
-                match th.ground(r, c) {
-                    Ground::Water => {
-                        water += 1;
-                        wet += usize::from(h < SEA_LEVEL_M);
+        let split = |rows: &[String]| -> Vec<String> {
+            let wide = |r: &String| r.chars().flat_map(|c| [c, c]).collect::<String>();
+            rows.iter().flat_map(|r| [wide(r), wide(r)]).collect()
+        };
+        let mut fine = Theater::builtin().clone();
+        fine.grid.ground = split(&fine.grid.ground);
+        fine.grid.side = split(&fine.grid.side);
+        let fine = Theater::parse(&fine.to_text()).expect("lesbar");
+        assert_eq!(fine.grid_n(), 128);
+        for th in [Theater::builtin(), &fine] {
+            let t = Terrain::from_theater(th);
+            let n = th.grid_n();
+            let cell = th.size_m / n as f64;
+            let (mut wet, mut water, mut high, mut mountains) = (0, 0, 0, 0);
+            for r in 0..n {
+                for c in 0..n {
+                    let x = th.size_m * 0.5 - (r as f64 + 0.5) * cell;
+                    let y = -th.size_m * 0.5 + (c as f64 + 0.5) * cell;
+                    let h = t.ground_height(x, y);
+                    assert!(h < t.max_elevation());
+                    match th.ground(r, c) {
+                        Ground::Water => {
+                            water += 1;
+                            wet += usize::from(h < SEA_LEVEL_M);
+                        }
+                        Ground::Mountains => {
+                            mountains += 1;
+                            high += usize::from(h > 500.0);
+                        }
+                        _ => {}
                     }
-                    Ground::Mountains => {
-                        mountains += 1;
-                        high += usize::from(h > 500.0);
-                    }
-                    _ => {}
                 }
             }
+            assert!(wet * 10 >= water * 8, "{n}: nur {wet} von {water} Wasserzellen nass");
+            assert!(high * 10 >= mountains * 7, "{n}: nur {high} von {mountains} Gebirgszellen hoch");
         }
-        assert!(wet * 10 >= water * 8, "nur {wet} von {water} Wasserzellen nass");
-        assert!(high * 10 >= mountains * 7, "nur {high} von {mountains} Gebirgszellen hoch");
     }
 
     #[test]

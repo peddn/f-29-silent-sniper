@@ -75,8 +75,6 @@ Westrand. Die Mitte der Zelle (Zeile `r`, Spalte `c`) liegt bei
 
 **Gelände** (`ground`):
 
-| Zeichen | Art |
-|---|---|
 | Zeichen | Art | Landschaft | Farbe | Radar (Tiefflug) |
 |---|---|---|---|---|
 | `~` | Wasser | Meer, Seen | blau | 100 % |
@@ -95,6 +93,14 @@ Die Farbe folgt der Art der verzerrten Zelle; steile Hänge sind immer Fels,
 Ufer Strand. Die Radarspalte nennt, wie weit feindliche Radare im Tiefflug
 noch reichen (Handbuch, Kapitel Radar). Häuser als Kulisse in Stadt und
 Dorf gibt es noch nicht.
+
+**Feinheit:** Überblenden und Verzerrung rechnen in Zellen, die Höhenformen
+in Metern (Grate etwa 9 km, Hügel etwa 2 km, Feinrauschen 12 km). Ein feiner
+gezeichnetes Raster folgt der Zeichnung also enger, ohne die Landschaft
+schroffer zu machen: Dasselbe Gebiet mit 128 statt 64 Zellen weicht im
+Mittel nur etwa 50 m in der Höhe ab. Eine einzelne Gebirgszelle im
+128er-Raster (knapp 4 km) ergibt einen Gipfel oder ein Stück Grat; eine
+Gebirgskette braucht mehrere Zellen.
 
 **Seite** (`side`):
 
@@ -158,6 +164,10 @@ Eine Datei, die eine dieser Regeln verletzt, ist unlesbar:
 
 Das Spiel prüft das nicht, der Editor sollte es aber anzeigen:
 
+- **Größe:** die echten Gebiete 500 km Kantenlänge mit 128 × 128 Zellen
+  (knapp 4 km je Zelle, Spielerentscheidung v0.3); das Testgebiet NORTH COAST
+  hat 64 × 64. Andere Größen gehen, die Entfernungen der Missionen (unten)
+  bleiben aber gleich – sie hängen am Flugzeug, nicht an der Karte.
 - **Missionen:** Der Missionsgenerator wählt zwei Ziele aus den nichtzivilen
   Objekten der Klassen `Building`, `Hardened`, `Bridge`, `ParkedAircraft`,
   `Armored` und `Soft`, 80–220 km von der eigenen Basis und 20–80 km

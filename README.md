@@ -362,6 +362,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Format beschrieben (`docs/GEBIETSFORMAT.md`), kein Generator im Spiel
 - [x] Geländearten Wüste, Wald, Stadt und Dorf (Höhe, Farbe, Radar;
       Häuser als Kulisse folgen später)
+- [x] Raster 128 × 128 für die echten Gebiete geprüft (Landschaft folgt der
+      Zeichnung, Höhenformen bleiben); Empfehlung im Gebietsformat
 - [ ] Die vier Gebiete des Originals nach echter Geografie mit echten Namen:
       Libyen, Persischer Golf, Nordkap, Mitteleuropa (im Karteneditor)
 - [x] Konfliktstufen von „Spannung“ bis „offener Krieg“ mit unterschiedlichen

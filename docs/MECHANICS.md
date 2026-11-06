@@ -1297,14 +1297,17 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   beschreibt `docs/GEBIETSFORMAT.md`.
   - **Gebietsdatei** (`data/theaters/*.ron`, Formatversion, eingebaut das
     Testgebiet „NORTH COAST“): Name,
-    Seed, Kantenlänge 500 km, Grobraster n × n (64 × 64) mit Gelände (`~ . h M
+    Seed, Kantenlänge 500 km, Grobraster n × n (NORTH COAST 64 × 64, die
+    echten Gebiete 128 × 128, Spielerentscheidung v0.3) mit Gelände (`~ . h M
     d f C v`: Wasser, Flachland, Hügel, Gebirge, Wüste, Wald, Stadt, Dorf; je
     Art Höhenprofil und Farbe, Spielerentscheidung v0.3) und Seite (`F N H`: eigen, neutral,
     feindlich), Flugplätze (eigene Basis, Horste mit ihren MiG-21 und MiG-29)
     und alle Objekte mit Name, Klasse, Lage, Ausrichtung, „zivil“ und Ort
     (angezeigt „NAME AT ORT“, z. B. „RADAR AT BENGHAZI“). Das Raster
     formt die Landschaft (`Terrain::from_theater`: je Geländeart ein Höhenprofil,
-    weich überblendet, verzerrte Zellgrenzen, darüber das Detailrauschen); die
+    weich überblendet, verzerrte Zellgrenzen, darüber das Detailrauschen;
+    Überblenden und Verzerrung in Zellen, Höhenformen in Metern, sodass ein
+    feineres Raster der Zeichnung enger folgt, ohne schroffer zu werden); die
     Seiten (außerhalb neutral) gelten für Landung, Ausstieg (M-032) und Feuer
     (M-033).
   - **Missionsgenerator** (`f29_core::mission`): zwei Ziele aus den nichtzivilen
