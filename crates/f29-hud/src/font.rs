@@ -87,6 +87,12 @@ pub const GLYPH_H: f32 = 6.0;
 /// Vorschub pro Zeichen in Rastereinheiten (4 Breite + 2 Abstand).
 pub const ADVANCE: f32 = 6.0;
 
+/// Längster Anfang von `text`, der bei Zeichenhöhe `h` in die Breite `w` passt.
+pub fn fit(text: &str, w: f32, h: f32) -> &str {
+    let n = ((w * GLYPH_H / h + 2.0) / ADVANCE).floor().max(0.0) as usize;
+    text.char_indices().nth(n).map_or(text, |(i, _)| &text[..i])
+}
+
 /// Breite eines Textes bei Zeichenhöhe `h`.
 pub fn text_width(text: &str, h: f32) -> f32 {
     let n = text.chars().count() as f32;
@@ -106,6 +112,15 @@ mod tests {
         for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+.:/%<>! ".chars() {
             assert!(glyph(c).is_some(), "Glyphe fehlt: {c:?}");
         }
+    }
+
+    /// `fit` kürzt genau so weit, dass der Text in die Breite passt.
+    #[test]
+    fn fit_cuts_to_the_width() {
+        let h = 10.0;
+        assert_eq!(fit("COMMAND POST", text_width("COMMAND POST", h), h), "COMMAND POST");
+        assert_eq!(fit("COMMAND POST", text_width("COMMAND", h), h), "COMMAND");
+        assert_eq!(fit("ABC", 0.0, h), "");
     }
 
     #[test]

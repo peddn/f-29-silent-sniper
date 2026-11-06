@@ -1431,8 +1431,11 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Aufklärungsziel „PRIMARY/SECONDARY PHOTOGRAPHED“. Die TGT-Seite zeigt im
     AG-Modus ihr Bild (Bildhöhe = Bildkreis; sonst BAY CLOSED bzw. ON GROUND),
     Ziel, Entfernung, Fotozahl und „IN FRAME“, wenn ein Foto jetzt zählen würde.
-  - **MSN-Seite:** STRIKE bzw. RECON, je Ziel ATK/RCN mit Name und Entfernung
-    bzw. DONE, Regelset und Gebiet unter dem Flugzeug (M-033).
+  - **MSN-Seite:** STRIKE bzw. RECON, je Ziel ATK/RCN mit Name ohne Ort, DONE
+    sobald erledigt; in der Route heißen die Zielpunkte nach dem Ort ihres
+    Ziels (ohne Ort PRIMARY/SECONDARY), Entfernung und Verbrauch stehen dort.
+    Namen werden auf die freie Breite gekürzt. Regelset und Gebiet unter dem
+    Flugzeug (M-033).
   - **Flugprotokoll** (`LogEntry`, mit Tick): Start (von der Bahn), Wegpunkte
     (3 km, ohne Start und Landeplatz), Entdeckung (je Radarstellung bzw. Jäger
     beim ersten Mal), Radar-ID, Zerstörungen, Fotos, Abschüsse, Treffer,

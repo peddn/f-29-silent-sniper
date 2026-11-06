@@ -42,7 +42,10 @@ pub enum TargetState {
 /// Ein Bodenziel.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Target {
+    /// Anzeigename, mit Ort „NAME AT ORT“ (M-031).
     pub name: &'static str,
+    /// Ort allein, leer ohne Ort.
+    pub place: &'static str,
     pub class: TargetClass,
     /// Zivil oder befreundet: nicht angreifen.
     pub civilian: bool,
@@ -62,6 +65,11 @@ impl Target {
     /// Mittelpunkt der Form in NED (für Erfassung und Anzeige).
     pub fn center(&self) -> DVec3 {
         DVec3::new(self.north, self.east, -(self.elevation + self.class.height() * 0.5))
+    }
+
+    /// Name ohne Ort, für knappe Anzeigen (MSN-Seite).
+    pub fn short_name(&self) -> &'static str {
+        self.name.strip_suffix(self.place).and_then(|n| n.strip_suffix(" AT ")).unwrap_or(self.name)
     }
 
     pub fn is_intact(&self) -> bool {
@@ -84,6 +92,7 @@ pub fn from_theater(theater: &Theater, terrain: &Terrain) -> Vec<Target> {
         .iter()
         .map(|o| Target {
             name: intern(&o.label()),
+            place: intern(&o.place),
             class: o.class,
             civilian: o.civilian,
             role: TargetRole::None,
@@ -112,6 +121,11 @@ mod tests {
         for (t, o) in t.iter().zip(&th.objects) {
             assert_eq!((t.north, t.east, t.class), (o.north, o.east, o.class));
             assert_eq!(t.elevation, terrain.elevation(o.north, o.east));
+            assert_eq!(
+                (t.short_name(), t.place),
+                (o.name.as_str(), o.place.as_str()),
+                "Name und Ort getrennt"
+            );
         }
     }
 }

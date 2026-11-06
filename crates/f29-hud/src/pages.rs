@@ -6,7 +6,7 @@
 //! ([`page_bar`]).
 
 use crate::canvas::{Align, DisplayList, Ink, Rect};
-use crate::font::text_width;
+use crate::font::{fit, text_width};
 use crate::heading_deg;
 use crate::hud::HudMode;
 use crate::map::MapData;
@@ -263,28 +263,20 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
     let kind = if recon { "RECON" } else { "STRIKE" };
     dl.text_mid([f.x1, screen.max[1] - f.txt * 1.2], f.txt, Align::Right, kind, Ink::MfdDim);
     let step = f.txt * 1.5;
+    let size = f.txt * 0.85;
     let mut y = screen.max[1] - f.h * 0.15;
-    // Primär- und Sekundärziel: Auftrag, Name, Entfernung bzw. erledigt
+    // Primär- und Sekundärziel: Auftrag und Name ohne Ort, erledigt mit DONE.
+    // Ort und Entfernung stehen in der Route.
     for (k, (role, label)) in
         [(TargetRole::Primary, "PRI"), (TargetRole::Secondary, "SEC")].into_iter().enumerate()
     {
-        let t = map.and_then(|m| m.targets.iter().find(|t| t.role == role));
+        let name = map.and_then(|m| m.targets.iter().find(|t| t.role == role)).map_or("---", |t| t.short);
         let (task, done) =
             fd.objectives[k].map_or(("", false), |(t, d)| (if t == Task::Recon { "RCN" } else { "ATK" }, d));
-        let (name, right) = match t {
-            Some(_) if done => ("DONE".to_string(), String::new()),
-            Some(t) => {
-                let (dn, de) = (t.pos[0] - fd.position.x, t.pos[1] - fd.position.y);
-                (
-                    t.name.chars().take(10).collect(),
-                    format!("{:.1} KM", units::m_to_km((dn * dn + de * de).sqrt())),
-                )
-            }
-            None => ("---".to_string(), String::new()),
-        };
-        let ink = if done { Ink::MfdDim } else { Ink::Warning };
-        dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, &format!("{label} {task} {name}"), ink);
-        dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &right, Ink::Mfd);
+        let (right, ink) = if done { ("DONE", Ink::MfdDim) } else { ("", Ink::Warning) };
+        let room = f.x1 - f.x0 - text_width(&format!(" {right}"), size);
+        dl.text_mid([f.x0, y], size, Align::Left, fit(&format!("{label} {task} {name}"), room, size), ink);
+        dl.text_mid([f.x1, y], size, Align::Right, right, Ink::Mfd);
         y -= step;
     }
     // Regelset; Planquadrat (M-031) und Gebiet unter dem Flugzeug
@@ -327,8 +319,13 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
                     Ink::Needle,
                 );
             }
-            let name = format!("{} {}", k + 1, p.name);
-            dl.text_mid([f.x0 + f.txt * 1.2, y], f.txt * 0.85, Align::Left, &name, ink);
+            // Zielpunkte heißen nach dem Ort ihres Ziels, sonst PRIMARY/SECONDARY.
+            let place = map.targets.iter().find(|t| t.role != TargetRole::None && t.pos == p.pos);
+            let place = place.map_or("", |t| t.place);
+            let name = format!("{} {}", k + 1, if place.is_empty() { &p.name } else { place });
+            let x = f.x0 + f.txt * 1.2;
+            let room = km_x - text_width("0000", size) - x;
+            dl.text_mid([x, y], size, Align::Left, fit(&name, room, size), ink);
             let leg = match active {
                 Some((a, range)) if k == a => Some(range),
                 _ => leg,
