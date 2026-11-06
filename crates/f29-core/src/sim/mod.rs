@@ -969,7 +969,10 @@ impl Sim {
             height_agl_m: a.height_agl_m,
             door: self.stores.door,
             radar_on: self.sensors.radar_on,
-            ground: crate::radar::ground_factor(self.config.theater.ground_at(a.position.x, a.position.y)),
+            ground: self
+                .terrain
+                .ground_mix(a.position.x, a.position.y, crate::radar::ground_factor)
+                .unwrap_or(1.0),
             ecm: self.stores.countermeasures.ecm,
             visible: self.config.spawn.visible,
         }
@@ -1599,27 +1602,37 @@ mod tests {
         assert!(touch(Landings::NoCrash, max * 3.0, false).is_ok());
     }
 
-    /// Radar (M-020): Über einer Gebirgszelle des Gebiets schwächt das Gelände
-    /// den Impuls, über Flachland nicht.
+    /// Radar (M-020): Mitten im Hügelland verkürzt das Gelände die Reichweite
+    /// ganz, mitten im Flachland nicht, über Gebirgszellen im Schnitt stärker
+    /// als über Hügeln (die Ketten sind schmal, nur ihr Kamm hat den vollen
+    /// Faktor); dazwischen ändert es sich stetig wie die Landschaft, ohne
+    /// Sprung an den Zellgrenzen.
     #[test]
     fn exposure_carries_the_ground_under_the_aircraft() {
+        use crate::radar::ground_factor;
         let mut sim = Sim::new(SimConfig::new(1));
         let th = sim.config.theater.clone();
-        let n = th.grid_n();
-        let cell = th.size_m / n as f64;
-        let center = |k: usize| {
-            [
-                th.size_m * 0.5 - (k / n) as f64 * cell - cell * 0.5,
-                (k % n) as f64 * cell + cell * 0.5 - th.size_m * 0.5,
-            ]
+        let (n, size) = (th.grid_n(), th.size_m);
+        let cells = || (1..n - 1).flat_map(|r| (1..n - 1).map(move |c| (r, c)));
+        let center = |(r, c): (usize, usize)| {
+            let cell = size / n as f64;
+            (size * 0.5 - (r as f64 + 0.5) * cell, (c as f64 + 0.5) * cell - size * 0.5)
         };
-        let find = |g| (0..n * n).find(|&k| th.ground(k / n, k % n) == g).map(center).unwrap();
-        for (ground, factor) in
-            [(Ground::Mountains, crate::radar::ground_factor(Some(Ground::Mountains))), (Ground::Plain, 1.0)]
-        {
-            let [north, east] = find(ground);
+        let mut at = |(north, east): (f64, f64)| {
             (sim.aircraft.position.x, sim.aircraft.position.y) = (north, east);
-            assert_eq!(sim.exposure().ground, factor, "{ground:?}");
+            sim.exposure().ground
+        };
+        let factor = |r: usize, c: usize| ground_factor(th.ground(r, c));
+        for f in [ground_factor(Ground::Hills), 1.0] {
+            let inner = cells().find(|&(r, c)| (0..9).all(|k| factor(r + k / 3 - 1, c + k % 3 - 1) == f));
+            assert_eq!(at(center(inner.unwrap())), f);
         }
+        let peaks: Vec<f64> =
+            cells().filter(|&(r, c)| th.ground(r, c) == Ground::Mountains).map(|rc| at(center(rc))).collect();
+        let mean = peaks.iter().sum::<f64>() / peaks.len() as f64;
+        assert!(mean < ground_factor(Ground::Hills), "über Gebirge im Schnitt {mean}");
+        let along: Vec<f64> = (0..5_000).map(|k| at((0.0, k as f64 * 100.0 - size * 0.5))).collect();
+        let jump = along.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f64::max);
+        assert!(jump < 0.02, "Sprung {jump} auf 100 m");
     }
 }

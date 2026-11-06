@@ -895,13 +895,18 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Bewegung auf die Stellung zu oder von ihr weg (reiner Querflug 25 %),
     Impuls ist richtungsunabhängig. Auch am Boden kommen Pings an.
   - **Gelände** (`radar::ground_factor`, Spielerentscheidung v0.3): Die
-    Geländeart der Rasterzelle unter dem Flugzeug (M-031) verkürzt die
-    Reichweite jedes Radars, auch des Bordradars feindlicher Jäger: Hügel auf
-    70 %, Gebirge auf 45 %, Wasser und Flachland gar nicht. Voll gilt das bis
+    Geländeart unter dem Flugzeug aus dem Grobraster (M-031), so weich
+    gemischt und verzerrt wie die Landschaft (`Terrain::ground_mix`, kein
+    Sprung an Zellgrenzen), verkürzt die Reichweite jedes Radars, auch des
+    Bordradars feindlicher Jäger: Hügel auf 70 %, Gebirge auf 45 %, Wasser und
+    Flachland gar nicht; die schmalen Ketten erreichen den vollen Wert nur über
+    dem Kamm. Voll gilt das bis
     100 m über Grund, bis 1000 m läuft es aus. Weil die Impulsstärke linear
     mit der Entfernung fällt, entdeckt jedes Radar dort im gleichen Verhältnis
     erst näher – nie gar nicht. Die Anzeigen (SIG-Säule, Pings) zeigen die
     verkürzte Stärke; die Reichweitenkreise bleiben beim Nennwert.
+  - **Handbuch:** `docs/handbuch/radar.md` beschreibt die Mechanik für
+    Spieler und nennt alle Stellschrauben.
   - **Stealth-Level** = 1 − Sichtbarkeit, ein Wert für alle Radare wie im
     Original. Sichtbarkeit = Grundwert 0,10 + Höhe über Grund bis 0,40
     (Arkustangens über (Höhe − 100 m) / 1500 m: 1000 m ≈ 0,14, 3000 m ≈ 0,28)

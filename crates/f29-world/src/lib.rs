@@ -123,11 +123,13 @@ pub struct Terrain {
     grid: Option<Arc<GridField>>,
 }
 
-/// Höhenvorgaben je Rasterzelle: Grundhöhe (m), Gebirgs- und Hügelanteil.
+/// Je Rasterzelle die Geländeart und ihre Höhenvorgaben: Grundhöhe (m),
+/// Gebirgs- und Hügelanteil.
 #[derive(Debug, Clone, PartialEq)]
 struct GridField {
     n: usize,
     size_m: f64,
+    ground: Vec<Ground>,
     cells: Vec<[f64; 3]>,
 }
 
@@ -148,8 +150,9 @@ const GRID_DETAIL_SCALE: f64 = 12_000.0;
 const GRID_WARP: f64 = 0.4;
 
 impl GridField {
-    /// Vorgaben weich zwischen den Zellmitten gemischt (außen: Randzellen).
-    fn at(&self, x: f64, y: f64) -> [f64; 3] {
+    /// Werte je Zelle (`value(Index)`) weich zwischen den Zellmitten gemischt
+    /// (außen: Randzellen).
+    fn mix<const N: usize>(&self, x: f64, y: f64, value: impl Fn(usize) -> [f64; N]) -> [f64; N] {
         let cell = self.size_m / self.n as f64;
         let half = self.size_m * 0.5;
         let last = (self.n - 1) as f64;
@@ -157,7 +160,7 @@ impl GridField {
         let u = ((y + half) / cell - 0.5).clamp(0.0, last);
         let (r0, c0) = (v.floor().min(last - 1.0), u.floor().min(last - 1.0));
         let (fv, fu) = (smoothstep(0.0, 1.0, v - r0), smoothstep(0.0, 1.0, u - c0));
-        let idx = |r: f64, c: f64| self.cells[r as usize * self.n + c as usize];
+        let idx = |r: f64, c: f64| value(r as usize * self.n + c as usize);
         let (a, b, c, d) = (idx(r0, c0), idx(r0, c0 + 1.0), idx(r0 + 1.0, c0), idx(r0 + 1.0, c0 + 1.0));
         std::array::from_fn(|k| {
             let top = a[k] + (b[k] - a[k]) * fu;
@@ -195,9 +198,10 @@ impl Terrain {
     /// Flugplätze aus der Datei.
     pub fn from_theater(theater: &Theater) -> Self {
         let n = theater.grid_n();
-        let cells = (0..n * n).map(|k| profile(theater.ground(k / n, k % n))).collect();
+        let ground: Vec<Ground> = (0..n * n).map(|k| theater.ground(k / n, k % n)).collect();
+        let cells = ground.iter().map(|&g| profile(g)).collect();
         let mut t = Self::new(theater.seed);
-        t.grid = Some(Arc::new(GridField { n, size_m: theater.size_m, cells }));
+        t.grid = Some(Arc::new(GridField { n, size_m: theater.size_m, ground, cells }));
         t.runways = theater
             .airfields
             .iter()
@@ -263,15 +267,29 @@ impl Terrain {
         base + mountains + hills
     }
 
-    /// Höhe aus dem Grobraster: Vorgaben der verzerrt abgefragten Zelle, dazu
-    /// Feinrauschen, Gebirgsgrate und Hügel nach ihrem Anteil.
-    fn grid_height(&self, g: &GridField, x: f64, y: f64) -> f64 {
-        let p = &self.params;
+    /// Abfragepunkt im Grobraster, verzerrt für natürliche Grenzen.
+    fn warped(&self, g: &GridField, x: f64, y: f64) -> (f64, f64) {
         let cell = g.size_m / g.n as f64;
         let ws = cell * 1.5;
         let wx = fbm(self.s_warp, x / ws, y / ws, 3) * cell * GRID_WARP;
         let wy = fbm(self.s_warp ^ 0x5741_5250, x / ws, y / ws, 3) * cell * GRID_WARP;
-        let [base, mountain, hill] = g.at(x + wx, y + wy);
+        (x + wx, y + wy)
+    }
+
+    /// Eine Eigenschaft `f` der Geländeart, so weich gemischt und verzerrt
+    /// wie die Landschaft selbst; ohne Gebiet `None`.
+    pub fn ground_mix(&self, x: f64, y: f64, f: impl Fn(Ground) -> f64) -> Option<f64> {
+        let g = self.grid.as_ref()?;
+        let (x, y) = self.warped(g, x, y);
+        Some(g.mix(x, y, |k| [f(g.ground[k])])[0])
+    }
+
+    /// Höhe aus dem Grobraster: Vorgaben der verzerrt abgefragten Zelle, dazu
+    /// Feinrauschen, Gebirgsgrate und Hügel nach ihrem Anteil.
+    fn grid_height(&self, g: &GridField, x: f64, y: f64) -> f64 {
+        let p = &self.params;
+        let (wx, wy) = self.warped(g, x, y);
+        let [base, mountain, hill] = g.mix(wx, wy, |k| g.cells[k]);
         let detail = fbm(self.s_continent, x / GRID_DETAIL_SCALE, y / GRID_DETAIL_SCALE, 4) * GRID_DETAIL_M;
         let rs = p.ridge_scale;
         let r = ridged(self.s_ridge, x / rs, y / rs, 5);

@@ -17,7 +17,8 @@
 //! Ohne Treffer sinkt die Stufe nach [`DECAY_S`] um eins. Radare sehen durch
 //! das Gelände (keine Sichtlinie, Spielerentscheidung v0.2.8); wie im
 //! Original verkürzt aber die Geländeart unter dem Flugzeug ihre Reichweite,
-//! grob je Rasterzelle ([`ground_factor`]).
+//! grob nach dem Grobraster, so weich gemischt wie die Landschaft
+//! ([`ground_factor`]).
 //!
 //! Das Stealth-Level ist wie im Original ein Wert für alle Radare: tief und
 //! waagerecht ist am unauffälligsten; Höhe über Grund, Querlage, offener
@@ -79,16 +80,17 @@ pub const SHORAD: RadarSpec = RadarSpec { kind: RadarKind::Doppler, range_m: 12_
 /// Dopplerradar im reinen Querflug.
 const BEAM_FLOOR: f64 = 0.25;
 
-/// Geländeart unter dem Flugzeug (wie im Original grob je Rasterzelle):
-/// Über Hügeln und Gebirge reicht jedes Radar nur so weit (Anteil; eigene
-/// Werte, Spielerentscheidung v0.3), entdeckt also erst näher – ganz
-/// verdecken kann das Gelände nicht. Voll wirkt das im Tiefflug bis
-/// [`LOW_LEVEL_M`], bis [`GROUND_TOP_M`] über Grund läuft es aus.
-pub fn ground_factor(ground: Option<Ground>) -> f64 {
+/// Geländeart unter dem Flugzeug (wie im Original grob nach dem Raster des
+/// Gebiets, aber so weich gemischt und verzerrt wie die Landschaft): Über
+/// Hügeln und Gebirge reicht jedes Radar nur so weit (Anteil; eigene Werte,
+/// Spielerentscheidung v0.3), entdeckt also erst näher – ganz verdecken kann
+/// das Gelände nicht. Voll wirkt das im Tiefflug bis [`LOW_LEVEL_M`], bis
+/// [`GROUND_TOP_M`] über Grund läuft es aus.
+pub fn ground_factor(ground: Ground) -> f64 {
     match ground {
-        Some(Ground::Hills) => 0.7,
-        Some(Ground::Mountains) => 0.45,
-        _ => 1.0,
+        Ground::Hills => 0.7,
+        Ground::Mountains => 0.45,
+        Ground::Water | Ground::Plain => 1.0,
     }
 }
 pub const GROUND_TOP_M: f64 = 1_000.0;
@@ -381,21 +383,20 @@ mod tests {
             ground: ground_factor(ground),
             ..level(-10_000.0, 0.0)
         };
-        let flat = at(50.0, Some(Ground::Plain)).signal(&EARLY_WARNING, SITE);
-        let hills = at(50.0, Some(Ground::Hills)).signal(&EARLY_WARNING, SITE);
-        let peaks = at(50.0, Some(Ground::Mountains)).signal(&EARLY_WARNING, SITE);
+        let flat = at(50.0, Ground::Plain).signal(&EARLY_WARNING, SITE);
+        let hills = at(50.0, Ground::Hills).signal(&EARLY_WARNING, SITE);
+        let peaks = at(50.0, Ground::Mountains).signal(&EARLY_WARNING, SITE);
         assert!(flat > hills && hills > peaks && peaks > 0.0, "{flat} {hills} {peaks}");
-        assert_eq!(at(50.0, None).signal(&EARLY_WARNING, SITE), flat, "außerhalb wie Flachland");
-        let mid = at(550.0, Some(Ground::Mountains)).signal(&EARLY_WARNING, SITE);
-        let high = at(GROUND_TOP_M, Some(Ground::Mountains)).signal(&EARLY_WARNING, SITE);
+        let mid = at(550.0, Ground::Mountains).signal(&EARLY_WARNING, SITE);
+        let high = at(GROUND_TOP_M, Ground::Mountains).signal(&EARLY_WARNING, SITE);
         assert!(peaks < mid && mid < high, "{peaks} {mid} {high}");
-        assert_eq!(high, at(GROUND_TOP_M, Some(Ground::Plain)).signal(&EARLY_WARNING, SITE));
+        assert_eq!(high, at(GROUND_TOP_M, Ground::Plain).signal(&EARLY_WARNING, SITE));
         let seen = |km: f64, ground| {
             let x = Exposure { position: DVec3::new(-km * 1e3, 0.0, -50.0), ..at(50.0, ground) };
             x.signal(&EARLY_WARNING, SITE) > x.stealth()
         };
-        assert!(seen(1.0, Some(Ground::Mountains)) && !seen(3.0, Some(Ground::Mountains)));
-        assert!(seen(3.0, Some(Ground::Plain)));
+        assert!(seen(1.0, Ground::Mountains) && !seen(3.0, Ground::Mountains));
+        assert!(seen(3.0, Ground::Plain));
     }
 
     #[test]

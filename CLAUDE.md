@@ -9,6 +9,8 @@
   sich lohnt** – und das dem Spieler mitteilen, bevor gebaut wird.
 - Neue Mechaniken zuerst diskutieren, wenn der Spieler darum bittet.
 - Echte Waffennamen sind erlaubt.
+- Das Handbuch (`docs/handbuch/`) mit dem Spiel aktuell halten: Ändert sich
+  eine Mechanik, ihr Kapitel samt Stellschrauben mitändern.
 
 ## Git
 
