@@ -18,4 +18,18 @@
   nicht selbst nach `main` mergen.
 - Kleine Korrekturen (Tippfehler, Doku) dürfen direkt auf `main`.
 - Zu jedem Branch die Befehle nennen, mit denen der Spieler hineinwechselt,
-  testet und zurück nach `main` geht.
+  testet und zurück nach `main` geht – nach dieser Vorlage, ergänzt um
+  Startparameter, die zum Thema passen (z. B. `--rules cold`, `--start air`):
+
+  ```bash
+  git fetch origin
+  git switch feature/<kurzname>
+  cargo build -p f29-app                                   # kompilieren
+  cargo test --workspace                                   # Tests
+  cargo run -p f29-app -- --roster target/test-roster.ron  # mit Menüs, Test-Dienstplan
+  cargo run -p f29-app -- --fly --seed 7                   # gleich fliegen, feste Mission
+  git switch main
+  # nach dem Merge auf GitHub:
+  git pull
+  git branch -d feature/<kurzname>
+  ```

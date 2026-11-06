@@ -8,7 +8,7 @@
 //! Kommandozeile:
 //!
 //! ```text
-//! f29-silent-sniper [--seed N] [--view cockpit|chase] [--start runway|air]
+//! f29-silent-sniper [--fly] [--seed N] [--view cockpit|chase] [--start runway|air]
 //!                   [--volume 0..100] [--no-sound]
 //!                   [--loadout fall,chute,lgb,agm (ohne: Vorschlag des Auftrags)] [--night] [--no-awacs] [--no-stealth] [--no-damage]
 //!                   [--rules cold|limited|war]
