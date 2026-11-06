@@ -41,7 +41,8 @@ impl Sim {
             let t = &self.targets[i];
             let (dist, deg) = self.home_vector(t.north, t.east);
             lines.push(format!("{}: {} {}", ["PRIMARY", "SECONDARY"][k], task.label(), t.name));
-            lines.push(format!("    {dist} KM FROM {}, BEARING {deg:03}", self.route[0].name));
+            let grid = self.grid_square(t.north, t.east);
+            lines.push(format!("    GRID {grid}, {dist} KM FROM {}, BEARING {deg:03}", self.route[0].name));
         }
         if self.mission.has_recon() {
             lines.push(String::new());
@@ -82,8 +83,13 @@ impl Sim {
 
     /// Flugplan: Wegpunkte mit Teilstrecken, Gesamtstrecke, Treibstoff,
     /// Tageszeit.
-    /// Je Wegpunkt Strecke und Verbrauch des Abschnitts nach der Planung
-    /// (Reiseverbrauch, M-009), darunter der Rest nach der Route.
+    /// Planquadrat eines Punkts im Gebiet (M-031).
+    pub fn grid_square(&self, north: f64, east: f64) -> String {
+        crate::nav::grid_square(north, east, crate::nav::half_extent_m(&self.terrain))
+    }
+
+    /// Je Wegpunkt Planquadrat, Strecke und Verbrauch des Abschnitts nach der
+    /// Planung (Reiseverbrauch, M-009), darunter der Rest nach der Route.
     pub fn briefing_route(&self) -> Vec<String> {
         let kg = |x: f64| (x / 10.0).round() as i64 * 10;
         let mut lines = Vec::new();
@@ -96,7 +102,9 @@ impl Sim {
                 left -= burn;
                 format!("{:>4} KM{:>8} KG", km(m), kg(burn))
             });
-            lines.push(format!("{} {:<20}{}", k + 1, sp.name, leg.unwrap_or_default()).trim_end().into());
+            let name: String = sp.name.chars().take(14).collect();
+            let grid = self.grid_square(sp.north, sp.east);
+            lines.push(format!("{} {name:<15}{grid:<5}{}", k + 1, leg.unwrap_or_default()).trim_end().into());
         }
         lines.push(format!("  {:<20}{:>15} KG", "LEFT", kg(left)));
         lines.push(String::new());
@@ -181,6 +189,9 @@ mod tests {
         }
         let route = sim.briefing_route();
         assert!(route[0].starts_with("1 HOME") && route[1].ends_with(" KG"), "{route:?}");
+        let home = &sim.route[0];
+        assert!(route[0].ends_with(&sim.grid_square(home.north, home.east)), "{route:?}");
+        assert!(text.contains("GRID "), "Planquadrat fehlt:\n{text}");
         // Verbrauch je Abschnitt, zusammen der Reiseverbrauch; darunter der Rest.
         let kg = |line: &String| line.split_whitespace().rev().nth(1).unwrap().parse::<f64>().unwrap();
         let n = sim.route.len();

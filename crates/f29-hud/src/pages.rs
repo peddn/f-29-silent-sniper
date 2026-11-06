@@ -287,9 +287,11 @@ pub(crate) fn mission(dl: &mut DisplayList, fd: &FlightData, screen: Rect, map: 
         dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, &right, Ink::Mfd);
         y -= step;
     }
-    // Regelset und Gebiet unter dem Flugzeug
+    // Regelset; Planquadrat (M-031) und Gebiet unter dem Flugzeug
     let ink = if fd.territory == f29_core::Side::Hostile { Ink::Warning } else { Ink::Mfd };
-    let side = fd.territory.label();
+    let grid = map.map(|m| f29_core::nav::grid_square(fd.position.x, fd.position.y, m.half_m));
+    let side = format!("{} {}", grid.unwrap_or_default(), fd.territory.label());
+    let side = side.trim_start();
     dl.text_mid([f.x0, y], f.txt * 0.85, Align::Left, &format!("ROE {}", fd.rules), Ink::Mfd);
     dl.text_mid([f.x1, y], f.txt * 0.85, Align::Right, side, ink);
     y -= step * 1.1;

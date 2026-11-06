@@ -11,7 +11,7 @@ use f29_core::terrain::{AirfieldKind, Terrain};
 
 /// Halbe Kantenlänge des Kartengebiets (m): das ganze Einsatzgebiet.
 pub fn map_half_extent(terrain: &Terrain) -> f64 {
-    terrain.size_m().unwrap_or(200_000.0) * 0.5
+    f29_core::nav::half_extent_m(terrain)
 }
 
 /// Ein Flugplatz auf der Karte.
@@ -47,6 +47,8 @@ pub struct MapData {
     pub runways: Vec<MapRunway>,
     pub route: Vec<MapPoint>,
     pub targets: Vec<MapTarget>,
+    /// Halbe Kantenlänge des Gebiets (m), für die Planquadrate.
+    pub half_m: f64,
 }
 
 impl MapData {
@@ -77,7 +79,7 @@ impl MapData {
                 pos: [t.north, t.east],
             })
             .collect();
-        Self { runways, route, targets }
+        Self { runways, route, targets, half_m: map_half_extent(terrain) }
     }
 }
 

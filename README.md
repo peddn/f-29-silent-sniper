@@ -312,7 +312,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Flugprotokoll und Missionsende: Landung beendet die Mission,
       Schleudersitz (Strg+E), Gebiet entscheidet über Rettung,
       Zwischenfall oder Gefangenschaft; Ergebnistafel (v0.3)
-- [ ] Planquadrate auf Karte und Missionsseite; Geländeart als Radarfaktor
+- [x] Planquadrate in Lagebesprechung (Text und Karte) und auf der MSN-Seite
+- [ ] Geländeart als Radarfaktor
 - [x] Missionsdaten in der Lagebesprechung: Karte mit Zielen, Route, Radarkreisen
       und Fliegerhorsten, Texte je Thema
 - [x] Bewaffnung und Betankung vor dem Start (Zusatztanks), Missionsauswertung
