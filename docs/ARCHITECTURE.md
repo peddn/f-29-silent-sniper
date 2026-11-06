@@ -36,7 +36,7 @@ engine-neutral (`Page`).
 | Crate | Aufgabe |
 |---|---|
 | `f29-data` | Spieldaten als Typen und Konstanten |
-| `f29-world` | Einsatzgebiet als Daten (RON), Grobraster, Zielklassen, Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung, Flugplätze (Einebnung), Erstbefüllung (`populate`) |
+| `f29-world` | Einsatzgebiet als Daten (RON), Grobraster, Zielklassen, Rauschen, Höhenfunktion, Oberflächenklassen, Gitterabtastung, Flugplätze (Einebnung), Gebiete laden (`Theater::load_dir`, Format: `docs/GEBIETSFORMAT.md`) |
 | `f29-core` | Flugmodell, Atmosphäre, Sim-Schleife, Navigation, Replays, Autopilot, deterministische Mathematik |
 | `f29-hud` | HUD und MFDs (Karte mit Höhenlinien, Ressourcen) als Liniensegmente, Vektorfont, SVG-Export; Inhalt der Menü- und Nachbesprechungsseiten, Karte der Lagebesprechung |
 | `f29-audio` | Prozedurale Klangsynthese (Triebwerk, Systeme, Ereignisse), Formant-Sprachansagen, WAV-Ein-/Ausgabe |

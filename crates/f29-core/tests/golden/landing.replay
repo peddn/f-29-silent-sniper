@@ -1,6 +1,6 @@
 F29REPLAY 13
 config (seed:3881,spawn:(kind:Air,fuel:0.4,north:-141184.83117545687,east:-150361.16882454313,altitude:386.0815108060318,min_clearance:0.0,heading:2.356194490192345,speed:95.0,throttle:0.3,loadout:Some(((None,None,None,None))),night:false,awacs:true,visible:false,invulnerable:false,conflict:War,opponents:Regular,landings:Realistic))
-theater ab8f65046263e6a2 NORTH COAST
+theater 5b7e81ceed407102 NORTH COAST
 frames 12356
 36 -13107 0 0 0 12 0
 16 -13107 1 0 0 12 0

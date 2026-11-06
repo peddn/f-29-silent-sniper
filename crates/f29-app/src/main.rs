@@ -13,6 +13,7 @@
 //!                   [--loadout fall,chute,lgb,agm (ohne: Vorschlag des Auftrags)] [--night] [--no-awacs] [--no-stealth] [--no-damage]
 //!                   [--rules cold|limited|war]
 //!                   [--joystick DATEI] [--joystick-debug] [--roster DATEI]
+//!                   [--theaters ORDNER] [--region NAME]
 //!                   [--screenshot DATEI.png [--after SEKUNDEN]]
 //! ```
 
@@ -65,6 +66,28 @@ fn main() {
     } else {
         f29_core::SimConfig::runway(seed)
     };
+    // Einsatzgebiete: alle Dateien aus `--theaters ORDNER` (sonst
+    // `data/theaters`), ohne lesbare Datei das eingebaute; `--region NAME`
+    // wählt eines, sonst das erste.
+    let dir = arg(&args, "--theaters").unwrap_or_else(|| f29_world::theater::THEATER_DIR.into());
+    let (found, errors) = f29_world::Theater::load_dir(std::path::Path::new(&dir));
+    errors.iter().for_each(|e| eprintln!("{e}"));
+    let theaters: Vec<_> = if found.is_empty() {
+        vec![config.theater.clone()]
+    } else {
+        found.into_iter().map(std::sync::Arc::new).collect()
+    };
+    let region = arg(&args, "--region");
+    match region
+        .as_ref()
+        .map_or(theaters.first(), |r| theaters.iter().find(|t| t.name.eq_ignore_ascii_case(r)))
+    {
+        Some(t) => config.theater = t.clone(),
+        None => {
+            let names: Vec<&str> = theaters.iter().map(|t| t.name.as_str()).collect();
+            eprintln!("Gebiet {} unbekannt; vorhanden: {}", region.unwrap_or_default(), names.join(", "));
+        }
+    }
     // Nachtflug: dunkle Darstellung, stark verkürzte Sensorreichweiten.
     config.spawn.night = args.iter().any(|a| a == "--night");
     // Ohne freundliches AWACS: keine Datalink-Daten zu fernen Zielen.
@@ -133,7 +156,7 @@ fn main() {
     }
     app.add_plugins((actions::ActionsPlugin, menu::MenuPlugin, store_art::StoreArtPlugin, ui::UiPlugin));
     app.add_plugins((
-        sim::SimPlugin { config, menu },
+        sim::SimPlugin { config, theaters, menu },
         airfield::AirfieldPlugin,
         targets::TargetsPlugin,
         fighters::FightersPlugin,

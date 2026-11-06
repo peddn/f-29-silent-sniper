@@ -1273,20 +1273,34 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
   Zufall, Vorrang für Träger); liegt die Gesamtstrecke außerhalb eines Bands,
   wird neu gewürfelt (begrenzt oft). Den Missionstyp regelt eine Tabelle nach
   Zielklasse, Gebiet und Kampagnenstufe; ein Gebiet hat zusätzlich feste
-  Missionen.
+  Missionen. **Namen:** Jedes Objekt verweist auf zwei Einträge einer
+  Namensliste des Gebiets, meist Ort und Art der Anlage, zusammengesetzt und
+  bei Überlänge gekürzt. So heißt es in den Meldungen im Flug (eine Stellung
+  startet eine Rakete, ein Flugplatz einen Jäger), auf der Kartentafel beim
+  gewählten Objekt, bei der Heimatbasis und beim erfassten Ziel; die beiden
+  Aufträge beschreibt das Briefing zusätzlich mit je einem Absatz aus einer
+  eigenen Textdatei. Ortsbeschriftungen auf der Karte gibt es nicht.
 - **Referenzstelle:** f19re `src_start/stgen.c` (`missionGenerate`,
   `parseWorld`, `runGenerator`, `findOrPlaceItem`, `formatGridRef`),
   `src_start/stparse.c` (Geländekacheln), `src_en/egcombat.c` (Rasterzellen in
   der Radarbewertung, `spawnSamThreat`). Die Gebietsdateien (`*.wld`, `*.3dT`,
   `*.xxx`) liegen der Rekonstruktion nicht bei; ausgewertet wurden nur Aufbau,
-  Maßstab und Regeln, keine Positionen.
-- **Unser Design:** eigene, fiktive Gebiete als Daten (Crate `f29-world`), vom
-  Original nur die Struktur (Raster, Objektliste, Generatorregeln).
-  - **Gebietsdatei** (`data/theaters/*.ron`, eingebaut „NORTH COAST“): Name,
+  Maßstab und Regeln, keine Positionen. Namen: `src/egframe.c`
+  (`buildStoreName`), `src_en/egcombat.c` (Meldungen), `src_start/stutil.c`
+  (Briefing).
+- **Unser Design:** Gebiete als Daten (Crate `f29-world`), vom Original die
+  Struktur (Raster, Objektliste, Generatorregeln); die vier Gebiete des
+  Originals (Libyen, Persischer Golf, Nordkap, Mitteleuropa) werden nach der
+  echten Geografie mit echten Namen von Hand bzw. im Karteneditor angelegt
+  (Spielerentscheidung v0.3). Das Spiel erzeugt keine Gebiete; das Format
+  beschreibt `docs/GEBIETSFORMAT.md`.
+  - **Gebietsdatei** (`data/theaters/*.ron`, Formatversion, eingebaut das
+    Testgebiet „NORTH COAST“): Name,
     Seed, Kantenlänge 500 km, Grobraster n × n (64 × 64) mit Gelände (`~ . h M`:
     Wasser, Flachland, Hügel, Gebirge) und Seite (`F N H`: eigen, neutral,
     feindlich), Flugplätze (eigene Basis, Horste mit ihren MiG-21 und MiG-29)
-    und alle Objekte mit Name, Klasse, Lage, Ausrichtung und „zivil“. Das Raster
+    und alle Objekte mit Name, Klasse, Lage, Ausrichtung, „zivil“ und Ort
+    (angezeigt „NAME AT ORT“, z. B. „RADAR AT BENGHAZI“). Das Raster
     formt die Landschaft (`Terrain::from_theater`: je Geländeart ein Höhenprofil,
     weich überblendet, verzerrte Zellgrenzen, darüber das Detailrauschen); die
     Seiten (außerhalb neutral) gelten für Landung, Ausstieg (M-032) und Feuer
@@ -1299,12 +1313,14 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Route: Startbasis → Primär- → Sekundärziel → Startbasis; landen darf man auf
     jedem Platz, das Gebiet entscheidet. `f29-headless airfields` listet Plätze,
     Route und Auftrag.
-  - **Gebiet anlegen:** `f29-headless theater-new` (`populate.rs`, nicht im
-    Spiel) erzeugt es einmalig aus Rauschgelände, danach ist es Daten: Basis im
-    Südwesten, Horste im Nordosten, Seiten nach Nähe, Stellungen, Frühwarnradare
-    an der Grenze, Anlagen, Schiffe, Ziviles; feindliche Radare mindestens 35 km
-    von eigenen Basen, damit schon das Anrollen unentdeckt bleibt. `theater-png`
-    zeigt eine Vorschau.
+  - **Gebiete wählen:** Das Spiel liest beim Start alle Dateien aus
+    `data/theaters/` (`--theaters ORDNER`), nach Name sortiert, und bietet sie
+    im REGION-Menü an (höchstens vier); `--region NAME` startet direkt in
+    einem. Ohne lesbare Datei bleibt das eingebaute Testgebiet. Die
+    Pilotenakte merkt sich das Gebiet. `f29-headless theater-png` zeigt eine
+    Vorschau einer Datei. NORTH COAST entstand einmalig mit einem inzwischen
+    entfernten Generator; es dient als feste Testkarte, sobald die echten
+    Gebiete vorliegen.
   - **Karte:** MFD-Kartenbild 4096² über das ganze Gebiet, parallel berechnet;
     Kartenstufen 0,625–640 km, außerhalb schwarz. Replays speichern Name und
     Prüfsumme des Gebiets.
@@ -1317,7 +1333,9 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Wegpunkt im Flugplan, auf ihrer Karte das 100-km-Gitter mit den
     Buchstaben (eingezoomt unter 60 km halber Breite auch die 10-km-Felder),
     auf der MSN-Seite das eigene Planquadrat neben dem Gebiet.
-- **Abweichungen:** ein Gebiet statt vier; feste Startbasis, kein Träger; Ziele
+- **Abweichungen:** vorerst nur das Testgebiet; feste Startbasis, kein Träger;
+  Namen aus Art und Ort im Objekt selbst statt einer Namensliste je Gebiet,
+  kein eigener Beschreibungsabsatz je Auftrag; Ziele
   nur aus der Objektliste; das Band gilt für den Abstand zur Basis, nicht für
   die Gesamtstrecke; keine festen Missionen; keine Zellen für spontane tragbare
   Flugabwehr; Radare sehen durch das Gelände, die Geländeart verkürzt nur
@@ -1675,8 +1693,9 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     BRIEFING, ARM YOUR PLANE, BEGIN MISSION; im Textfeld die Übersicht des
     Briefings). Neue Mission
     = nächster Seed mit denselben Einstellungen und vorgeschlagener Beladung,
-    zurück zum Dienstplan; ebenso nach der Nachbesprechung. Gebiet und
-    Missionsart haben vorerst je einen Eintrag; Konfliktlage = Regelset (M-033).
+    zurück zum Dienstplan; ebenso nach der Nachbesprechung. REGION bietet die
+    geladenen Gebiete an (M-031), die Missionsart vorerst einen Eintrag;
+    Konfliktlage = Regelset (M-033).
   - **Dienstplan** (`f29_core::roster`, `f29-app/src/roster.rs`): Die Tabelle
     der zehn Plätze ist die Auswahl (Kopfzeile PILOT, POINTS, MISSIONS,
     STATUS; gewählte Zeile invers, aktive Piloten hell, andere gedämpft; die

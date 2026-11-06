@@ -9,7 +9,7 @@
 //! Richtungsvektoren aus einer Tabelle exakter Konstanten, und das Crate
 //! braucht keine Winkelfunktionen (bitgenauer Determinismus).
 
-use crate::noise::{mix64, smoothstep};
+use crate::noise::smoothstep;
 use serde::{Deserialize, Serialize};
 
 /// Art des Flugplatzes.
@@ -54,9 +54,9 @@ pub fn dimensions(kind: AirfieldKind) -> (f64, f64) {
         AirfieldKind::Enemy => (2_500.0, 40.0),
     }
 }
-/// Bahnen nicht tiefer (Strand, Wasser) und nicht höher als das.
+
+/// Bahnen nicht tiefer (Strand, Wasser) als das.
 pub(crate) const MIN_SITE_M: f64 = 12.0;
-const MAX_SITE_M: f64 = 900.0;
 
 /// Richtungen in 22,5°-Schritten als (Nord, Ost).
 const DIRECTIONS: [[f64; 2]; 8] = [
@@ -137,80 +137,6 @@ pub(crate) fn flatten(runways: &[Runway], x: f64, y: f64, raw: f64) -> f64 {
     h
 }
 
-/// Gleichverteilte Zahl 0..1 aus einem Hash.
-fn unit(h: u64) -> f64 {
-    (h >> 11) as f64 / (1_u64 << 53) as f64
-}
-
-/// Bewertet einen Bauplatz: (Höhenspanne, mittlere Höhe) oder `None`, wenn
-/// der Platz ungeeignet ist (Wasser, Strand, Hochgebirge).
-fn evaluate(
-    raw: &impl Fn(f64, f64) -> f64,
-    c: [f64; 2],
-    dir: [f64; 2],
-    len: f64,
-    width: f64,
-) -> Option<(f64, f64)> {
-    let half_u = len * 0.5 + FLAT_END_M;
-    let half_v = width * 0.5 + FLAT_SIDE_M;
-    let (mut min, mut max, mut sum, mut n) = (f64::MAX, f64::MIN, 0.0, 0.0);
-    for i in 0..=10 {
-        let u = -half_u + 2.0 * half_u * f64::from(i) / 10.0;
-        for v in [-half_v, 0.0, half_v] {
-            let x = c[0] + u * dir[0] - v * dir[1];
-            let y = c[1] + u * dir[1] + v * dir[0];
-            let h = raw(x, y);
-            if !(MIN_SITE_M..=MAX_SITE_M).contains(&h) {
-                return None;
-            }
-            min = min.min(h);
-            max = max.max(h);
-            sum += h;
-            n += 1.0;
-        }
-    }
-    Some((max - min, sum / n))
-}
-
-struct Site {
-    center: [f64; 2],
-    dir_index: usize,
-    elevation: f64,
-    cost: f64,
-}
-
-/// Sucht den günstigsten Bauplatz unter `count` Kandidaten.
-fn best_site(
-    raw: &impl Fn(f64, f64) -> f64,
-    seed: u64,
-    salt: u64,
-    count: u64,
-    candidate: impl Fn(u64, f64, f64) -> Option<([f64; 2], f64)>,
-    len: f64,
-    width: f64,
-) -> Option<Site> {
-    let mut best: Option<Site> = None;
-    for k in 0..count {
-        let h = mix64(seed ^ mix64(salt.wrapping_add(k)));
-        let Some((center, extra_cost)) = candidate(k, unit(h), unit(mix64(h))) else {
-            continue;
-        };
-        let ch = raw(center[0], center[1]);
-        if !(MIN_SITE_M..=MAX_SITE_M).contains(&ch) {
-            continue;
-        }
-        for (dir_index, dir) in DIRECTIONS.iter().enumerate() {
-            if let Some((range, mean)) = evaluate(raw, center, *dir, len, width) {
-                let cost = range + extra_cost;
-                if best.as_ref().is_none_or(|b| cost < b.cost) {
-                    best = Some(Site { center, dir_index, elevation: mean, cost });
-                }
-            }
-        }
-    }
-    best
-}
-
 impl Runway {
     /// Bahn der Art `kind` bei `center`, Richtung `heading_deg` (gerundet auf
     /// 22,5°-Schritte), auf Höhe `elevation_m`.
@@ -235,35 +161,4 @@ impl Runway {
             fighters: [0, 0],
         }
     }
-}
-
-/// Sucht einen flachen Bauplatz für eine Bahn der Art `kind` im Umkreis
-/// `radius` um `around` (`raw`: Geländehöhe ohne Einebnung). Liefert Mitte,
-/// Richtung (Grad) und Höhe – für die Erstbefüllung von Gebieten.
-pub fn find_site(
-    raw: impl Fn(f64, f64) -> f64,
-    seed: u64,
-    kind: AirfieldKind,
-    around: [f64; 2],
-    radius: f64,
-) -> Option<([f64; 2], f64, f64)> {
-    let (len, width) = dimensions(kind);
-    let site = best_site(
-        &raw,
-        seed,
-        0x5349_5445,
-        64,
-        |k, a, b| {
-            let c = if k == 0 {
-                around
-            } else {
-                [around[0] + (a * 2.0 - 1.0) * radius, around[1] + (b * 2.0 - 1.0) * radius]
-            };
-            let (dx, dy) = (c[0] - around[0], c[1] - around[1]);
-            Some((c, (dx * dx + dy * dy).sqrt() / 1_000.0))
-        },
-        len,
-        width,
-    )?;
-    Some((site.center, site.dir_index as f64 * 22.5, site.elevation))
 }

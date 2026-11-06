@@ -70,6 +70,9 @@ cargo run --release -p f29-app -- --rules cold
 # Dienstplan aus einer anderen Datei (Standard: roster.ron im Datenordner des
 # Benutzers, unter Linux ~/.local/share/f29-silent-sniper/)
 cargo run --release -p f29-app -- --roster piloten.ron
+# Einsatzgebiete aus einem anderen Ordner (Standard: data/theaters) bzw.
+# direkt in einem bestimmten Gebiet starten
+cargo run --release -p f29-app -- --theaters meine-karten --region "NORTH COAST"
 
 # nach 10 s automatisch einen Screenshot speichern und beenden
 cargo run --release -p f29-app -- --screenshot bild.png --after 10
@@ -180,6 +183,7 @@ docs/
   ARCHITECTURE.md  Aufbau, Koordinatensysteme, Determinismus, Teststrategie
   MECHANICS.md     Clean-Room-Protokoll und Mechanik-Einträge
   handbuch/        Handbuch: wie das Spiel funktioniert, mit Stellschrauben
+  GEBIETSFORMAT.md Format der Einsatzgebiete (Vertrag mit dem Karteneditor)
 ```
 
 Nur `f29-app` hängt von Bevy ab. Simulation, Gelände, HUD und Geometrie sind ohne
@@ -300,8 +304,8 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       die Wertung; MSN-Seite mit Regelset und Gebiet (v0.3)
 - [x] Einsatzgebiete als Daten (M-031, Crate `f29-world`): Gebiet
       „NORTH COAST“, 500 km, Grobraster 64 × 64 (Gelände, Seite) formt das
-      Gelände; Flugplätze und alle Ziele aus der Datei; `f29-headless
-      theater-new` / `theater-png`; Kartenbild über das ganze Gebiet (v0.3)
+      Gelände; Flugplätze und alle Ziele aus der Datei; Vorschau mit
+      `f29-headless theater-png`; Kartenbild über das ganze Gebiet (v0.3)
 - [x] Missionsgenerator: zwei Ziele aus dem Gebiet, das nähere ist das
       Primärziel; Route Start → Primär → Sekundär → Landung; geheime Pisten
       entfallen (v0.3)
@@ -353,7 +357,11 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - [x] Pilot mit Laufbahn: Punkte, sieben Ränge, Orden und Bänder (Namen wie
       im Original, eigene Schwellen), Ruhestand nach 60 Einsätzen; Ehrung
       nach der Nachbesprechung (vorerst Text)
-- [ ] Mehrere eigene, fiktive Einsatzgebiete (Szenarien)
+- [x] Mehrere Einsatzgebiete laden und im Menü wählen (`data/theaters/`,
+      `--theaters`, `--region`), Gebiet in der Pilotenakte, Ort je Objekt;
+      Format beschrieben (`docs/GEBIETSFORMAT.md`), kein Generator im Spiel
+- [ ] Die vier Gebiete des Originals nach echter Geografie mit echten Namen:
+      Libyen, Persischer Golf, Nordkap, Mitteleuropa (im Karteneditor)
 - [x] Konfliktstufen von „Spannung“ bis „offener Krieg“ mit unterschiedlichen
       Einsatzregeln (COLD WAR, LIMITED, OPEN WAR, M-033)
 - [x] Verlauf: Abschuss, Gefangennahme (verzögert die Beförderung), Rettung,
