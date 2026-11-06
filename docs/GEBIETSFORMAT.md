@@ -18,6 +18,8 @@ Code: `crates/f29-world/src/theater.rs` (`Theater::parse`, `Theater::to_text`).
   `--region NAME` startet direkt in einem Gebiet (Groß-/Kleinschreibung egal).
 - Findet das Spiel keine Datei, nimmt es das eingebaute Testgebiet
   NORTH COAST.
+- Beispiel mit allen Geländearten, ohne Ziele: `data/examples/showcase.ron`
+  (`cargo run -p f29-app -- --theaters data/examples --region showcase --start air`).
 - Replays speichern Name und Prüfsumme des Gebiets. Ein Replay lässt sich
   nur mit genau demselben Gebiet abspielen – wer ein Gebiet ändert, macht
   seine alten Replays unbrauchbar.
