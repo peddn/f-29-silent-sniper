@@ -6,7 +6,6 @@
 //! f29-headless hud-svg  [--seed N] [--seconds S] [--aspect A] [--page SEITE] [--radar 1] [--drop 1 [--after S]] [--push S] [--gun S] [--mode nav|ag|aa] [--wide 1] [--damage 1] [--bay N] [--zoom 0..10] [--rules R] [--out DATEI]
 //! f29-headless terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
 //! f29-headless airfields [--seed N] [--rules cold|limited|war]
-//! f29-headless theater-new [--name NAME] [--seed N] [--size KM] [--grid N] --out DATEI.ron
 //! f29-headless theater-png [--theater DATEI.ron] [--size PX] [--out DATEI.png]
 //! f29-headless sound    [--out VERZEICHNIS]
 //! f29-headless bench    [--seconds S]
@@ -42,7 +41,6 @@ Befehle:
   terrain  [--seed N] [--size PX] [--extent M] [--out DATEI.ppm]
                                                        Höhenkarte als PPM-Bild
   airfields [--seed N] [--rules R]                     Flugplätze, Route und Auftrag auflisten
-  theater-new [--name NAME] [--seed N] [--size KM] [--grid N] --out DATEI.ron
                                                        Einsatzgebiet aus einem Seed anlegen
   theater-png [--theater DATEI.ron] [--size PX] [--out DATEI.png]
                                                        Vorschau eines Gebiets (Seiten, Plätze, Ziele)
@@ -110,7 +108,6 @@ fn main() -> ExitCode {
         "bench" => bench(&args),
         "airfields" => airfields(&args),
         "sound" => sound(&args),
-        "theater-new" => theater_new(&args),
         "theater-png" => theater_png(&args),
         "help" | "--help" | "-h" => {
             print!("{USAGE}");
@@ -238,7 +235,11 @@ fn demo(args: &Args) -> Result<(), String> {
 fn replay(args: &Args) -> Result<(), String> {
     let path = args.positional.first().ok_or("Pfad zur Replay-Datei fehlt")?;
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    let replay = Replay::from_text(&text).map_err(|e| e.to_string())?;
+    // Gebiete aus `data/theaters` und das eingebaute
+    let (found, _) = f29_world::Theater::load_dir(std::path::Path::new(f29_world::theater::THEATER_DIR));
+    let mut theaters: Vec<_> = found.into_iter().map(std::sync::Arc::new).collect();
+    theaters.push(std::sync::Arc::new(f29_world::Theater::builtin().clone()));
+    let replay = Replay::from_text_in(&text, &theaters).map_err(|e| e.to_string())?;
     let start = Instant::now();
     let sim = replay.run();
     let elapsed = start.elapsed();
@@ -435,20 +436,6 @@ fn airfields(args: &Args) -> Result<(), String> {
         println!("Auftrag: {} {} ({:?})", task.label(), t.name, t.class);
     }
     println!("Beladung: {}", f29_core::weapons::Loadout(sim.stores().bays.map(|b| b.kind)).to_text());
-    Ok(())
-}
-
-fn theater_new(args: &Args) -> Result<(), String> {
-    let name = args.opt("name").unwrap_or("NORTH COAST");
-    let t = f29_world::populate::generate(
-        name,
-        args.get("seed", 0x0F29_u64)?,
-        args.get("size", 500.0_f64)? * 1_000.0,
-        args.get("grid", 64_usize)?,
-    );
-    let out = args.opt("out").ok_or("--out fehlt")?;
-    std::fs::write(out, t.to_text()).map_err(|e| format!("{out}: {e}"))?;
-    println!("{}: {} Flugplätze, {} Objekte → {out}", t.name, t.airfields.len(), t.objects.len());
     Ok(())
 }
 

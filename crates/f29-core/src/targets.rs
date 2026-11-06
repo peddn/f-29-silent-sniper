@@ -83,7 +83,7 @@ pub fn from_theater(theater: &Theater, terrain: &Terrain) -> Vec<Target> {
         .objects
         .iter()
         .map(|o| Target {
-            name: intern(&o.name),
+            name: intern(&o.label()),
             class: o.class,
             civilian: o.civilian,
             role: TargetRole::None,

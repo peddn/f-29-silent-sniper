@@ -15,7 +15,6 @@
 pub mod airfield;
 pub mod class;
 pub mod noise;
-pub mod populate;
 pub mod theater;
 
 pub use airfield::{AirfieldKind, Runway};

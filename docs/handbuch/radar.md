@@ -163,7 +163,7 @@ Reichweite trifft. Die Option steht im Replay.
 | `f29-core/src/targets.rs` | `air_defense` | EW → SA-5, SAM → SA-6, SHORAD → SA-13 | welches Radar und welche Rakete zu welcher Stellung gehört |
 | `f29-core/src/fighters.rs` | `radar`, `radar_cone_rad` der Jägertypen | siehe Tabelle Jäger | Bordradar der Jäger |
 | `f29-core/src/rules.rs` | `fire_only_over_hostile`, `max_hostile_missiles`, `detection_penalty`, `attack_needs_detection` | siehe Tabelle Regelsets | Folgen einer Entdeckung je Regelset |
-| `f29-world/src/populate.rs` | `HOME_RADAR_CLEARANCE_M` | 35 km | Mindestabstand feindlicher Radare von eigenen Basen beim Anlegen eines Gebiets (schon das Anrollen bleibt unentdeckt) |
+| `data/theaters/*.ron` | `objects` der Radarklassen | Lage und Zahl je Gebiet | wie viele Stellungen wo stehen – die größte Stellschraube; empfohlen mindestens 35 km Abstand zur eigenen Basis (`docs/GEBIETSFORMAT.md`) |
 | `f29-world/src/lib.rs` | `GRID_WARP` | 0,4 Zellen | wie unregelmäßig die Geländegrenzen verlaufen – für Landschaft und Radar zugleich |
 | `data/theaters/*.ron` | `grid.ground` | `~ . h M` je Zelle | wo Wasser, Flachland, Hügel und Gebirge liegen |
 | `f29-hud/src/mfd.rs` | `PING_SHOW_S` | 1 s | wie lange ein Ping in der SIG-Säule steht |

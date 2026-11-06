@@ -8,8 +8,8 @@
 
 use crate::ui::Hit;
 use bevy::prelude::*;
+use f29_core::SimConfig;
 use f29_core::roster::{Mission, NAME_LEN, Pilot, RANKS, Roster, SLOTS, Settings, Status};
-use f29_core::sim::Spawn;
 use f29_hud::{Ink, Page, Row};
 use std::path::PathBuf;
 
@@ -154,7 +154,7 @@ impl Duty {
 
     /// Bedienung; liefert die Einstellungen des gewählten Piloten, sobald
     /// einer gewählt ist.
-    pub fn input(&mut self, k: &Keys, spawn: &Spawn) -> Option<Settings> {
+    pub fn input(&mut self, k: &Keys, config: &SimConfig) -> Option<Settings> {
         match &mut self.mode {
             Mode::Name(name) => {
                 for c in k.text.chars().filter(|c| c.is_ascii_alphanumeric() || " -.".contains(*c)) {
@@ -169,7 +169,7 @@ impl Duty {
                 if k.escape {
                     self.mode = Mode::List;
                 } else if k.enter && !name.is_empty() {
-                    self.roster.slots[self.cursor] = Some(Pilot::new(&name, Settings::of(spawn)));
+                    self.roster.slots[self.cursor] = Some(Pilot::new(&name, Settings::of(config)));
                     self.mode = Mode::List;
                     self.save();
                 }
@@ -212,7 +212,7 @@ impl Duty {
                 match slot {
                     None => self.mode = Mode::Name(String::new()),
                     Some(p) if p.status == Status::Active => {
-                        let s = p.settings;
+                        let s = p.settings.clone();
                         (self.pilot, self.roster.current) = (Some(self.cursor), Some(self.cursor));
                         self.save();
                         return Some(s);

@@ -1,4 +1,7 @@
 //! Einsatzgebiet als Daten (M-031): Grobraster, Flugplätze und alle Objekte.
+//! Das Format beschreibt `docs/GEBIETSFORMAT.md` (Version [`FORMAT`]); die
+//! Gebiete entstehen von Hand bzw. im Editor, das Spiel liest sie aus
+//! [`THEATER_DIR`] ([`Theater::load_dir`]).
 //!
 //! Eine Gebietsdatei (RON, lesbar und von Hand bearbeitbar) beschreibt ein
 //! quadratisches Gebiet um den Ursprung:
@@ -8,15 +11,22 @@
 //!   Gelände folgt die Großform der Landschaft, das Rauschen liefert die
 //!   Feinheiten ([`crate::Terrain::from_theater`]).
 //! - **Flugplätze** mit Art, Lage, Richtung und den Jägern feindlicher Horste.
-//! - **Objekte**: alle Ziele des Gebiets mit Klasse, Lage und Ausrichtung; der
-//!   Missionsgenerator wählt aus ihnen die Missionsziele.
+//! - **Objekte**: alle Ziele des Gebiets mit Klasse, Lage, Ausrichtung und
+//!   Ort (angezeigt „NAME AT ORT“ wie im Original); der Missionsgenerator
+//!   wählt aus ihnen die Missionsziele.
 //!
 //! Koordinaten in Metern, Nord und Ost, Ursprung in der Gebietsmitte.
 
 use crate::AirfieldKind;
 use crate::class::TargetClass;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
+
+/// Version des Dateiformats, die dieses Spiel liest.
+pub const FORMAT: u32 = 1;
+/// Ordner der Gebietsdateien, vom Arbeitsverzeichnis aus.
+pub const THEATER_DIR: &str = "data/theaters";
 
 /// Seite einer Rasterzelle bzw. eines Flugplatzes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -118,11 +128,24 @@ pub struct ObjectDef {
     /// Zivil: nicht angreifen.
     #[serde(default)]
     pub civilian: bool,
+    /// Ort (echter Name); angezeigt als „NAME AT ORT“, leer nur der Name.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub place: String,
+}
+
+impl ObjectDef {
+    /// Angezeigter Name: Name, mit Ort „NAME AT ORT“.
+    pub fn label(&self) -> String {
+        if self.place.is_empty() { self.name.clone() } else { format!("{} AT {}", self.name, self.place) }
+    }
 }
 
 /// Ein Einsatzgebiet.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Theater {
+    /// Version des Dateiformats ([`FORMAT`]).
+    #[serde(default = "first_format")]
+    pub format: u32,
     pub name: String,
     /// Seed des Detailrauschens.
     pub seed: u64,
@@ -131,6 +154,10 @@ pub struct Theater {
     pub grid: Grid,
     pub airfields: Vec<AirfieldDef>,
     pub objects: Vec<ObjectDef>,
+}
+
+fn first_format() -> u32 {
+    1
 }
 
 /// Fehler beim Lesen eines Gebiets.
@@ -149,6 +176,9 @@ impl Theater {
     /// Liest ein Gebiet aus RON und prüft das Raster.
     pub fn parse(text: &str) -> Result<Self, TheaterError> {
         let t: Theater = ron::from_str(text).map_err(|e| TheaterError(e.to_string()))?;
+        if t.format > FORMAT {
+            return Err(TheaterError(format!("Formatversion {} ist neuer als {FORMAT}", t.format)));
+        }
         let n = t.grid.ground.len();
         let rows_ok = |rows: &[String], ok: fn(char) -> bool| {
             rows.len() == n && rows.iter().all(|r| r.chars().count() == n && r.chars().all(ok))
@@ -159,10 +189,33 @@ impl Theater {
         {
             return Err(TheaterError("Raster muss n × n Zeichen je Ebene haben (~ . h M bzw. F N H)".into()));
         }
-        if !t.airfields.iter().any(|a| a.kind == AirfieldKind::Home) {
-            return Err(TheaterError("keine eigene Basis".into()));
+        if t.airfields.first().is_none_or(|a| a.kind != AirfieldKind::Home) {
+            return Err(TheaterError("der erste Flugplatz muss die eigene Basis sein".into()));
         }
         Ok(t)
+    }
+
+    /// Alle Gebiete eines Ordners (`*.ron`), nach Name sortiert, dazu je
+    /// unlesbarer Datei ein Fehler mit ihrem Pfad.
+    pub fn load_dir(dir: &Path) -> (Vec<Theater>, Vec<TheaterError>) {
+        let (mut found, mut errors) = (Vec::new(), Vec::new());
+        let mut paths: Vec<_> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "ron"))
+            .collect();
+        paths.sort();
+        for p in paths {
+            let text = std::fs::read_to_string(&p).map_err(|e| TheaterError(e.to_string()));
+            match text.and_then(|t| Theater::parse(&t)) {
+                Ok(t) => found.push(t),
+                Err(e) => errors.push(TheaterError(format!("{}: {}", p.display(), e.0))),
+            }
+        }
+        found.sort_by(|a, b| a.name.cmp(&b.name));
+        (found, errors)
     }
 
     /// Als RON, gut lesbar.
@@ -236,6 +289,7 @@ mod tests {
 
     fn tiny() -> Theater {
         Theater {
+            format: FORMAT,
             name: "TINY".into(),
             seed: 1,
             size_m: 40_000.0,
@@ -256,6 +310,7 @@ mod tests {
                 east: -5.0,
                 heading_deg: 0.0,
                 civilian: false,
+                place: "TOBRUK".into(),
             }],
         }
     }
@@ -272,7 +327,33 @@ mod tests {
         assert_eq!(t.side_at(-10_000.0, 10_000.0), Side::Hostile);
         assert_eq!(t.side_at(90_000.0, 0.0), Side::Neutral, "außerhalb");
         assert!(Theater::parse(&t.to_text().replace("\"hM\"", "\"hX\"")).is_err());
+        assert!(Theater::parse(&t.to_text().replace("format: 1", "format: 99")).is_err(), "neueres Format");
+        assert_eq!(t.objects[0].label(), "BUNKER AT TOBRUK");
+        let enemy_first = Theater {
+            airfields: vec![AirfieldDef { kind: AirfieldKind::Enemy, ..t.airfields[0].clone() }],
+            ..t.clone()
+        };
+        assert!(Theater::parse(&enemy_first.to_text()).is_err(), "erst die eigene Basis");
         assert_eq!(intern("AB"), intern(&String::from("AB")));
+    }
+
+    /// Ein Ordner liefert seine lesbaren Gebiete nach Name und meldet die
+    /// übrigen mit Pfad.
+    #[test]
+    fn load_dir_reads_all_and_reports_broken_files() {
+        let dir = std::env::temp_dir().join(format!("f29-theaters-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut b = tiny();
+        b.name = "ALPHA".into();
+        std::fs::write(dir.join("z.ron"), b.to_text()).unwrap();
+        std::fs::write(dir.join("a.ron"), tiny().to_text()).unwrap();
+        std::fs::write(dir.join("kaputt.ron"), "(").unwrap();
+        std::fs::write(dir.join("notiz.txt"), "kein Gebiet").unwrap();
+        let (found, errors) = Theater::load_dir(&dir);
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(found.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["ALPHA", "TINY"]);
+        assert!(errors.len() == 1 && errors[0].0.contains("kaputt.ron"), "{errors:?}");
+        assert!(Theater::load_dir(Path::new("gibt/es/nicht")).0.is_empty());
     }
 
     #[test]

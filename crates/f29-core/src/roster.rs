@@ -7,9 +7,11 @@
 //! und Ort bestimmt das Frontend.
 
 use crate::rules::{Conflict, Landings, Opponents};
+use crate::sim::SimConfig;
 use crate::sim::Status as Outcome;
-use f29_world::Side;
+use f29_world::{Side, Theater};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Plätze im Dienstplan.
 pub const SLOTS: usize = 10;
@@ -71,21 +73,36 @@ impl Status {
 }
 
 /// Einstellungen des Auftrags, die ein Pilot mitnimmt.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Settings {
     pub conflict: Conflict,
     pub opponents: Opponents,
     pub landings: Landings,
+    /// Name des Einsatzgebiets; leer: keins gemerkt.
+    #[serde(default)]
+    pub region: String,
 }
 
 impl Settings {
-    pub fn of(spawn: &crate::sim::Spawn) -> Self {
-        Settings { conflict: spawn.conflict, opponents: spawn.opponents, landings: spawn.landings }
+    pub fn of(config: &SimConfig) -> Self {
+        let sp = &config.spawn;
+        let region = config.theater.name.clone();
+        Settings { conflict: sp.conflict, opponents: sp.opponents, landings: sp.landings, region }
+    }
+
+    /// Überträgt die Einstellungen; das Gebiet nur, wenn es unter `theaters`
+    /// ist.
+    pub fn apply(&self, config: &mut SimConfig, theaters: &[Arc<Theater>]) {
+        (config.spawn.conflict, config.spawn.opponents, config.spawn.landings) =
+            (self.conflict, self.opponents, self.landings);
+        if let Some(t) = theaters.iter().find(|t| t.name == self.region) {
+            config.theater = t.clone();
+        }
     }
 }
 
 /// Was ein Einsatz der Akte liefert.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Mission {
     /// Gesamtwertung (M-032).
     pub points: i32,
@@ -102,7 +119,7 @@ impl Mission {
             points: sim.score().total,
             outcome: sim.status(),
             hit: sim.logged(crate::flightlog::LogEntry::Hit).is_some(),
-            settings: Settings::of(&sim.config().spawn),
+            settings: Settings::of(sim.config()),
         }
     }
 }
@@ -169,7 +186,7 @@ impl Pilot {
     pub fn fly(&mut self, m: &Mission) -> Report {
         self.missions += 1;
         self.points += i64::from(m.points);
-        self.settings = m.settings;
+        self.settings = m.settings.clone();
         let mut r = Report::default();
         let mean = self.points / i64::from(self.missions);
         let meets =
@@ -251,14 +268,28 @@ mod tests {
         let mut r = Roster::default();
         r.slots[3] = Some(Pilot::new("MAVERICK", Settings::default()));
         let war = Settings { conflict: Conflict::War, ..Settings::default() };
-        r.record(3, &Mission { settings: war, ..mission(450, CAPTURED) });
+        r.record(3, &Mission { settings: war.clone(), ..mission(450, CAPTURED) });
         let p = r.slots[3].as_ref().unwrap();
-        assert_eq!((p.missions, p.points, p.status, p.settings), (1, 450, Status::Active, war));
+        assert_eq!((p.missions, p.points, p.status, &p.settings), (1, 450, Status::Active, &war));
         r.record(3, &mission(0, Outcome::Crashed { tick: 2, cause: CrashCause::Terrain }));
         assert_eq!(r.slots[3].as_ref().unwrap().status, Status::Killed);
         assert_eq!(r.record(5, &mission(100, HOME)), None, "leerer Platz bleibt leer");
         r.current = Some(3);
         assert_eq!(Roster::from_ron(&r.to_ron()).unwrap(), r);
+    }
+
+    /// Die Akte merkt sich das Gebiet; übertragen wird es nur, wenn es
+    /// noch vorhanden ist.
+    #[test]
+    fn settings_carry_the_region() {
+        let other = Arc::new(Theater { name: "OTHER".into(), ..Theater::builtin().clone() });
+        let s = Settings::of(&SimConfig { theater: other.clone(), ..SimConfig::new(1) });
+        assert_eq!(s.region, "OTHER");
+        let mut config = SimConfig::new(1);
+        s.apply(&mut config, &[]);
+        assert_eq!(config.theater.name, Theater::builtin().name, "unbekannt: bleibt");
+        s.apply(&mut config, &[other]);
+        assert_eq!(config.theater.name, "OTHER");
     }
 
     /// Orden nach der Wertung des Einsatzes: der höchste erreichte, beim

@@ -25,7 +25,7 @@ use f29_core::rules::{Conflict, Landings, Opponents};
 use f29_core::weapons::{Loadout, WeaponKind};
 use f29_hud::arming::Arming;
 use f29_hud::intel::Topic;
-use f29_hud::{Page, Row};
+use f29_hud::{MAX_OPTIONS, Page, Row};
 
 pub struct MenuPlugin;
 
@@ -86,7 +86,10 @@ pub fn page(state: &SimState) -> Page {
             ],
             list(&["ACCEPT MISSION", "CHANGE CHOICES"]),
         ),
-        Screen::Region => ("REGION OF THE WORLD", vec![], vec![region]),
+        Screen::Region => {
+            let names = state.theaters.iter().take(MAX_OPTIONS).map(|t| t.name.to_uppercase()).collect();
+            ("REGION OF THE WORLD", vec![], names)
+        }
         Screen::Conflict => {
             ("LEVEL OF CONFLICT", vec![], Conflict::ALL.map(|c| c.rules().label.to_string()).into())
         }
@@ -209,8 +212,10 @@ fn arm(
 
 /// Öffnet einen Bildschirm; Auswahllisten beginnen bei der aktuellen Wahl.
 fn open(state: &mut SimState, screen: Screen) {
-    let sp = &state.sim.config().spawn;
+    let config = state.sim.config();
+    let sp = &config.spawn;
     state.cursor = match screen {
+        Screen::Region => state.theaters.iter().position(|t| t.name == config.theater.name).unwrap_or(0),
         Screen::Conflict => sp.conflict as usize,
         Screen::Opponents => sp.opponents as usize,
         Screen::Landings => sp.landings as usize,
@@ -238,7 +243,13 @@ fn choose(state: &mut SimState, choice: usize) {
         Some(Screen::Identification) => Some(Screen::Roster),
         Some(Screen::Roster) => Some(Screen::Assignment),
         Some(Screen::Assignment) => Some(if choice == 0 { Screen::Intel } else { Screen::Region }),
-        Some(Screen::Region) => Some(Screen::Conflict),
+        Some(Screen::Region) => {
+            if let Some(t) = state.theaters.get(choice) {
+                config.theater = t.clone();
+                state.reset(config);
+            }
+            Some(Screen::Conflict)
+        }
         Some(Screen::Conflict) => {
             config.spawn.conflict = Conflict::ALL[choice];
             state.reset(config);
@@ -356,10 +367,9 @@ fn menu_input(
             actions.0.clear();
         }
         // Der gewählte Pilot fliegt mit seinen Einstellungen weiter.
-        if let Some(s) = duty.input(&k, &state.sim.config().spawn) {
+        if let Some(s) = duty.input(&k, state.sim.config()) {
             let mut config = state.sim.config().clone();
-            (config.spawn.conflict, config.spawn.opponents, config.spawn.landings) =
-                (s.conflict, s.opponents, s.landings);
+            s.apply(&mut config, &state.theaters);
             state.reset(config);
             choose(&mut state, 0);
             *pilot = PilotInput::matching(&state.sim);

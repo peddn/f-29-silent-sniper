@@ -20,6 +20,7 @@ use crate::controls::ControlFrame;
 use crate::sim::{Sim, SimConfig, Spawn};
 use f29_world::Theater;
 use std::fmt::Write as _;
+use std::sync::Arc;
 
 pub const MAGIC: &str = "F29REPLAY 13";
 
@@ -100,7 +101,14 @@ impl Replay {
         s
     }
 
+    /// Liest ein Replay im eingebauten Gebiet.
     pub fn from_text(text: &str) -> Result<Self, ParseError> {
+        Self::from_text_in(text, &[Arc::new(Theater::builtin().clone())])
+    }
+
+    /// Liest ein Replay; sein Gebiet muss unter `theaters` sein, mit
+    /// derselben Prüfsumme wie bei der Aufnahme.
+    pub fn from_text_in(text: &str, theaters: &[Arc<Theater>]) -> Result<Self, ParseError> {
         let mut lines = text.lines().enumerate().map(|(i, l)| (i + 1, l.trim()));
         let mut next = |what: &str| {
             lines.by_ref().find(|(_, l)| !l.is_empty()).ok_or_else(|| ParseError {
@@ -120,14 +128,12 @@ impl Replay {
             .strip_prefix("config ")
             .ok_or_else(|| err(ln, "erwartet `config (…)`".into()))
             .and_then(|t| ron::from_str(t).map_err(|e| err(ln, format!("Konfiguration: {e}"))))?;
-        // Bisher nur das eingebaute Gebiet; die Prüfsumme sichert, dass es
-        // dasselbe ist wie bei der Aufnahme.
         let (ln, l) = next("theater")?;
-        let builtin = Theater::builtin();
-        let expected = format!("theater {:016x} {}", builtin.checksum(), builtin.name);
-        if l != expected {
-            return Err(err(ln, format!("Gebiet unbekannt oder verändert: `{l}`")));
-        }
+        let theater = theaters
+            .iter()
+            .find(|t| l == format!("theater {:016x} {}", t.checksum(), t.name))
+            .ok_or_else(|| err(ln, format!("Gebiet unbekannt oder verändert: `{l}`")))?
+            .clone();
 
         let (ln, frames_line) = next("frames")?;
         let count = frames_line
@@ -167,7 +173,8 @@ impl Replay {
             Err(_) => None,
         };
 
-        Ok(Self { config: SimConfig::with(header.seed, header.spawn), frames, final_hash })
+        let config = SimConfig { theater, ..SimConfig::with(header.seed, header.spawn) };
+        Ok(Self { config, frames, final_hash })
     }
 }
 
@@ -209,5 +216,20 @@ mod tests {
         assert!(Replay::from_text("hallo").is_err());
         assert!(Replay::from_text("F29REPLAY 5\nseed 9\n").is_err(), "alte Version");
         assert!(Replay::from_text(&format!("{MAGIC}\nconfig (seed:x)\n")).is_err());
+    }
+
+    /// Ein Replay aus einem anderen Gebiet findet sein Gebiet unter den
+    /// bekannten wieder; im eingebauten allein ist es unbekannt.
+    #[test]
+    fn finds_its_theater_by_name_and_checksum() {
+        let other = Arc::new(Theater { name: "OTHER".into(), ..Theater::builtin().clone() });
+        let r = Replay::new(SimConfig { theater: other.clone(), ..SimConfig::new(3) });
+        let text = r.to_text();
+        assert!(Replay::from_text(&text).is_err());
+        let builtin = Arc::new(Theater::builtin().clone());
+        assert_eq!(
+            Replay::from_text_in(&text, &[builtin, other]).expect("gefunden").config.theater.name,
+            "OTHER"
+        );
     }
 }

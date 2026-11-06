@@ -4,7 +4,9 @@ use crate::input::PilotInput;
 use bevy::prelude::*;
 use f29_core::replay::Replay;
 use f29_core::{DQuat, DT, DVec3, FlightData, Sim, SimConfig};
+use f29_world::Theater;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 pub const DEFAULT_SEED: u64 = 0x0F29;
 /// Schutz gegen die „Todesspirale“ nach langen Rucklern.
@@ -12,6 +14,8 @@ const MAX_STEPS_PER_FRAME: u32 = 24;
 
 pub struct SimPlugin {
     pub config: SimConfig,
+    /// Wählbare Einsatzgebiete (REGION).
+    pub theaters: Vec<Arc<Theater>>,
     /// Mit der Menüführung beginnen (sonst gleich fliegen).
     pub menu: bool,
 }
@@ -20,6 +24,7 @@ impl Plugin for SimPlugin {
     fn build(&self, app: &mut App) {
         let mut state = SimState::new(self.config.clone());
         state.menu = self.menu.then_some(crate::menu::Screen::Title);
+        state.theaters = self.theaters.clone();
         let pilot = PilotInput::matching(&state.sim);
         app.insert_resource(state)
             .insert_resource(pilot)
@@ -86,12 +91,15 @@ pub struct SimState {
     pub arm_bay: Option<usize>,
     /// Lagebesprechung: gezeigtes Thema (folgt dem Cursor nur auf Themen).
     pub intel_topic: f29_hud::intel::Topic,
+    /// Wählbare Einsatzgebiete (REGION).
+    pub theaters: Vec<Arc<Theater>>,
     /// Momentaufnahme für alle Anzeigen, einmal je Bild nach dem Takten.
     pub fd: FlightData,
 }
 
 impl SimState {
     pub fn new(config: SimConfig) -> Self {
+        let sim_theater = config.theater.clone();
         let sim = Sim::new(config);
         let fd = sim.flight_data();
         let pose = Pose::of(&sim);
@@ -108,6 +116,7 @@ impl SimState {
             cursor: 0,
             arm_bay: None,
             intel_topic: f29_hud::intel::Topic::Targets,
+            theaters: vec![sim_theater],
             fd,
         }
     }
@@ -137,8 +146,10 @@ impl SimState {
     pub fn reset(&mut self, config: SimConfig) {
         self.save_replay();
         let (menu, cursor, arm_bay, topic) = (self.menu, self.cursor, self.arm_bay, self.intel_topic);
+        let theaters = std::mem::take(&mut self.theaters);
         *self = Self::new(config);
         (self.menu, self.cursor, self.arm_bay, self.intel_topic) = (menu, cursor, arm_bay, topic);
+        self.theaters = theaters;
     }
 
     /// Deckt ein Bildschirm (Menü oder Nachbesprechung) die Ansicht zu?
