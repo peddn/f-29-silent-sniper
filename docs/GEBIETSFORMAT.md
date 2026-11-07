@@ -7,6 +7,7 @@ Hand oder im Karteneditor. Diese Beschreibung ist der Vertrag zwischen
 Editor und Spiel.
 
 Code: `crates/f29-world/src/theater.rs` (`Theater::parse`, `Theater::to_text`).
+Editor: `cargo run -p f29-editor -- DATEI.ron` ([`KARTENEDITOR.md`](KARTENEDITOR.md)).
 
 ## Dateien und Auswahl
 

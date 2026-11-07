@@ -17,17 +17,21 @@
    │ f29-hud  │ │ f29-render │   engine-neutral: Display-Liste / Meshes, Palette, Koordinaten
    └───┬──────┘ └──┬─────────┘
        │  ┌────────┴──────────────┐
-  ┌────▼──▼─────┐          ┌──────▼───────┐
-  │   f29-app   │          │ f29-headless │
-  │   (Bevy)    │          │   (CLI)      │
-  └─────────────┘          └──────────────┘
+  ┌────▼──▼─────┐          ┌──────▼───────┐  ┌──────────────┐
+  │   f29-app   │          │ f29-headless │  │  f29-editor  │
+  │   (Bevy)    │          │   (CLI)      │  │   (egui)     │
+  └─────────────┘          └──────────────┘  └──────────────┘
 ```
 
 Abhängigkeiten zeigen nur nach unten. **Nur `f29-app` kennt Bevy.** Alles andere
-kompiliert und testet ohne Grafikkarte und ohne Fenster. Fremde Crates nur, wo
+außer dem Karteneditor kompiliert und testet ohne Grafikkarte und ohne Fenster;
+der Editor (`f29-editor`, auf `f29-world`, `f29-core` und `f29-render`) hat
+ein Fenster über eframe/egui, aber keine Engine. Fremde Crates nur, wo
 nötig: `serde`/`ron` (Gebietsdaten in `f29-world`, Replay-Kopf und Dienstplan in
 `f29-core`),
-`png` (`f29-headless`), `resvg` (SVG-Grafiken der Ausrüstung in `f29-app`).
+`png` (`f29-headless`, `f29-editor`), `resvg` (SVG-Grafiken der Ausrüstung in
+`f29-app`), `eframe` (Fenster und Oberfläche des Karteneditors; teilt wgpu und
+winit mit Bevy).
 Die Bildschirme außerhalb des Cockpits (Menüs, Nachbesprechung) zeichnet
 bevy_ui in der Pixelschrift Departure Mono (`f29-app/src/ui.rs`, Schrift samt
 Lizenz unter `f29-app/assets/fonts/`); ihren Inhalt liefert `f29-hud`
@@ -43,6 +47,7 @@ engine-neutral (`Page`).
 | `f29-render` | Terrain-Kachel-Meshes, Bahnen mit Markierungen und PAPI, Flugzeugmodell mit Fahrwerk, Satellitenkarte (Raster + kursbezogener Ausschnitt), Palette, NED → Y-up |
 | `f29-headless` | Simulation ohne Grafik: Demo, Replays, HUD als SVG, Höhenkarte, Benchmark |
 | `f29-app` | Fenster, Eingabe, Kameras, Terrain-Streaming, Post-Processing |
+| `f29-editor` | Karteneditor: Raster malen, Unterlage, Wassermaske, Landschaftsvorschau (`docs/KARTENEDITOR.md`) |
 
 ## Koordinatensysteme
 
