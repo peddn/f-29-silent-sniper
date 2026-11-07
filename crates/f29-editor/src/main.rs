@@ -12,6 +12,7 @@
 
 mod app;
 mod edit;
+mod objects;
 mod preview;
 mod recent;
 

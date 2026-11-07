@@ -2,16 +2,20 @@
 //! Karte, oben Datei und Verlauf, unten die Lage unter der Maus.
 
 use crate::edit::{self, History, Paint};
+use crate::objects::{self, Item, Kind, Place};
 use crate::preview;
 use crate::recent::{Recent, absolute};
 use eframe::egui::{
     self, Align2, Color32, ColorImage, FontId, Key, Modifiers, PointerButton, Pos2, Rect, Sense,
     TextureHandle, TextureOptions, Vec2, ViewportCommand, pos2, vec2,
 };
+use f29_core::mission::{MAX_RANGE_M, MIN_RANGE_M};
 use f29_core::nav::grid_square;
+use f29_core::targets::air_defense;
 use f29_render::palette;
+use f29_world::airfield::dimensions;
 use f29_world::theater::{CELL_M, GRID_N, Grid, SIZE_M, THEATER_DIR};
-use f29_world::{AirfieldKind, Ground, Side, Theater};
+use f29_world::{AirfieldKind, Ground, Side, TargetClass, Theater};
 use std::path::{Path, PathBuf};
 
 /// Pinselgrößen (Zellen Durchmesser).
@@ -19,6 +23,11 @@ const SIZES: [usize; 5] = [1, 3, 5, 9, 15];
 /// Zoom (Pixel je Zelle).
 const ZOOM_MIN: f32 = 1.0;
 const ZOOM_MAX: f32 = 64.0;
+/// So nah (Pixel) muss ein Klick an einem Flugplatz oder Objekt liegen.
+const PICK_PX: f64 = 8.0;
+/// Feindliche Radare mindestens so weit von der eigenen Basis (GEBIETSFORMAT,
+/// „Was ein gutes Gebiet beachtet“); kommt mit den Prüfungen nach f29-core.
+const RADAR_MIN_HOME_M: f64 = 35_000.0;
 
 fn ground_name(g: Ground) -> &'static str {
     match g {
@@ -99,12 +108,20 @@ fn read_png(path: &Path) -> Result<([usize; 2], Vec<u8>), String> {
 enum Layer {
     Ground,
     Side,
+    Objects,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Tool {
     Brush,
     Fill,
+}
+
+/// Werkzeug der Ebene Objekte.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ObjTool {
+    Select,
+    Place,
 }
 
 /// Wofür ein Pfad gefragt wird.
@@ -186,6 +203,21 @@ pub struct Editor {
     recent: Recent,
     show_underlay: bool,
     underlay_alpha: f32,
+    obj_tool: ObjTool,
+    /// Was „Setzen“ anlegt, militärisch oder zivil.
+    kind: Kind,
+    civilian: bool,
+    selected: Option<Item>,
+    /// Beim Ziehen: Stand davor und Abstand des Elements zum Griffpunkt.
+    moving: Option<(Theater, [f64; 2])>,
+    /// Stand vor einer Änderung im Eigenschaftsfeld; ein Schritt im Verlauf,
+    /// sobald das Feld den Fokus abgibt.
+    pending: Option<Theater>,
+    /// Orte aus der Ortsliste der Unterlage.
+    places: Vec<Place>,
+    show_ranges: bool,
+    /// Element, auf das die Karte im nächsten Bild zentriert.
+    center_on: Option<Item>,
     dialog: Dialog,
     message: String,
     allow_close: bool,
@@ -233,6 +265,15 @@ impl Editor {
             recent,
             show_underlay: true,
             underlay_alpha: 0.5,
+            obj_tool: ObjTool::Select,
+            kind: Kind::Object(TargetClass::EarlyWarning),
+            civilian: false,
+            selected: None,
+            moving: None,
+            pending: None,
+            places: Vec::new(),
+            show_ranges: true,
+            center_on: None,
             dialog: Dialog::None,
             message: String::new(),
             allow_close: false,
@@ -254,8 +295,8 @@ impl Editor {
 
     fn paint(&self) -> Paint {
         match self.layer {
-            Layer::Ground => Paint::Ground(self.ground),
             Layer::Side => Paint::Side(self.side),
+            _ => Paint::Ground(self.ground),
         }
     }
 
@@ -270,6 +311,8 @@ impl Editor {
                 self.history.clear();
                 self.fit = true;
                 self.underlay = None;
+                self.places.clear();
+                (self.selected, self.pending) = (None, None);
                 if let Some(u) = self.recent.underlay(&self.path) {
                     self.load_underlay(ctx, &u);
                 }
@@ -306,6 +349,7 @@ impl Editor {
                     Some((ctx.load_texture("unterlage", img, TextureOptions::LINEAR), path.into()));
                 self.show_underlay = true;
                 self.recent.set_underlay(&self.path, path);
+                self.places = objects::places_for(path);
             }
             Err(e) => self.message = format!("Unterlage nicht geladen: {e}"),
         }
@@ -352,16 +396,48 @@ impl Editor {
                 self.saved = None;
                 self.history.clear();
                 self.fit = true;
+                (self.selected, self.pending) = (None, None);
             }
         }
     }
 
     fn undo(&mut self) {
+        self.flush_pending();
         self.history.undo(&mut self.theater);
     }
 
     fn redo(&mut self) {
+        self.flush_pending();
         self.history.redo(&mut self.theater);
+    }
+
+    /// Eine laufende Änderung im Eigenschaftsfeld als Schritt abschließen.
+    fn flush_pending(&mut self) {
+        if let Some(before) = self.pending.take()
+            && before != self.theater
+        {
+            self.history.push(before);
+        }
+    }
+
+    fn remove_selected(&mut self) {
+        self.flush_pending();
+        let before = self.theater.clone();
+        if let Some(it) = self.selected
+            && objects::remove(&mut self.theater, it)
+        {
+            self.history.push(before);
+            self.selected = None;
+        }
+    }
+
+    fn duplicate_selected(&mut self) {
+        self.flush_pending();
+        let before = self.theater.clone();
+        if let Some(copy) = self.selected.and_then(|it| objects::duplicate(&mut self.theater, it)) {
+            self.history.push(before);
+            self.selected = Some(copy);
+        }
     }
 
     // ---------------------------------------------------------------- Bilder
@@ -425,18 +501,41 @@ impl Editor {
                 match self.layer {
                     Layer::Ground => self.ground = Ground::ALL[k],
                     Layer::Side => self.side = *Side::ALL.get(k).unwrap_or(&self.side),
+                    Layer::Objects => {}
                 }
             }
         }
         if pressed(Key::E) {
-            self.layer = if self.layer == Layer::Ground { Layer::Side } else { Layer::Ground };
+            self.layer = match self.layer {
+                Layer::Ground => Layer::Side,
+                Layer::Side => Layer::Objects,
+                Layer::Objects => Layer::Ground,
+            };
             self.show_sides = self.layer == Layer::Side;
         }
-        if pressed(Key::B) {
-            self.tool = Tool::Brush;
-        }
-        if pressed(Key::F) {
-            self.tool = Tool::Fill;
+        if self.layer == Layer::Objects {
+            if pressed(Key::A) {
+                self.obj_tool = ObjTool::Select;
+            }
+            if pressed(Key::N) {
+                self.obj_tool = ObjTool::Place;
+            }
+            if pressed(Key::Delete) || pressed(Key::Backspace) {
+                self.remove_selected();
+            }
+            if cmd(Key::D) {
+                self.duplicate_selected();
+            }
+            if pressed(Key::Escape) {
+                self.selected = None;
+            }
+        } else {
+            if pressed(Key::B) {
+                self.tool = Tool::Brush;
+            }
+            if pressed(Key::F) {
+                self.tool = Tool::Fill;
+            }
         }
         if pressed(Key::L) {
             self.landscape = !self.landscape;
@@ -512,11 +611,11 @@ impl Editor {
         });
         ui.horizontal(|ui| {
             ui.label(format!("Seed {}", self.theater.seed));
-            let free = self.theater.objects.is_empty();
+            let free = self.theater.objects.is_empty() && self.theater.airfields.len() == 1;
             let hint = if free {
                 "Formt Grate und Hügel; nur bewusst ändern"
             } else {
-                "Nur ohne Objekte änderbar"
+                "Nur ohne Objekte und feindliche Horste änderbar"
             };
             if ui.add_enabled(free, egui::Button::new("ändern …")).on_hover_text(hint).clicked() {
                 self.dialog = Dialog::Seed(self.theater.seed.to_string());
@@ -524,13 +623,20 @@ impl Editor {
         });
         ui.separator();
 
-        ui.heading("Malen");
+        ui.heading("Bearbeiten");
         ui.horizontal(|ui| {
             ui.radio_value(&mut self.layer, Layer::Ground, "Gelände");
             if ui.radio_value(&mut self.layer, Layer::Side, "Seite").clicked() {
                 self.show_sides = true;
             }
+            ui.radio_value(&mut self.layer, Layer::Objects, "Objekte");
         });
+        if self.layer == Layer::Objects {
+            self.objects_panel(ui);
+            ui.separator();
+            self.view_panel(ui);
+            return;
+        }
         let swatch = |ui: &mut egui::Ui, color: Color32, selected: bool, text: String| {
             ui.horizontal(|ui| {
                 let (r, resp) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
@@ -548,7 +654,7 @@ impl Editor {
                     }
                 }
             }
-            Layer::Side => {
+            _ => {
                 for (k, s) in Side::ALL.into_iter().enumerate() {
                     let text = format!("{}  {}  ({})", s.to_char(), side_name(s), k + 1);
                     if swatch(ui, side_color(s), self.side == s, text) {
@@ -568,7 +674,11 @@ impl Editor {
             }
         });
         ui.separator();
+        self.view_panel(ui);
+    }
 
+    /// Ansicht, Unterlage und Bedienhinweise.
+    fn view_panel(&mut self, ui: &mut egui::Ui) {
         ui.heading("Ansicht");
         ui.horizontal(|ui| {
             ui.radio_value(&mut self.landscape, false, "Zellen");
@@ -576,6 +686,7 @@ impl Editor {
         });
         ui.checkbox(&mut self.show_sides, "Seiten einfärben");
         ui.checkbox(&mut self.show_grid, "Planquadrate (100 km)");
+        ui.checkbox(&mut self.show_ranges, "Reichweiten, Ringe um die Basis");
         if ui.button("Einpassen").clicked() {
             self.fit = true;
         }
@@ -599,12 +710,143 @@ impl Editor {
         }
         ui.separator();
 
-        ui.label(
+        ui.label(if self.layer == Layer::Objects {
+            "„Setzen“ legt mit Klick an, „Auswählen“ wählt und zieht. Entf löscht, \
+             Strg+D dupliziert, Esc hebt die Auswahl auf. Mausrad zoomt, mittlere \
+             Maustaste oder Leertaste + Ziehen verschiebt, E wechselt die Ebene."
+        } else {
             "Linke Maustaste malt, rechte nimmt den Wert unter der Maus auf. \
              Mausrad zoomt, mittlere Maustaste oder Leertaste + Ziehen verschiebt. \
              E wechselt die Ebene, [ und ] die Pinselgröße. \
-             Dateien (.ron, .png) lassen sich ins Fenster ziehen.",
-        );
+             Dateien (.ron, .png) lassen sich ins Fenster ziehen."
+        });
+    }
+
+    /// Werkzeug, Art zum Setzen, Eigenschaften der Auswahl, Liste.
+    fn objects_panel(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut self.obj_tool, ObjTool::Select, "Auswählen (A)");
+            ui.radio_value(&mut self.obj_tool, ObjTool::Place, "Setzen (N)");
+        });
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("art").selected_text(self.kind.label()).show_ui(ui, |ui| {
+                for k in Kind::all() {
+                    ui.selectable_value(&mut self.kind, k, k.label());
+                }
+            });
+            ui.checkbox(&mut self.civilian, "zivil");
+        });
+        if self.places.is_empty() {
+            ui.weak("Ohne Ortsliste (<Unterlage>_orte.txt) bleibt „Ort“ leer.");
+        }
+        ui.separator();
+        self.properties(ui);
+        ui.separator();
+        let items: Vec<Item> = objects::all(&self.theater).collect();
+        egui::CollapsingHeader::new(format!("Liste ({})", items.len())).default_open(true).show(ui, |ui| {
+            egui::ScrollArea::vertical().id_salt("liste").max_height(240.0).show(ui, |ui| {
+                for it in items {
+                    let text = objects::label(&self.theater, it);
+                    if ui.selectable_label(self.selected == Some(it), text).clicked() {
+                        (self.selected, self.center_on) = (Some(it), Some(it));
+                    }
+                }
+            });
+        });
+    }
+
+    /// Felder der Auswahl; eine Änderung wird ein Schritt im Verlauf, sobald
+    /// das Feld den Fokus abgibt.
+    fn properties(&mut self, ui: &mut egui::Ui) {
+        let Some(it) = self.selected else {
+            ui.weak("Nichts ausgewählt.");
+            return;
+        };
+        let before = self.theater.clone();
+        let places = &self.places;
+        egui::Grid::new("eigenschaften").num_columns(2).show(ui, |ui| {
+            match it {
+                Item::Airfield(i) => {
+                    let a = &mut self.theater.airfields[i];
+                    ui.label("Name");
+                    ui.text_edit_singleline(&mut a.name);
+                    ui.end_row();
+                    ui.label("Art");
+                    ui.label(if a.kind == AirfieldKind::Home { "eigene Basis" } else { "feindlicher Horst" });
+                    ui.end_row();
+                    ui.label("Bahn");
+                    ui.add(egui::Slider::new(&mut a.heading_deg, 0.0..=157.5).step_by(22.5).suffix("°"));
+                    ui.end_row();
+                    if a.kind == AirfieldKind::Enemy {
+                        ui.label("MiG-21");
+                        ui.add(egui::DragValue::new(&mut a.mig21).range(0..=9));
+                        ui.end_row();
+                        ui.label("MiG-29");
+                        ui.add(egui::DragValue::new(&mut a.mig29).range(0..=9));
+                        ui.end_row();
+                    }
+                }
+                Item::Object(i) => {
+                    let o = &mut self.theater.objects[i];
+                    ui.label("Name");
+                    ui.text_edit_singleline(&mut o.name);
+                    ui.end_row();
+                    let (mut class, mut civilian) = (o.class, o.civilian);
+                    ui.label("Klasse");
+                    egui::ComboBox::from_id_salt("klasse").selected_text(class.label()).show_ui(ui, |ui| {
+                        for c in TargetClass::ALL {
+                            ui.selectable_value(&mut class, c, c.label());
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("Zivil");
+                    ui.checkbox(&mut civilian, "nicht angreifen");
+                    ui.end_row();
+                    if (class, civilian) != (o.class, o.civilian) {
+                        objects::retype(o, class, civilian);
+                    }
+                    ui.label("Ort");
+                    ui.horizontal(|ui| {
+                        ui.add(egui::TextEdit::singleline(&mut o.place).desired_width(110.0));
+                        if ui.add_enabled(!places.is_empty(), egui::Button::new("nächster")).clicked() {
+                            o.place = objects::nearest_place(places, o.north, o.east);
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("Richtung");
+                    ui.add(egui::Slider::new(&mut o.heading_deg, 0.0..=355.0).step_by(5.0).suffix("°"));
+                    ui.end_row();
+                }
+            }
+            let [mut north, mut east] = objects::pos(&self.theater, it).map(|v| v / 1e3);
+            let km = |ui: &mut egui::Ui, label: &str, v: &mut f64| {
+                ui.label(label);
+                let r = ui.add(
+                    egui::DragValue::new(v).speed(0.1).range(-250.0..=250.0).max_decimals(2).suffix(" km"),
+                );
+                ui.end_row();
+                r.changed()
+            };
+            let (a, b) = (km(ui, "Nord", &mut north), km(ui, "Ost", &mut east));
+            if a || b {
+                objects::set_pos(&mut self.theater, it, [north * 1e3, east * 1e3]);
+            }
+        });
+        let fixed = it == Item::Airfield(0);
+        let (mut remove, mut duplicate) = (false, false);
+        ui.horizontal(|ui| {
+            remove = ui.add_enabled(!fixed, egui::Button::new("Löschen (Entf)")).clicked();
+            duplicate = ui.add_enabled(!fixed, egui::Button::new("Duplizieren (Strg+D)")).clicked();
+        });
+        if self.theater != before && self.pending.is_none() {
+            self.pending = Some(before);
+        }
+        if remove {
+            self.remove_selected();
+        }
+        if duplicate {
+            self.duplicate_selected();
+        }
     }
 
     /// Ordner der Gebietsdatei als Startpunkt für Dateiabfragen.
@@ -647,10 +889,22 @@ impl Editor {
         if resp.dragged_by(PointerButton::Middle) || (space && resp.dragged_by(PointerButton::Primary)) {
             self.offset += resp.drag_delta();
         }
+        if let Some(it) = self.center_on.take() {
+            let [n, e] = objects::pos(&self.theater, it);
+            let local =
+                Self::screen(Rect::from_min_size(Pos2::ZERO, Vec2::splat(GRID_N as f32 * self.zoom)), n, e);
+            self.offset = rect.size() * 0.5 - local.to_vec2();
+        }
         let map = self.map_rect(rect);
         let at = |p: Pos2| [(p.y - map.min.y) / self.zoom, (p.x - map.min.x) / self.zoom];
         let inside = |c: [f32; 2]| c.iter().all(|v| (0.0..GRID_N as f32).contains(v));
         let hover = resp.hover_pos().map(at);
+
+        if self.layer == Layer::Objects {
+            self.object_input(ui, &resp, map, space);
+            self.draw(ui, rect, map, None);
+            return hover.filter(|&c| inside(c));
+        }
 
         // Malen
         let paint = self.paint();
@@ -690,6 +944,63 @@ impl Editor {
 
         self.draw(ui, rect, map, hover.filter(|&c| inside(c)));
         hover.filter(|&c| inside(c))
+    }
+
+    /// Auswählen, Ziehen und Setzen von Flugplätzen und Objekten.
+    fn object_input(&mut self, ui: &egui::Ui, resp: &egui::Response, map: Rect, space: bool) {
+        let m_px = SIZE_M / f64::from(map.width());
+        let world = |p: Pos2| {
+            [
+                SIZE_M * 0.5 - f64::from(p.y - map.min.y) * m_px,
+                f64::from(p.x - map.min.x) * m_px - SIZE_M * 0.5,
+            ]
+        };
+        let primary = |r: &egui::Response| !space && r.clicked_by(PointerButton::Primary);
+        match (self.obj_tool, resp.interact_pointer_pos()) {
+            (ObjTool::Place, Some(p)) if primary(resp) => {
+                let [n, e] = world(p);
+                if n.abs().max(e.abs()) <= SIZE_M * 0.5 {
+                    self.flush_pending();
+                    self.history.push(self.theater.clone());
+                    self.selected =
+                        Some(objects::add(&mut self.theater, self.kind, self.civilian, n, e, &self.places));
+                }
+            }
+            (ObjTool::Select, Some(p)) if primary(resp) => {
+                let [n, e] = world(p);
+                self.selected = objects::nearest(&self.theater, n, e, PICK_PX * m_px);
+            }
+            _ => {}
+        }
+        // Ziehen: Griff am Druckpunkt, Abstand zum Element bleibt.
+        let origin = ui.input(|i| i.pointer.press_origin());
+        if self.obj_tool == ObjTool::Select
+            && !space
+            && resp.drag_started_by(PointerButton::Primary)
+            && let Some(o) = origin
+        {
+            let [n, e] = world(o);
+            self.selected = objects::nearest(&self.theater, n, e, PICK_PX * m_px);
+            if let Some(it) = self.selected {
+                self.flush_pending();
+                let [pn, pe] = objects::pos(&self.theater, it);
+                self.moving = Some((self.theater.clone(), [pn - n, pe - e]));
+            }
+        }
+        if let (Some(it), Some((_, grab)), Some(p)) =
+            (self.selected, &self.moving, resp.interact_pointer_pos())
+            && resp.dragged_by(PointerButton::Primary)
+        {
+            let [n, e] = world(p);
+            let target = [n + grab[0], e + grab[1]];
+            objects::set_pos(&mut self.theater, it, target);
+        }
+        if !resp.dragged()
+            && let Some((before, _)) = self.moving.take()
+            && before != self.theater
+        {
+            self.history.push(before);
+        }
     }
 
     fn draw(&self, ui: &egui::Ui, rect: Rect, map: Rect, hover: Option<[f32; 2]>) {
@@ -745,40 +1056,84 @@ impl Editor {
                 painter.text(left, Align2::RIGHT_CENTER, &letter, font.clone(), Color32::LIGHT_GRAY);
             }
         }
-        // Flugplätze und Objekte (Bearbeiten folgt)
-        for a in &self.theater.airfields {
+        self.draw_items(&painter, map);
+        // Pinsel
+        if let Some(h) = hover.filter(|_| self.tool == Tool::Brush && self.layer != Layer::Objects) {
+            let center = map.min + vec2(h[1].floor() + 0.5, h[0].floor() + 0.5) * self.zoom;
+            let r = (self.size as f32 * 0.5).max(0.5) * self.zoom;
+            painter.circle_stroke(center, r, (1.0, Color32::WHITE));
+        }
+    }
+
+    /// Ringe um die Basis, Reichweiten, Bahnen, Objekte, Auswahl.
+    fn draw_items(&self, painter: &egui::Painter, map: Rect) {
+        let px = |m: f64| (m / SIZE_M) as f32 * map.width();
+        let t = &self.theater;
+        if self.show_ranges {
+            if let Some(home) = t.airfields.first() {
+                let c = Self::screen(map, home.north, home.east);
+                painter.circle_stroke(c, px(RADAR_MIN_HOME_M), (1.0, Color32::from_rgb(255, 150, 0)));
+                for r in [MIN_RANGE_M, MAX_RANGE_M] {
+                    painter.circle_stroke(c, px(r), (1.5, Color32::from_rgb(90, 200, 255)));
+                }
+            }
+            for o in t.objects.iter().filter(|o| !o.civilian) {
+                if let Some((radar, _)) = air_defense(o.class) {
+                    let color = if o.class == TargetClass::EarlyWarning {
+                        Color32::from_rgba_unmultiplied(255, 230, 0, 150)
+                    } else {
+                        Color32::from_rgba_unmultiplied(255, 70, 40, 150)
+                    };
+                    painter.circle_stroke(
+                        Self::screen(map, o.north, o.east),
+                        px(radar.range_m),
+                        (1.0, color),
+                    );
+                }
+            }
+        }
+        let font = FontId::proportional(12.0);
+        let labels = self.zoom >= 8.0 || (self.layer == Layer::Objects && self.zoom >= 5.0);
+        let text = |p: Pos2, s: &str| {
+            painter.text(p + vec2(7.0, 0.0), Align2::LEFT_CENTER, s, font.clone(), Color32::from_gray(235))
+        };
+        for (i, a) in t.airfields.iter().enumerate() {
             let c = if a.kind == AirfieldKind::Home {
                 Color32::from_rgb(40, 120, 255)
             } else {
                 Color32::from_rgb(210, 0, 210)
             };
             let p = Self::screen(map, a.north, a.east);
-            painter.rect_filled(Rect::from_center_size(p, Vec2::splat(9.0)), 1.0, c);
+            let h = a.heading_deg.to_radians();
+            let half = vec2(h.sin() as f32, -h.cos() as f32) * px(dimensions(a.kind).0 * 0.5).max(6.0);
+            painter.line_segment([p - half, p + half], (3.0, c));
+            painter.rect_filled(Rect::from_center_size(p, Vec2::splat(7.0)), 1.0, c);
             if self.zoom >= 4.0 {
-                painter.text(
-                    p + vec2(8.0, 0.0),
-                    Align2::LEFT_CENTER,
-                    &a.name,
-                    FontId::proportional(12.0),
-                    Color32::WHITE,
-                );
+                text(p, &a.name);
+            }
+            if self.selected == Some(Item::Airfield(i)) {
+                painter.circle_stroke(p, 9.0, (2.0, Color32::WHITE));
             }
         }
-        for o in &self.theater.objects {
+        for (i, o) in t.objects.iter().enumerate() {
             let c = if o.civilian {
                 Color32::WHITE
             } else if o.class.is_radar() {
                 Color32::YELLOW
+            } else if o.class.is_naval() {
+                Color32::from_rgb(0, 220, 220)
             } else {
                 Color32::RED
             };
-            painter.circle_filled(Self::screen(map, o.north, o.east), 3.0, c);
-        }
-        // Pinsel
-        if let Some(h) = hover.filter(|_| self.tool == Tool::Brush) {
-            let center = map.min + vec2(h[1].floor() + 0.5, h[0].floor() + 0.5) * self.zoom;
-            let r = (self.size as f32 * 0.5).max(0.5) * self.zoom;
-            painter.circle_stroke(center, r, (1.0, Color32::WHITE));
+            let p = Self::screen(map, o.north, o.east);
+            painter.circle(p, 3.5, c, (1.0, Color32::BLACK));
+            let selected = self.selected == Some(Item::Object(i));
+            if labels || selected {
+                text(p, &o.label());
+            }
+            if selected {
+                painter.circle_stroke(p, 8.0, (2.0, Color32::WHITE));
+            }
         }
     }
 
@@ -796,15 +1151,10 @@ impl Editor {
                     ground_name(self.theater.ground(row, col)),
                     side_name(self.theater.side(row, col)),
                 );
-                // Objekt oder Flugplatz unter der Maus (bis 8 Pixel)
-                let near = 8.0 * SIZE_M / (GRID_N as f64 * f64::from(self.zoom));
-                let d = |n: f64, e: f64| (n - north).hypot(e - east);
-                let airfield = self.theater.airfields.iter().map(|a| (d(a.north, a.east), a.name.clone()));
-                let objects = self.theater.objects.iter().map(|o| (d(o.north, o.east), o.label()));
-                if let Some((_, name)) =
-                    airfield.chain(objects).filter(|x| x.0 < near).min_by(|a, b| a.0.total_cmp(&b.0))
-                {
-                    text += &format!("   {name}");
+                // Objekt oder Flugplatz unter der Maus
+                let near = PICK_PX * SIZE_M / (GRID_N as f64 * f64::from(self.zoom));
+                if let Some(it) = objects::nearest(&self.theater, north, east, near) {
+                    text += &format!("   {}", objects::label(&self.theater, it));
                 }
                 ui.label(text);
             }
@@ -969,16 +1319,25 @@ impl eframe::App for Editor {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             self.dialog = Dialog::Discard(After::Close);
         }
+        if self.selected.is_some_and(|it| !objects::exists(&self.theater, it)) {
+            self.selected = None;
+        }
         self.shortcuts(&ctx);
         self.dropped(&ctx);
         self.refresh(&ctx);
         egui::Panel::top("datei").show(ui, |ui| self.top_bar(ui));
         // Die Statuszeile zeigt die Lage aus dem letzten Bild (die Karte kommt danach).
         egui::Panel::bottom("status").show(ui, |ui| self.status(ui));
-        egui::Panel::left("werkzeug").default_size(250.0).show(ui, |ui| {
+        egui::Panel::left("werkzeug").default_size(300.0).show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| self.side_panel(ui));
         });
         egui::CentralPanel::no_frame().show(ui, |ui| self.hover = self.canvas(ui));
         self.dialogs(&ctx);
+        if self.pending.is_some()
+            && ctx.memory(|m| m.focused().is_none())
+            && !ctx.input(|i| i.pointer.any_down())
+        {
+            self.flush_pending();
+        }
     }
 }
