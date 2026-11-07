@@ -47,7 +47,7 @@ engine-neutral (`Page`).
 | `f29-render` | Terrain-Kachel-Meshes, Bahnen mit Markierungen und PAPI, Flugzeugmodell mit Fahrwerk, Satellitenkarte (Raster + kursbezogener Ausschnitt), Palette, NED → Y-up |
 | `f29-headless` | Simulation ohne Grafik: Demo, Replays, HUD als SVG, Höhenkarte, Benchmark |
 | `f29-app` | Fenster, Eingabe, Kameras, Terrain-Streaming, Post-Processing |
-| `f29-editor` | Karteneditor: Raster malen, Unterlage, Wassermaske, Landschaftsvorschau (`docs/KARTENEDITOR.md`) |
+| `f29-editor` | Karteneditor: Raster malen, Flugplätze und Objekte, Unterlage, Wassermaske, Landschaftsvorschau (`docs/KARTENEDITOR.md`) |
 
 ## Koordinatensysteme
 

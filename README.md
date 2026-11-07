@@ -374,8 +374,10 @@ Details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
       Seiten und Objektklassen ersetzt NORTH COAST als Grundlage der Tests
 - [x] Karteneditor, Teil 1: Gelände und Seiten malen, Kartenunterlage,
       Wasser aus Maske, Landschaftsvorschau mit dem Code des Spiels
-- [ ] Karteneditor, Teil 2 und 3: Flugplätze und Objekte bearbeiten; Prüfungen
-      (Missionspaare, Radarabstand, Schiffe auf Wasser)
+- [x] Karteneditor, Teil 2: Flugplätze und Objekte setzen und bearbeiten, Ort
+      aus der Ortsliste, Reichweiten und Ringe um die Basis
+- [ ] Karteneditor, Teil 3: Prüfungen anzeigen (Missionspaare, Radarabstand,
+      Schiffe auf Wasser; die Prüfung selbst kommt nach f29-core)
 - [ ] Die vier Gebiete des Originals nach echter Geografie mit echten Namen:
       Libyen, Persischer Golf, Nordkap, Mitteleuropa (im Karteneditor)
 - [ ] Fertige Gebiete ins Programm einbetten (kein Datenordner nötig;
