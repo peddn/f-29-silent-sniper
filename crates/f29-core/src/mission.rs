@@ -88,6 +88,13 @@ impl Mission {
         self.objectives().any(|(_, t)| t == Task::Recon)
     }
 
+    /// Ob der Auftrag gilt: zwei Ziele, im Kalten Krieg beide zur Aufklärung.
+    pub fn is_complete(&self, conflict: Conflict) -> bool {
+        self.primary.is_some()
+            && self.secondary.is_some()
+            && (recon_percent(conflict) < 100 || self.tasks.iter().all(|&t| t == Task::Recon))
+    }
+
     /// Vorgeschlagene Beladung (wie im Original): Sidewinder und HARM, dazu je
     /// Ziel die Kamera bzw. eine Waffe gegen seine Klasse; die Kamera nur
     /// einmal. Reicht der Haupttank nicht (`fuel_short`), ersetzt ein
@@ -114,18 +121,30 @@ fn dist(a: [f64; 2], t: &Target) -> f64 {
     (t.north - a[0]).hypot(t.east - a[1])
 }
 
-/// Wählt den Auftrag für `seed` unter dem Regelset `conflict`.
-pub fn plan(terrain: &Terrain, targets: &[Target], seed: u64, conflict: Conflict) -> Mission {
+/// Startbasis: Index der Heimatbahn und ihre Mitte.
+fn home(terrain: &Terrain) -> (usize, [f64; 2]) {
     let start = terrain.runways().iter().position(|r| r.kind == AirfieldKind::Home).unwrap_or(0);
-    let home = terrain.runways().get(start).map_or([0.0, 0.0], |r| r.center);
-    let band: Vec<usize> = (0..targets.len())
+    (start, terrain.runways().get(start).map_or([0.0, 0.0], |r| r.center))
+}
+
+/// Mögliche Missionsziele: nichtzivile Objekte der Missionsklassen im Band um
+/// die Startbasis (Indizes in `targets`).
+pub fn candidates(terrain: &Terrain, targets: &[Target]) -> Vec<usize> {
+    let (_, home) = home(terrain);
+    (0..targets.len())
         .filter(|&i| {
             let t = &targets[i];
             !t.civilian
                 && MISSION_CLASSES.contains(&t.class)
                 && (MIN_RANGE_M..=MAX_RANGE_M).contains(&dist(home, t))
         })
-        .collect();
+        .collect()
+}
+
+/// Wählt den Auftrag für `seed` unter dem Regelset `conflict`.
+pub fn plan(terrain: &Terrain, targets: &[Target], seed: u64, conflict: Conflict) -> Mission {
+    let (start, home) = home(terrain);
+    let band = candidates(terrain, targets);
     let mut rng = Pcg32::new(seed, STREAM_MISSION);
     // Je Ziel zuerst die Auftragsart, dann ein passendes Ziel (Aufklärung nur
     // an fotografierbaren Klassen); ohne passendes Ziel: Angriff.
@@ -143,38 +162,39 @@ pub fn plan(terrain: &Terrain, targets: &[Target], seed: u64, conflict: Conflict
         };
         (!c.is_empty()).then(|| (c[rng.next_u32() as usize % c.len()], task))
     };
-    // Neu würfeln, bis beide Ziele passen (im Kalten Krieg beide
-    // fotografierbar).
-    let mut pair = (None, None);
+    // Das nähere Ziel ist das Primärziel.
+    let mission = |first: Option<(usize, Task)>, second: Option<(usize, Task)>| {
+        let (first, second) = match (first, second) {
+            (Some(a), Some(b)) if dist(home, &targets[b.0]) < dist(home, &targets[a.0]) => (Some(b), Some(a)),
+            other => other,
+        };
+        let task = |x: Option<(usize, Task)>| x.map_or(Task::Attack, |x| x.1);
+        Mission {
+            start,
+            landing: start,
+            primary: first.map(|x| x.0),
+            secondary: second.map(|x| x.0),
+            tasks: [task(first), task(second)],
+        }
+    };
+    // Neu würfeln, bis der Auftrag gilt; sonst bleibt der erste mit Ziel.
+    let mut best: Option<Mission> = None;
     for _ in 0..50 {
         let first = choose(&|_| true);
         let second = first.and_then(|(a, _)| {
             let at = [targets[a].north, targets[a].east];
             choose(&|b| (MIN_APART_M..=MAX_APART_M).contains(&dist(at, &targets[b])))
         });
-        let allowed =
-            |x: Option<(usize, Task)>| x.is_some_and(|x| recon_percent(conflict) < 100 || x.1 == Task::Recon);
-        let ok = allowed(first) && allowed(second);
-        if pair.0.is_none() || ok {
-            pair = (first, second);
+        let m = mission(first, second);
+        let ok = m.is_complete(conflict);
+        if best.is_none_or(|b| b.primary.is_none()) || ok {
+            best = Some(m);
         }
         if ok {
             break;
         }
     }
-    let (first, second) = pair;
-    let (first, second) = match (first, second) {
-        (Some(a), Some(b)) if dist(home, &targets[b.0]) < dist(home, &targets[a.0]) => (Some(b), Some(a)),
-        other => other,
-    };
-    let task = |x: Option<(usize, Task)>| x.map_or(Task::Attack, |x| x.1);
-    Mission {
-        start,
-        landing: start,
-        primary: first.map(|x| x.0),
-        secondary: second.map(|x| x.0),
-        tasks: [task(first), task(second)],
-    }
+    best.expect("mindestens ein Versuch")
 }
 
 /// Route des Auftrags: Start → Primärziel → Sekundärziel → Landeplatz.

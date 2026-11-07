@@ -888,7 +888,8 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Zielklasse abseits der Route), SAM-Feuerleitradar (Doppler, 30 km, 5 s),
     Kurzstrecken-Flugabwehr (Doppler, 12 km, 2,5 s). Eine zerstörte Stellung
     strahlt nicht mehr und vergisst. Feindliche Radare stehen mindestens
-    35 km von der Heimatbasis, damit schon das Anrollen unentdeckt bleibt.
+    35 km von der Heimatbasis, damit schon das Anrollen unentdeckt bleibt
+    (`theater_check::RADAR_MIN_HOME_M`, M-031).
   - **Pings:** Jede Stellung pingt einmal je Antennenumlauf (versetzt je
     Stellung); nur dann wird gerechnet. Die Impulsstärke am Flugzeug fällt
     linear mit der Entfernung bis zur Reichweitengrenze. Doppler zählt nur die
@@ -1332,6 +1333,18 @@ Jeder Eintrag beschreibt den heutigen Stand; den Verlauf zeigt git.
     Objektklasse, etwa 90 Objekte; Grundlage aller Tests
     (`docs/GEBIETSFORMAT.md`, Abschnitt Testgebiet). Es löste das einmalig
     erzeugte NORTH COAST ab.
+  - **Gebietsprüfung** (`f29_core::theater_check::check`, rein und
+    deterministisch, wenige Millisekunden): Befunde (Warnung oder Hinweis, mit
+    Flugplatz oder Objekt) und Kennzahlen für Editor und
+    `f29-headless theater-check`.
+    - Missionen prüft sie mit dem Generator selbst: Zielpaare je
+      Konfliktstufe aus 200 Seeds, mit `mission::candidates` und
+      `Mission::is_complete`, die auch `plan` nutzt.
+    - Dazu kommen Radarabstand zur Basis, Wasser und Land nach der
+      Geländehöhe, Gebietsgrenze, Abstände zwischen Objekten und zu den
+      Bahnen sowie die Seiten von Basis, Horsten und Militär.
+    - Die Grenzen sind benannte Konstanten, die Regeln stehen in
+      `docs/GEBIETSFORMAT.md`.
   - **Laden statt Backen:** Das Spiel liest die Gebietsdatei und rechnet die
     Landschaft daraus beim Laden, der Editor mit demselben Code für die
     Vorschau. Ein vorab gerechnetes Höhenbild gibt es nicht. Fertige Gebiete

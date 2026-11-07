@@ -160,20 +160,37 @@ Eine Datei, die eine dieser Regeln verletzt, ist unlesbar:
 
 ## Was ein gutes Gebiet beachtet
 
-Das Spiel prüft das nicht, der Editor sollte es aber anzeigen:
+Das Spiel lehnt solche Gebiete nicht ab, sie spielen sich aber falsch. Die
+Gebietsprüfung `f29_core::theater_check::check` findet sie mit den Regeln
+des Spiels selbst. Der Editor zeigt ihre Befunde; auf der Kommandozeile gibt
+es `cargo run -p f29-headless -- theater-check --theater DATEI.ron`. Jeder
+Befund ist eine **Warnung** (spielt sich falsch) oder ein **Hinweis**
+(ungewöhnlich) und nennt, wenn möglich, den Flugplatz oder das Objekt.
+Die Grenzen sind benannte Konstanten im Modul `theater_check`.
 
-- **Missionen:** Der Missionsgenerator wählt zwei Ziele aus den nichtzivilen
-  Objekten der Klassen `Building`, `Hardened`, `Bridge`, `ParkedAircraft`,
-  `Armored` und `Soft`, 80–220 km von der eigenen Basis und 20–80 km
-  voneinander entfernt. Ohne solche Paare gibt es keine Mission.
-- **Radare:** feindliche Radare mindestens 35 km von der eigenen Basis,
-  damit schon das Anrollen unentdeckt bleibt.
-- **Wasser und Land:** Schiffe nur auf Wasser, alles andere nur an Land.
-- **Abstände:** Objekte mindestens etwa 120 m voneinander und 2,5 km von
-  Bahnen.
-- **Menge:** Jede Radarstellung zählt für die Entdeckung und jede SAM für
-  den Beschuss. Weniger, aber gut platzierte Stellungen spielen sich wie im
-  Original.
+| Regel | Stufe | Konstante |
+|---|---|---|
+| **Missionen:** Der Missionsgenerator des Spiels findet je Konfliktstufe aus 200 Seeds mindestens 10 verschiedene Zielpaare. Er wählt zwei Ziele aus den nichtzivilen Objekten der Klassen `Building`, `Hardened`, `Bridge`, `ParkedAircraft`, `Armored` und `Soft`, 80–220 km von der eigenen Basis und 20–80 km voneinander; im Kalten Krieg müssen beide fotografierbar sein (`Building`, `Hardened`, `Bridge`, `ParkedAircraft`). | Warnung | `MISSION_SEEDS`, `FEW_PAIRS`; Band in `mission::MIN_RANGE_M` … `MAX_APART_M` |
+| **Radare** (alle Radarklassen, auch zivile – sie strahlen ebenso) mindestens 35 km von der eigenen Basis, damit schon das Anrollen unentdeckt bleibt. | Warnung | `RADAR_MIN_HOME_M` |
+| **Wasser und Land:** Schiffe nur auf Wasser, alles andere nur an Land, nach der Geländehöhe am Punkt. Bahnen an Mitte und beiden Enden nach der Höhe ohne Einebnung. | Warnung | – |
+| **Gebietsgrenze:** Objekte und Bahnen ganz im Gebiet. | Warnung | – |
+| **Abstände:** Objekte mindestens 120 m voneinander, 2,5 km von der befestigten Fläche der eigenen Bahn (Start und Anflug frei) und 500 m von feindlichen Bahnen (Schutzbauten und abgestellte Flugzeuge daneben, nicht darauf). | Warnung | `OBJECT_MIN_APART_M`, `OBJECT_MIN_HOME_RUNWAY_M`, `OBJECT_MIN_ENEMY_RUNWAY_M` |
+| **Eigene Basis** mit Mitte und beiden Bahnenden auf eigener Seite; sonst zählt eine Landung dort als „LANDED – CAPTURED“ bzw. „INTERNATIONAL INCIDENT“. | Warnung | – |
+| **Feindliche Horste** mit Jägern und nicht auf eigener Seite. | Hinweis | – |
+| **Militärische Objekte** auf feindlicher Seite. | Hinweis | – |
+| **Flugplätze** mindestens 5 km voneinander, sonst überlappen ihre Einebnungen. | Hinweis | `AIRFIELD_MIN_APART_M` |
+
+Dazu liefert die Prüfung **Kennzahlen**:
+- die verschiedenen Zielpaare je Konfliktstufe;
+- die Zahl der Frühwarnradare, SAM- und SHORAD-Stellungen;
+- die feindlichen Horste mit ihren MiG-21 und MiG-29;
+- die Missionsziele im Band;
+- welcher Anteil des feindlichen Teils des Missionsbands in Reichweite eines
+  Frühwarnradars liegt.
+
+**Menge:** Jede Radarstellung zählt für die Entdeckung und jede SAM für den
+Beschuss. Weniger, aber gut platzierte Stellungen spielen sich wie im
+Original.
 
 ## Testgebiet
 
@@ -196,7 +213,8 @@ kein Vorbild für echte Gebiete, sondern enthält, was die Tests brauchen:
   zusammen etwa 90 Objekte.
 
 Der Test `test_range_has_everything` prüft, dass jede Geländeart, jede Seite
-und jede Objektklasse vorkommt. Wer das Testgebiet ändert, lässt alle Tests
+und jede Objektklasse vorkommt; `test_range_is_clean`, dass die
+Gebietsprüfung weder Warnungen noch Hinweise findet. Wer das Testgebiet ändert, lässt alle Tests
 laufen und nimmt die Test-Replays neu auf
 (`F29_BLESS=1 cargo test -p f29-core --test determinism`).
 
