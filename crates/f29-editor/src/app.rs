@@ -3,6 +3,7 @@
 
 use crate::edit::{self, History, Paint};
 use crate::preview;
+use crate::recent::{Recent, absolute};
 use eframe::egui::{
     self, Align2, Color32, ColorImage, FontId, Key, Modifiers, PointerButton, Pos2, Rect, Sense,
     TextureHandle, TextureOptions, Vec2, ViewportCommand, pos2, vec2,
@@ -180,7 +181,9 @@ pub struct Editor {
     worker: preview::Worker,
     preview: Option<TextureHandle>,
     preview_of: Option<Theater>,
-    underlay: Option<(TextureHandle, String)>,
+    /// Unterlage und ihre Datei.
+    underlay: Option<(TextureHandle, PathBuf)>,
+    recent: Recent,
     show_underlay: bool,
     underlay_alpha: f32,
     dialog: Dialog,
@@ -190,10 +193,18 @@ pub struct Editor {
 }
 
 impl Editor {
-    /// Öffnet `file` (fehlt die Datei, ein neues Gebiet dieses Namens) und
-    /// lädt gegebenenfalls eine Unterlage.
-    pub fn new(ctx: &egui::Context, file: Option<PathBuf>, underlay: Option<PathBuf>) -> Self {
+    /// Öffnet `file` (fehlt die Datei, ein neues Gebiet dieses Namens; ohne
+    /// Angabe die zuletzt bearbeitete Datei) samt gemerkter oder angegebener
+    /// Unterlage.
+    pub fn new(
+        ctx: &egui::Context,
+        storage: Option<&dyn eframe::Storage>,
+        file: Option<PathBuf>,
+        underlay: Option<PathBuf>,
+    ) -> Self {
         let repaint = ctx.clone();
+        let recent = Recent::load(storage);
+        let file = file.or_else(|| recent.file.clone().filter(|f| f.exists()));
         let path = file.clone().unwrap_or_else(|| Path::new(THEATER_DIR).join("neu.ron"));
         let name = path.file_stem().map_or("NEU".into(), |s| s.to_string_lossy().to_uppercase());
         let mut e = Self {
@@ -219,6 +230,7 @@ impl Editor {
             preview: None,
             preview_of: None,
             underlay: None,
+            recent,
             show_underlay: true,
             underlay_alpha: 0.5,
             dialog: Dialog::None,
@@ -227,7 +239,7 @@ impl Editor {
             title: String::new(),
         };
         match file {
-            Some(f) if f.exists() => e.open(f),
+            Some(f) if f.exists() => e.open(ctx, f),
             _ => e.message = format!("Neues Gebiet {name}, Seed {}", e.theater.seed),
         }
         if let Some(u) = underlay {
@@ -247,7 +259,7 @@ impl Editor {
         }
     }
 
-    fn open(&mut self, path: PathBuf) {
+    fn open(&mut self, ctx: &egui::Context, path: PathBuf) {
         let read = std::fs::read_to_string(&path).map_err(|e| e.to_string());
         match read.and_then(|s| Theater::parse(&s).map_err(|e| e.to_string())) {
             Ok(t) => {
@@ -257,6 +269,10 @@ impl Editor {
                 self.path = path;
                 self.history.clear();
                 self.fit = true;
+                self.underlay = None;
+                if let Some(u) = self.recent.underlay(&self.path) {
+                    self.load_underlay(ctx, &u);
+                }
             }
             Err(e) => self.message = format!("Nicht geöffnet: {}: {e}", path.display()),
         }
@@ -273,6 +289,9 @@ impl Editor {
         self.message = match result {
             Ok(()) => {
                 self.saved = Some(self.theater.clone());
+                if let Some((_, u)) = &self.underlay {
+                    self.recent.set_underlay(&self.path, u);
+                }
                 format!("Gespeichert: {}", self.path.display())
             }
             Err(e) => format!("Nicht gespeichert: {}: {e}", self.path.display()),
@@ -283,10 +302,10 @@ impl Editor {
         match read_png(path) {
             Ok((size, rgba)) => {
                 let img = ColorImage::from_rgba_unmultiplied(size, &rgba);
-                let name = path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-                self.underlay = Some((ctx.load_texture("unterlage", img, TextureOptions::LINEAR), name));
+                self.underlay =
+                    Some((ctx.load_texture("unterlage", img, TextureOptions::LINEAR), path.into()));
                 self.show_underlay = true;
-                self.message = format!("Unterlage: {}", path.display());
+                self.recent.set_underlay(&self.path, path);
             }
             Err(e) => self.message = format!("Unterlage nicht geladen: {e}"),
         }
@@ -325,7 +344,7 @@ impl Editor {
                 self.allow_close = true;
                 ctx.send_viewport_cmd(ViewportCommand::Close);
             }
-            After::Open(p) => self.open(p),
+            After::Open(p) => self.open(ctx, p),
             After::New(t, p) => {
                 self.message = format!("Neues Gebiet {}, Seed {}", t.name, t.seed);
                 self.theater = *t;
@@ -452,7 +471,7 @@ impl Editor {
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if ui.button("Neu …").clicked() {
-                let path = Path::new(THEATER_DIR).join("neu.ron").display().to_string();
+                let path = self.path.with_file_name("neu.ron").display().to_string();
                 self.dialog = Dialog::New { name: "NEU".into(), seed: new_seed().to_string(), path };
             }
             if ui.button("Öffnen …").clicked() {
@@ -567,8 +586,8 @@ impl Editor {
             if ui.button("Laden …").clicked() {
                 self.dialog = Dialog::Path(Ask::Underlay, self.dir_of_path());
             }
-            if let Some((_, name)) = &self.underlay {
-                ui.label(name);
+            if let Some(name) = self.underlay.as_ref().and_then(|(_, p)| p.file_name()) {
+                ui.label(name.to_string_lossy());
             }
         });
         if self.underlay.is_some() {
@@ -939,6 +958,11 @@ fn file_list(ui: &mut egui::Ui, path: &mut String, ext: &str) {
 }
 
 impl eframe::App for Editor {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        self.recent.file = Some(absolute(&self.path));
+        self.recent.store(storage);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty() && !self.allow_close {

@@ -11,19 +11,33 @@ ist die Karte.
 Code: `crates/f29-editor` (egui/eframe, ohne Bevy).
 
 ```bash
-cargo run -p f29-editor -- data/theaters/libyen.ron
-cargo run -p f29-editor -- data/theaters/libyen.ron --unterlage karten/libyen.png
+cargo run --release -p f29-editor
+cargo run --release -p f29-editor -- data/theaters/libyen.ron --unterlage karten/libyen.png
 ```
 
-Fehlt die Datei, legt der Editor ein neues Gebiet mit diesem Namen an (ganz
-Flachland, neutral, die eigene Basis HOME in der Mitte) und schreibt es beim
-ersten Speichern. Ohne Angabe heißt es `data/theaters/neu.ron`.
+Ohne Angabe öffnet der Editor die zuletzt bearbeitete Datei mit ihrer
+Unterlage; beim allerersten Start ein neues Gebiet `data/theaters/neu.ron`.
+Fehlt eine angegebene Datei, legt er ein neues Gebiet mit diesem Namen an
+(ganz Flachland, neutral, die eigene Basis HOME in der Mitte) und schreibt es
+beim ersten Speichern. Das fertige Programm liegt nach dem Bauen unter
+`target/release/f29-editor` und lässt sich auch direkt oder über eine
+Verknüpfung starten.
+
+**Was der Editor sich merkt:** die zuletzt bearbeitete Datei, zu jeder
+Gebietsdatei ihre Unterlage (beim Öffnen wird sie wieder geladen, ohne
+gemerkte Unterlage ist keine zu sehen), Fenstergröße und Panelbreiten.
+Gespeichert wird beim Schließen des Fensters, unter Linux in
+`~/.local/share/f29-editor/app.ron`, unter Windows in
+`%APPDATA%\f29-editor\data\app.ron`, unter macOS in
+`~/Library/Application Support/f29-editor/app.ron`. Wer die Datei löscht,
+startet wie beim ersten Mal.
 
 ## Stand
 
 | Teil | Stand |
 |---|---|
 | Neu, Öffnen, Speichern, Speichern unter | fertig |
+| Zuletzt bearbeitete Datei und Unterlagen merken | fertig |
 | Gelände und Seite malen (Pinsel, Füllen), Rückgängig | fertig |
 | Kartenunterlage, Wasser aus Maske | fertig |
 | Landschaftsvorschau | fertig |

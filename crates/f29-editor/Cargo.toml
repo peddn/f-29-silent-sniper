@@ -13,7 +13,8 @@ f29-core.workspace = true
 f29-render.workspace = true
 f29-world.workspace = true
 # Fensterprogramm von egui, ohne Bevy; wgpu und winit in denselben Versionen wie Bevy.
-eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland"] }
+# persistence: zuletzt bearbeitete Datei, Unterlagen und Fenstergröße merken.
+eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland", "persistence"] }
 png = "0.18"
 
 [lints]

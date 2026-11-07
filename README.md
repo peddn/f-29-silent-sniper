@@ -74,7 +74,9 @@ cargo run --release -p f29-app -- --roster piloten.ron
 # Gebiet dort das eingebaute Testgebiet) bzw. direkt in einem Gebiet starten
 cargo run --release -p f29-app -- --theaters meine-karten --region "TEST RANGE"
 
-# Karteneditor für die Einsatzgebiete (docs/KARTENEDITOR.md)
+# Karteneditor für die Einsatzgebiete (docs/KARTENEDITOR.md);
+# ohne Angabe öffnet er die zuletzt bearbeitete Datei
+cargo run --release -p f29-editor
 cargo run --release -p f29-editor -- data/theaters/libyen.ron
 
 # nach 10 s automatisch einen Screenshot speichern und beenden
