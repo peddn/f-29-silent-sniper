@@ -168,6 +168,7 @@ cargo run --release -p f29-headless -- replay replays/last.replay # letzter Flug
 cargo run --release -p f29-headless -- hud-svg --seconds 30 --out hud.svg
 cargo run --release -p f29-headless -- terrain --seed 7 --out karte.ppm
 cargo run --release -p f29-headless -- airfields --seed 7          # Flugplätze und Route
+cargo run --release -p f29-headless -- theater-check --theater data/test/test_range.ron  # Gebiet prüfen
 cargo run --release -p f29-headless -- sound --out sounds          # Klänge als WAV-Hörproben
 cargo run --release -p f29-headless -- bench
 ```

@@ -42,6 +42,7 @@ Befehle:
   airfields [--seed N] [--rules R]                     Flugplätze, Route und Auftrag auflisten
   theater-png [--theater DATEI.ron] [--size PX] [--out DATEI.png]
                                                        Vorschau eines Gebiets (Seiten, Plätze, Ziele)
+  theater-check [--theater DATEI.ron]                  Gebiet prüfen: Befunde und Kennzahlen
   sound    [--out VERZEICHNIS]                         Klänge als WAV-Hörproben rendern
   bench    [--seconds S]                               Ticks pro Sekunde messen
 ";
@@ -107,6 +108,7 @@ fn main() -> ExitCode {
         "airfields" => airfields(&args),
         "sound" => sound(&args),
         "theater-png" => theater_png(&args),
+        "theater-check" => theater_check(&args),
         "help" | "--help" | "-h" => {
             print!("{USAGE}");
             Ok(())
@@ -435,14 +437,49 @@ fn airfields(args: &Args) -> Result<(), String> {
 /// Vorschau: Satellitenbild, feindliches Gebiet rötlich, neutrales
 /// gelblich getönt; Ziele als Punkte (rot militärisch, weiß zivil, gelb
 /// Radar), Flugplätze als Quadrate.
+/// Gebiet aus `--theater DATEI`, sonst das eingebaute Testgebiet.
+fn load_theater(args: &Args) -> Result<f29_world::Theater, String> {
+    use f29_world::Theater;
+    match args.opt("theater") {
+        Some(path) => Theater::parse(&std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?)
+            .map_err(|e| format!("{path}: {e}")),
+        None => Ok(Theater::builtin().clone()),
+    }
+}
+
+fn theater_check(args: &Args) -> Result<(), String> {
+    use f29_core::theater_check::{self, Item, Level, MISSION_SEEDS};
+    let t = load_theater(args)?;
+    let start = std::time::Instant::now();
+    let r = theater_check::check(&t);
+    let took = start.elapsed();
+    let warnings = r.warnings().count();
+    println!("{}: {warnings} Warnungen, {} Hinweise", t.name, r.findings.len() - warnings);
+    for f in &r.findings {
+        let level = if f.level == Level::Warning { "WARNUNG" } else { "HINWEIS" };
+        let item = match f.item {
+            Some(Item::Airfield(i)) => format!("Flugplatz {i} {}", t.airfields[i].name),
+            Some(Item::Object(i)) => format!("Objekt {i} {}", t.objects[i].label()),
+            None => "Gebiet".into(),
+        };
+        println!("  {level:<8} {item}: {}", f.text);
+    }
+    let s = &r.stats;
+    let pairs: Vec<String> = s.pairs.iter().map(|(c, n)| format!("{} {n}", c.rules().label)).collect();
+    println!();
+    println!("Zielpaare aus {MISSION_SEEDS} Seeds:   {}", pairs.join(", "));
+    println!("Missionsziele im Band:     {}", s.band_targets);
+    println!("Radare:                    {} Frühwarn, {} SAM, {} SHORAD", s.early_warning, s.sam, s.shorad);
+    println!("Feindliche Horste:         {} mit {} MiG-21, {} MiG-29", s.enemy_airfields, s.mig21, s.mig29);
+    println!("Frühwarnradar über dem feindlichen Missionsband: {:.0} %", s.ew_coverage_pct);
+    println!("Geprüft in {:.0} ms", took.as_secs_f64() * 1_000.0);
+    Ok(())
+}
+
 fn theater_png(args: &Args) -> Result<(), String> {
     use f29_render::map_raster::{MapRaster, MapStyle};
-    use f29_world::{Side, Theater};
-    let t = match args.opt("theater") {
-        Some(path) => Theater::parse(&std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?)
-            .map_err(|e| e.to_string())?,
-        None => Theater::builtin().clone(),
-    };
+    use f29_world::Side;
+    let t = load_theater(args)?;
     let size = args.get("size", 1_024_usize)?;
     let out = args.opt("out").unwrap_or("theater.png");
     let terrain = f29_world::Terrain::from_theater(&t);

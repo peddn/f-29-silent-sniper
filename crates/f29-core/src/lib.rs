@@ -32,6 +32,7 @@ pub mod sensors;
 pub mod sim;
 pub mod systems;
 pub mod targets;
+pub mod theater_check;
 pub mod units;
 pub mod weapons;
 
